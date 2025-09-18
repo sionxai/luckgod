@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>가챠 시뮬레이터 — 확률 지정 · 시드 · 통계</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="appWrap" class="wrap">
+      <header class="top">
+        <h1>가챠 시뮬레이터</h1>
+        <div class="hint">확률 직접 지정 · 1/10/100회 · 통계/시드/보장</div>
+        <span class="sep"></span>
+        <span class="muted small" id="whoami"></span>
+        <span class="muted small">포인트: <b id="points">-</b></span>
+        <span class="muted small">골드: <b id="gold">-</b></span>
+        <span class="muted small">다이아: <b id="diamonds">-</b></span>
+        <button id="toUser">사용자 페이지</button>
+        <button id="toAdmin">관리자 페이지</button>
+        <button id="toBattle">전투 페이지</button>
+        <button id="logoutBtn">로그아웃</button>
+        <button id="saveCfg">설정 저장</button>
+        <button id="loadCfg">불러오기</button>
+        <input id="cfgFile" type="file" accept="application/json" style="display:none" />
+        <button id="shareLink">공유 링크</button>
+      </header>
+
+      <div class="grid" style="margin-top:10px">
+        <section class="panel" data-admin="true" id="adminPanel" style="display:none">
+          <h2>관리자 페이지</h2>
+          <div class="row">
+            <div class="muted">확률/설정 편집 권한은 관리자만 가능</div>
+          </div>
+          <div class="row">
+            <h3 class="muted" style="margin:0">관리자 비밀번호 변경</h3>
+          </div>
+          <div class="row">
+            <label>현재 비밀번호<input id="adminOldPass" type="password" /></label>
+            <label>새 비밀번호<input id="adminNewPass" type="password" /></label>
+            <button id="adminChangePw">변경</button>
+          </div>
+          <div id="adminMsg" class="muted small" aria-live="polite"></div>
+          <div class="row" style="margin-top:10px">
+            <h3 class="muted" style="margin:0">프리셋 관리</h3>
+          </div>
+          <div class="row preset-admin-row">
+            <label>프리셋 선택<select id="adminPresetSelect"></select></label>
+            <button id="adminPresetApply">프리셋 적용</button>
+            <button id="adminPresetLoad">불러오기</button>
+            <button id="adminPresetDelete">삭제</button>
+          </div>
+          <div class="row preset-admin-row">
+            <label>프리셋 이름<input id="adminPresetName" type="text" placeholder="예: 기본 세팅" /></label>
+            <button id="adminPresetSave">현재 설정을 프리셋으로 저장</button>
+          </div>
+          <div id="presetAdminMsg" class="muted small" aria-live="polite"></div>
+          <div class="row" style="margin-top:14px">
+            <h3 class="muted" style="margin:0">드랍 확률 설정</h3>
+          </div>
+          <table class="stats" id="dropConfigTable" aria-label="드랍 확률 설정">
+            <thead>
+              <tr><th>아이템</th><th>기본 p</th><th>레벨당 증가</th><th>최대 p</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>가속 물약</td>
+                <td><input id="dropPotionBase" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropPotionPer" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropPotionMax" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+              </tr>
+              <tr>
+                <td>초 가속 물약</td>
+                <td><input id="dropHyperBase" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropHyperPer" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropHyperMax" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+              </tr>
+              <tr>
+                <td>보호권</td>
+                <td><input id="dropProtectBase" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropProtectPer" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropProtectMax" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+              </tr>
+              <tr>
+                <td>강화권</td>
+                <td><input id="dropEnhanceBase" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropEnhancePer" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropEnhanceMax" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+              </tr>
+              <tr>
+                <td>전투부활권</td>
+                <td><input id="dropBattleResBase" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropBattleResPer" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+                <td><input id="dropBattleResMax" type="number" step="any" min="0" max="1" style="width:90px" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="row" style="margin-top:10px">
+            <h3 class="muted" style="margin:0">골드 보상 설정</h3>
+          </div>
+          <table class="stats" id="goldConfigTable" aria-label="골드 보상 설정">
+            <thead><tr><th></th><th>Lv1</th><th>Lv999</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>최소 골드</td>
+                <td><input id="goldMinLow" type="number" min="0" step="1" style="width:90px" /></td>
+                <td><input id="goldMinHigh" type="number" min="0" step="1" style="width:90px" /></td>
+              </tr>
+              <tr>
+                <td>최대 골드</td>
+                <td><input id="goldMaxLow" type="number" min="0" step="1" style="width:90px" /></td>
+                <td><input id="goldMaxHigh" type="number" min="0" step="1" style="width:90px" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="row" style="margin-top:10px">
+            <h3 class="muted" style="margin:0">상점 가격 설정</h3>
+          </div>
+          <table class="stats" id="shopPriceTable" aria-label="상점 가격 설정">
+            <thead><tr><th>아이템</th><th>가격</th></tr></thead>
+            <tbody>
+              <tr><td>가속 물약</td><td><input id="priceInputPotion" type="number" min="0" step="1" style="width:100px" /></td></tr>
+              <tr><td>초 가속 물약</td><td><input id="priceInputHyper" type="number" min="0" step="1" style="width:100px" /></td></tr>
+              <tr><td>보호권</td><td><input id="priceInputProtect" type="number" min="0" step="1" style="width:100px" /></td></tr>
+              <tr><td>강화권</td><td><input id="priceInputEnhance" type="number" min="0" step="1" style="width:100px" /></td></tr>
+              <tr><td>전투부활권</td><td><input id="priceInputBattleRes" type="number" min="0" step="1" style="width:110px" /></td></tr>
+              <tr><td>초보자 패키지</td><td><input id="priceInputStarter" type="number" min="0" step="1" style="width:110px" /></td></tr>
+            </tbody>
+          </table>
+          <div class="row" style="margin-top:8px">
+            <button id="saveDrops">저장</button>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <h3 class="muted" style="margin:0">물약 지속/쿨다운</h3>
+          </div>
+          <table class="stats" id="potionConfigTable" aria-label="물약 지속 및 쿨다운 설정">
+            <thead>
+              <tr><th>아이템</th><th>지속 (초)</th><th>수동 쿨타임 (초)</th><th>자동 쿨타임 (초)</th><th>배속</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>가속 물약</td>
+                <td><input id="potionDuration" type="number" step="0.1" min="0" style="width:110px" /></td>
+                <td><input id="potionManualCd" type="number" step="0.1" min="0" style="width:110px" /></td>
+                <td><input id="potionAutoCd" type="number" step="0.1" min="0" style="width:110px" /></td>
+                <td><input id="potionSpeedMult" type="number" step="0.1" min="1" style="width:110px" /></td>
+              </tr>
+              <tr>
+                <td>초 가속 물약</td>
+                <td><input id="hyperDuration" type="number" step="0.1" min="0" style="width:110px" /></td>
+                <td><input id="hyperManualCd" type="number" step="0.1" min="0" style="width:110px" /></td>
+                <td><input id="hyperAutoCd" type="number" step="0.1" min="0" style="width:110px" /></td>
+                <td><input id="hyperSpeedMult" type="number" step="0.1" min="1" style="width:110px" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="row" style="margin-top:16px">
+            <h3 class="muted" style="margin:0">몬스터 난이도</h3>
+          </div>
+          <table class="stats" id="monsterConfigTable" aria-label="몬스터 난이도 설정">
+            <thead>
+              <tr><th>기준 전투력 (Lv.1)</th><th>최대 전투력 (Lv.999)</th><th>성장 곡선</th><th>난이도 배율</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input id="monsterBasePower" type="number" step="any" min="1" style="width:140px" /></td>
+                <td><input id="monsterMaxPower" type="number" step="any" min="1" style="width:140px" /></td>
+                <td><input id="monsterCurve" type="number" step="0.1" min="0.1" max="10" style="width:120px" /></td>
+                <td><input id="monsterDifficulty" type="number" step="0.05" min="0.1" max="10" style="width:120px" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="row" style="margin-top:16px">
+            <h3 class="muted" style="margin:0">사용자 지급</h3>
+          </div>
+          <div class="row preset-admin-row">
+            <label>사용자<select id="adminUserSelect"></select></label>
+            <span class="muted small" id="adminUserStats"></span>
+          </div>
+          <div class="row preset-admin-row">
+            <label>포인트<input id="adminGrantPoints" type="number" step="1" value="0" /></label>
+            <label>골드<input id="adminGrantGold" type="number" step="1" value="0" /></label>
+            <label>다이아<input id="adminGrantDiamonds" type="number" step="1" value="0" /></label>
+            <button id="adminGrantSubmit">지급</button>
+          </div>
+        </section>
+
+        <section class="panel" id="configPanel">
+          <h2>설정</h2>
+          <div class="row preset-user-row">
+            <label>관리자 프리셋<select id="globalPresetSelect"></select></label>
+            <button id="applyGlobalPreset">적용</button>
+            <label>나의 프리셋<select id="personalPresetSelect"></select></label>
+            <button id="applyPersonalPreset">적용</button>
+            <label>이름<input id="personalPresetName" type="text" placeholder="나의 프리셋" /></label>
+            <button id="savePersonalPreset">현재 설정 저장 (-1 다이아)</button>
+            <button id="toggleUserEdit">설정 편집 모드</button>
+          </div>
+          <div id="presetMsg" class="muted small" aria-live="polite"></div>
+          <div class="row">
+            <label>입력 모드<select id="mode"><option value="weight" selected>가중치</option><option value="percent">퍼센트(%)</option></select></label>
+            <label>시드<input id="seed" type="text" placeholder="예: lucky-777" /></label>
+            <label><input id="lock" type="checkbox" /> 설정 잠금</label>
+          </div>
+          <table class="weights" id="weightsTable" aria-label="등급별 가중치 테이블">
+            <thead>
+              <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div class="row">
+            <label><input id="pityEnabled" type="checkbox" /> 천장(보장)</label>
+            <label>기준<select id="pityFloor"><option value="S">S 이상</option><option value="A">A 이상</option></select></label>
+            <label>스팬<input id="pitySpan" type="number" min="1" value="90" style="width:90px" /></label>
+          </div>
+          <div class="row">
+            <label><input id="g10Enabled" type="checkbox" /> 10연 최소 보장</label>
+            <label>최소<select id="g10Tier"><option value="A">A 이상</option><option value="S">S 이상</option></select></label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>실행</h2>
+          <div class="row">
+            <button id="draw1" class="primary">1회</button>
+            <button id="draw10">10회</button>
+            <button id="draw100">100회</button>
+            <button id="draw1k">1,000회</button>
+            <button id="draw10k">10,000회</button>
+            <label>속도<input id="speed" type="range" min="0" max="60" value="10" /></label>
+            <button id="cancel" disabled>중단</button>
+          </div>
+          <div class="progress" aria-label="진행률"><div id="bar"></div></div>
+          <div id="drawResults" class="draw-results" style="display:none">
+            <h3>최근 뽑기 결과</h3>
+            <div class="draw-result-grid"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>장비창</h2>
+          <div class="row">
+            <div class="muted">장착 5부위 + 예비 2개(자동 정리)</div>
+            <span class="sep"></span>
+            <div class="muted">총 보유: <b id="invCount">0</b> / 7</div>
+          </div>
+          <div id="equipGrid" class="equipgrid" aria-label="장착 부위"></div>
+          <div class="row"><div class="muted">예비</div></div>
+          <div id="spareList"></div>
+        </section>
+
+        <section class="panel">
+          <h2>대장간</h2>
+          <div class="row">
+            <label>강화 대상<select id="forgeTarget"></select></label>
+            <span class="muted">현재 Lv.<b id="forgeLv">0</b></span>
+            <span class="muted">배율 <b id="forgeMul">1.00×</b></span>
+            <span class="muted">다음 성공률 <b id="forgeP">-</b></span>
+            <span class="muted">강화 후 미리보기 <b id="forgePreview">-</b></span>
+            <button id="forgeOnce">+1 강화</button>
+            <button id="forgeAuto">자동 강화</button>
+          </div>
+          <div class="row">
+            <label><input id="forgeProtectUse" type="checkbox" /> 보호권 사용</label>
+            <span class="muted">보호권: <b id="protectCount">0</b></span>
+            <span class="muted">강화권: <b id="enhanceCount">0</b></span>
+            <span class="muted">부활권: <b id="reviveCount">0</b></span>
+          </div>
+          <div id="forgeEffect" class="forge-effect" aria-hidden="true"></div>
+          <div id="forgeMsg" class="forge-msg muted" aria-live="polite"></div>
+          <details id="forgeEdit">
+            <summary class="muted">강화 수치/확률 편집</summary>
+            <div class="row">
+              <button id="forgeReset">초기값 복원</button>
+            </div>
+            <table class="forge-table" aria-label="강화 설정">
+              <thead><tr><th>Lv</th><th>배율</th><th>성공률(0~1)</th></tr></thead>
+              <tbody id="forgeTableBody"></tbody>
+            </table>
+          </details>
+        </section>
+
+        <section class="panel" id="battleRedirectPanel">
+          <h2>전투</h2>
+          <p class="muted small">새로운 전투 시스템은 전용 페이지에서 즐길 수 있어요.</p>
+          <button id="goBattle" class="primary">전투 페이지 열기</button>
+        </section>
+
+        <section class="panel" id="shopPanel">
+          <h2>상점</h2>
+          <div class="row">
+            <div class="muted small">골드를 소비해 아이템을 구매하세요.</div>
+          </div>
+          <table class="stats" aria-label="상점 목록" id="shopTable">
+            <thead><tr><th>아이템</th><th>가격</th><th>보유</th><th>구매</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>가속 물약</td>
+                <td><span id="pricePotion">-</span> G</td>
+                <td><span id="invPotion">0</span></td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="potion" data-count="1">1개</button>
+                    <button class="shop-buy" data-item="potion" data-count="5">5개</button>
+                    <button class="shop-buy" data-item="potion" data-count="10">10개</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>초 가속 물약</td>
+                <td><span id="priceHyper">-</span> G</td>
+                <td><span id="invHyper">0</span></td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="hyperPotion" data-count="1">1개</button>
+                    <button class="shop-buy" data-item="hyperPotion" data-count="5">5개</button>
+                    <button class="shop-buy" data-item="hyperPotion" data-count="10">10개</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>보호권</td>
+                <td><span id="priceProtect">-</span> G</td>
+                <td><span id="invProtect">0</span></td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="protect" data-count="1">1개</button>
+                    <button class="shop-buy" data-item="protect" data-count="5">5개</button>
+                    <button class="shop-buy" data-item="protect" data-count="10">10개</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>강화권</td>
+                <td><span id="priceEnhance">-</span> G</td>
+                <td><span id="invEnhance">0</span></td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="enhance" data-count="1">1개</button>
+                    <button class="shop-buy" data-item="enhance" data-count="5">5개</button>
+                    <button class="shop-buy" data-item="enhance" data-count="10">10개</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>전투부활권</td>
+                <td><span id="priceBattleRes">-</span> G</td>
+                <td><span id="invBattleRes">0</span></td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="battleRes" data-count="1">1개</button>
+                    <button class="shop-buy" data-item="battleRes" data-count="5">5개</button>
+                    <button class="shop-buy" data-item="battleRes" data-count="10">10개</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>초보자 패키지<br /><span class="muted small">B 등급 장비 5종 세트</span></td>
+                <td><span id="priceStarter">-</span> G</td>
+                <td>-</td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="starterPack" data-count="1">구매</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="shopMsg" class="shop-msg" aria-live="polite"></div>
+        </section>
+
+        <section class="panel">
+          <h2>통계</h2>
+          <div class="row">
+            <label>보기<select id="scope"><option value="session">세션</option><option value="global">전체</option></select></label>
+            <div class="muted">표본 수: <span id="nDraws">0</span></div>
+            <div class="muted">카이제곱 p-value: <span id="pval">-</span></div>
+            <span class="sep"></span>
+            <button id="resetSession">세션 초기화</button>
+            <button id="resetGlobal">전체 초기화</button>
+          </div>
+          <table class="stats" id="statsTable" aria-label="등급별 통계 테이블">
+            <thead>
+              <tr><th>등급</th><th>관측</th><th>비율</th><th>기대</th><th>Δ</th><th>상대오차</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div class="barwrap" style="margin-top:8px"><canvas id="chart" width="900" height="220"></canvas></div>
+        </section>
+
+        <section class="panel">
+          <h2>결과 로그</h2>
+          <div class="row">
+            <button id="exportCsv">CSV 내보내기</button>
+            <span class="muted small">행: draw_id, tier, part, stat, run_id, timestamp, config_hash</span>
+          </div>
+          <div class="log" id="log"></div>
+        </section>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
