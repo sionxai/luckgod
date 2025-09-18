@@ -36,6 +36,9 @@
       input[type="number"], input[type="text"], select { 
         background: var(--panel-2); color: var(--text); border: 1px solid var(--grid); border-radius: 6px; padding: 6px 8px; 
       }
+      .difficulty-adjust { display:flex; align-items:center; gap:6px; }
+      .difficulty-adjust button { width:32px; height:32px; padding:0; line-height:30px; }
+      .difficulty-adjust input { flex:1 1 auto; }
       input[type="checkbox"] { transform: translateY(1px); }
       button { background: var(--panel-2); color: var(--text); border: 1px solid var(--grid); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
       button.primary { background: var(--accent); color: #06122a; border-color: transparent; }

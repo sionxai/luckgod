@@ -49,6 +49,9 @@ const els = {
   autoPlayBtn: qs('#autoPlayBtn'),
   monsterLevel: qs('#monsterLevel'),
   levelDisplay: qs('#levelDisplay'),
+  monsterLevelMinus: qs('#monsterLevelMinus'),
+  monsterLevelPlus: qs('#monsterLevelPlus'),
+  monsterLevelInput: qs('#monsterLevelInput'),
   skillCooldownView: qs('#skillCooldownView'),
   potionStock: qs('#potionStock'),
   hyperPotionStock: qs('#hyperPotionStock'),
@@ -142,7 +145,8 @@ const gameState = {
     turn: 0,
     isPlayerTurn: true,
     ongoing: false,
-    autoPlay: false
+    autoPlay: false,
+    lastLevel: 1
   }
 };
 
@@ -889,28 +893,49 @@ function calculateDamage(attacker, defender, isSkill = false) {
   };
 }
 
+function clampMonsterLevel(value) {
+  let lvl = typeof value === 'number' ? value : parseInt(value, 10);
+  if (!Number.isFinite(lvl)) lvl = 1;
+  lvl = Math.floor(lvl);
+  if (lvl < 1) lvl = 1;
+  if (lvl > MAX_LEVEL) lvl = MAX_LEVEL;
+  return lvl;
+}
+
+function updateMonsterLevelUI(level) {
+  const lvl = clampMonsterLevel(level);
+  if (els.monsterLevel) els.monsterLevel.value = String(lvl);
+  if (els.monsterLevelInput) els.monsterLevelInput.value = String(lvl);
+  if (els.levelDisplay) els.levelDisplay.textContent = lvl;
+  return lvl;
+}
+
 function updateEnemyStats(level) {
-  gameState.enemy.level = level;
+  const lvl = updateMonsterLevelUI(level);
+  gameState.enemy.level = lvl;
   const scaling = normalizeMonsterScaling(state.config?.monsterScaling);
   const difficulty = scaling.difficultyMultiplier || 1;
-  const norm = Math.min(1, Math.max(0, (level - 1) / (MAX_LEVEL - 1 || 1)));
-  const power = ((scaling.maxPower - scaling.basePower) * Math.pow(norm, scaling.curve || 1) + scaling.basePower) * difficulty;
-  const atk = Math.max(1, Math.round(power * scaling.attackShare));
-  const def = Math.max(1, Math.round(power * scaling.defenseShare));
-  const hp = Math.max(level * 150, Math.round(power * scaling.hpMultiplier));
-  const speed = Math.round(scaling.speedBase + (scaling.speedMax - scaling.speedBase) * Math.pow(norm, 0.7));
-  const critRate = Math.min(
-    scaling.critRateMax,
-    scaling.critRateBase + (scaling.critRateMax - scaling.critRateBase) * Math.pow(norm, 0.9)
-  );
-  const critDmg = Math.min(
-    scaling.critDmgMax,
-    scaling.critDmgBase + (scaling.critDmgMax - scaling.critDmgBase) * Math.pow(norm, 1.05)
-  );
-  const dodge = Math.min(
-    scaling.dodgeMax,
-    scaling.dodgeBase + (scaling.dodgeMax - scaling.dodgeBase) * Math.pow(norm, 0.95)
-  );
+  const norm = Math.min(1, Math.max(0, (lvl - 1) / (MAX_LEVEL - 1 || 1)));
+  const basePower = Math.max(1, scaling.basePower || DEFAULT_MONSTER_SCALING.basePower);
+  const maxPower = Math.max(basePower, scaling.maxPower || DEFAULT_MONSTER_SCALING.maxPower);
+  const power = ((maxPower - basePower) * Math.pow(norm, scaling.curve || 1) + basePower) * difficulty;
+  const atkShare = scaling.attackShare || DEFAULT_MONSTER_SCALING.attackShare;
+  const defShare = scaling.defenseShare || DEFAULT_MONSTER_SCALING.defenseShare;
+  const atk = Math.max(1, Math.round(power * atkShare));
+  const def = Math.max(1, Math.round(power * defShare));
+  const hp = Math.max(lvl * 150, Math.round(power * (scaling.hpMultiplier || DEFAULT_MONSTER_SCALING.hpMultiplier)));
+  const speedBase = scaling.speedBase || DEFAULT_MONSTER_SCALING.speedBase;
+  const speedMax = Math.max(speedBase, scaling.speedMax || DEFAULT_MONSTER_SCALING.speedMax);
+  const speed = Math.round(speedBase + (speedMax - speedBase) * Math.pow(norm, 0.7));
+  const critRateBase = scaling.critRateBase || DEFAULT_MONSTER_SCALING.critRateBase;
+  const critRateMax = Math.max(critRateBase, scaling.critRateMax || DEFAULT_MONSTER_SCALING.critRateMax);
+  const critRate = Math.min(critRateMax, critRateBase + (critRateMax - critRateBase) * Math.pow(norm, 0.9));
+  const critDmgBase = scaling.critDmgBase || DEFAULT_MONSTER_SCALING.critDmgBase;
+  const critDmgMax = Math.max(critDmgBase, scaling.critDmgMax || DEFAULT_MONSTER_SCALING.critDmgMax);
+  const critDmg = Math.min(critDmgMax, critDmgBase + (critDmgMax - critDmgBase) * Math.pow(norm, 1.05));
+  const dodgeBase = scaling.dodgeBase || DEFAULT_MONSTER_SCALING.dodgeBase;
+  const dodgeMax = Math.max(dodgeBase, scaling.dodgeMax || DEFAULT_MONSTER_SCALING.dodgeMax);
+  const dodge = Math.min(dodgeMax, dodgeBase + (dodgeMax - dodgeBase) * Math.pow(norm, 0.95));
   gameState.enemy.maxHp = hp;
   gameState.enemy.hp = gameState.enemy.maxHp;
   gameState.enemy.stats = {
@@ -922,14 +947,57 @@ function updateEnemyStats(level) {
     dodge
   };
   gameState.enemy.power = power;
+  state.battle.lastLevel = lvl;
   gameState.enemy.defending = false;
-  if (els.enemyLevel) els.enemyLevel.textContent = String(level);
+  if (els.enemyLevel) els.enemyLevel.textContent = String(lvl);
   if (els.enemyAtk) els.enemyAtk.textContent = formatNum(gameState.enemy.stats.atk);
   if (els.enemyDef) els.enemyDef.textContent = formatNum(gameState.enemy.stats.def);
   if (els.enemySpeed) els.enemySpeed.textContent = Math.round(gameState.enemy.stats.speed);
-  updateMonsterImage(level);
+  updateMonsterImage(lvl);
   updateCombatPowerUI();
   updateHpBars();
+}
+
+function damageEquipmentAfterDefeat() {
+  const candidates = PART_DEFS.map((def) => ({ def, item: state.equip[def.key] })).filter((entry) => entry.item);
+  if (candidates.length === 0) {
+    addBattleLog('손상될 장비가 없어 피해를 면했습니다.', 'warn');
+    return;
+  }
+  const selected = candidates[Math.floor(Math.random() * candidates.length)];
+  const item = selected.item;
+  let message = '';
+  if (item.lvl && item.lvl > 0) {
+    const before = item.lvl;
+    item.lvl = Math.max(0, item.lvl - 1);
+    if (item.lvl <= 0) {
+      state.equip[selected.def.key] = null;
+      message = `${selected.def.name} 장비가 심하게 손상되어 파괴되었습니다. (Lv.${before})`;
+    } else {
+      message = `${selected.def.name}의 강화 레벨이 감소했습니다. (Lv.${before} → Lv.${item.lvl})`;
+    }
+  } else if ((item.base || 0) > 1) {
+    const before = item.base || 1;
+    const reduction = Math.max(1, Math.floor(before * 0.2));
+    const after = Math.max(1, before - reduction);
+    item.base = after;
+    message = `${selected.def.name}이(가) 손상되어 기본 수치가 감소했습니다. (${formatNum(before)} → ${formatNum(after)})`;
+  } else {
+    state.equip[selected.def.key] = null;
+    message = `${selected.def.name} 장비가 파괴되었습니다.`;
+  }
+  addBattleLog(message, 'damage');
+  ensurePlayerReady();
+  const sanitizedEquip = sanitizeEquipMap(state.equip);
+  const sanitizedSpares = sanitizeEquipMap(state.spares);
+  queueProfileUpdate({
+    equip: sanitizedEquip,
+    spares: sanitizedSpares
+  });
+  if (state.profile) {
+    state.profile.equip = sanitizedEquip;
+    state.profile.spares = sanitizedSpares;
+  }
 }
 
 function updateMonsterImage(level) {
@@ -981,8 +1049,8 @@ function ensurePlayerReady() {
 function startNewBattle() {
   clearAutoNextTimer();
   clearAutoPlayerTimer();
-  const level = parseInt(els.monsterLevel?.value || '1', 10) || 1;
-  if (els.levelDisplay) els.levelDisplay.textContent = level;
+  const level = clampMonsterLevel(els.monsterLevel?.value || state.battle.lastLevel || 1);
+  updateMonsterLevelUI(level);
   gameState.player.defending = false;
   gameState.player.skillCooldown = 0;
   gameState.player.hp = gameState.player.maxHp;
@@ -1116,6 +1184,7 @@ function handleDefeat(level, context) {
   }
   addBattleLog('=== 패배... ===', 'damage');
   if (state.user?.role !== 'admin') {
+    damageEquipmentAfterDefeat();
     if (state.wallet > 0) {
       const loss = Math.max(1, Math.floor(state.wallet * 0.2));
       state.wallet = Math.max(0, state.wallet - loss);
@@ -1306,9 +1375,30 @@ function initEventListeners() {
     updateBattleResUi();
   });
   els.monsterLevel?.addEventListener('input', (e) => {
-    const level = parseInt(e.target.value, 10) || 1;
-    if (els.levelDisplay) els.levelDisplay.textContent = level;
+    const level = clampMonsterLevel(e.target.value);
+    updateMonsterLevelUI(level);
     updateEnemyStats(level);
+  });
+  els.monsterLevelInput?.addEventListener('change', (e) => {
+    const level = clampMonsterLevel(e.target.value);
+    updateMonsterLevelUI(level);
+    updateEnemyStats(level);
+  });
+  els.monsterLevelInput?.addEventListener('input', (e) => {
+    const level = clampMonsterLevel(e.target.value);
+    updateMonsterLevelUI(level);
+  });
+  els.monsterLevelMinus?.addEventListener('click', () => {
+    const current = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || 1);
+    const next = clampMonsterLevel(current - 1);
+    updateMonsterLevelUI(next);
+    updateEnemyStats(next);
+  });
+  els.monsterLevelPlus?.addEventListener('click', () => {
+    const current = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || 1);
+    const next = clampMonsterLevel(current + 1);
+    updateMonsterLevelUI(next);
+    updateEnemyStats(next);
   });
   els.toGacha?.addEventListener('click', () => {
     window.location.href = 'index.html';
@@ -1426,6 +1516,7 @@ async function hydrateProfile(firebaseUser) {
   };
   const personalConfig = sanitizeConfig(rawProfile.config);
   state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
+  state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
   ensurePlayerReady();
   updateEnemyStats(parseInt(els.monsterLevel?.value || '1', 10) || 1);
   updateResourceSummary();

@@ -166,7 +166,13 @@
                 <td><input id="monsterBasePower" type="number" step="any" min="1" style="width:140px" /></td>
                 <td><input id="monsterMaxPower" type="number" step="any" min="1" style="width:140px" /></td>
                 <td><input id="monsterCurve" type="number" step="0.1" min="0.1" max="10" style="width:120px" /></td>
-                <td><input id="monsterDifficulty" type="number" step="0.05" min="0.1" max="10" style="width:120px" /></td>
+                <td>
+                  <div class="difficulty-adjust">
+                    <button type="button" id="monsterDifficultyMinus">−</button>
+                    <input id="monsterDifficulty" type="number" step="0.05" min="0.1" max="10" style="width:120px" />
+                    <button type="button" id="monsterDifficultyPlus">＋</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>

@@ -74,7 +74,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         priceInputPotion: $('#priceInputPotion'), priceInputHyper: $('#priceInputHyper'), priceInputProtect: $('#priceInputProtect'), priceInputEnhance: $('#priceInputEnhance'), priceInputBattleRes: $('#priceInputBattleRes'), priceInputStarter: $('#priceInputStarter'),
         potionDuration: $('#potionDuration'), potionManualCd: $('#potionManualCd'), potionAutoCd: $('#potionAutoCd'), potionSpeedMult: $('#potionSpeedMult'),
         hyperDuration: $('#hyperDuration'), hyperManualCd: $('#hyperManualCd'), hyperAutoCd: $('#hyperAutoCd'), hyperSpeedMult: $('#hyperSpeedMult'),
-        monsterBasePower: $('#monsterBasePower'), monsterMaxPower: $('#monsterMaxPower'), monsterCurve: $('#monsterCurve'), monsterDifficulty: $('#monsterDifficulty'),
+        monsterBasePower: $('#monsterBasePower'), monsterMaxPower: $('#monsterMaxPower'), monsterCurve: $('#monsterCurve'), monsterDifficultyInput: $('#monsterDifficulty'), monsterDifficultyMinus: $('#monsterDifficultyMinus'), monsterDifficultyPlus: $('#monsterDifficultyPlus'),
         saveDrops: $('#saveDrops'),
         mode: $('#mode'), seed: $('#seed'), lock: $('#lock'),
         weightsTable: $('#weightsTable tbody'),
@@ -818,7 +818,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
             basePower: parseFloat(els.monsterBasePower?.value),
             maxPower: parseFloat(els.monsterMaxPower?.value),
             curve: parseFloat(els.monsterCurve?.value),
-            difficultyMultiplier: parseFloat(els.monsterDifficulty?.value)
+            difficultyMultiplier: parseFloat(els.monsterDifficultyInput?.value)
           };
           state.config.monsterScaling = normalizeMonsterScaling({ ...state.config.monsterScaling, ...monsterRaw });
           if(isAdmin()) clearActivePreset(); else clearSelectedPreset();
@@ -838,6 +838,17 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(els.applyPersonalPreset) els.applyPersonalPreset.addEventListener('click', ()=>{ const id = els.personalPresetSelect?.value || ''; if(!id){ clearSelectedPreset(); setPresetMsg('프리셋 선택을 해제했습니다.', 'warn'); return; } const preset = findPersonalPreset(id); if(!preset){ setPresetMsg('선택한 프리셋을 찾을 수 없습니다.', 'error'); return; } applyPersonalPresetForUser(preset); });
         if(els.savePersonalPreset) els.savePersonalPreset.addEventListener('click', handleSavePersonalPreset);
         if(els.toggleUserEdit) els.toggleUserEdit.addEventListener('click', ()=>{ if(isAdmin()) return; state.ui.userEditEnabled = !state.ui.userEditEnabled; updateUserEditModeView(); toggleConfigDisabled(); updateWeightsInputs(); setPresetMsg(state.ui.userEditEnabled ? '설정 편집 모드를 켰습니다.' : '설정 편집 모드를 껐습니다.', 'warn'); });
+        const adjustMonsterDifficulty = (delta)=>{
+          if(!els.monsterDifficultyInput) return;
+          const current = parseFloat(els.monsterDifficultyInput.value) || (state.config.monsterScaling?.difficultyMultiplier ?? 1);
+          let next = current + delta;
+          if(next < 0.1) next = 0.1;
+          if(next > 10) next = 10;
+          next = Math.round(next * 100) / 100;
+          els.monsterDifficultyInput.value = formatMultiplier(next);
+        };
+        if(els.monsterDifficultyMinus){ els.monsterDifficultyMinus.addEventListener('click', ()=> adjustMonsterDifficulty(-0.1)); }
+        if(els.monsterDifficultyPlus){ els.monsterDifficultyPlus.addEventListener('click', ()=> adjustMonsterDifficulty(0.1)); }
         // auto hunt
         if(els.autoHuntBtn){ els.autoHuntBtn.addEventListener('click', toggleAutoHunt); }
         // potion
@@ -849,7 +860,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(els.spareList){ els.spareList.addEventListener('click', onSpareListClick); }
       }
 
-      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficulty].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; }
+      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficultyInput].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.monsterDifficultyMinus) els.monsterDifficultyMinus.disabled = disabled; if(els.monsterDifficultyPlus) els.monsterDifficultyPlus.disabled = disabled; if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; }
 
       // Draw engine with pity
       function drawOne(rng){ const cfg = state.config; const probs = cfg.probs; const t = chooseTier(probs, rng); applyPityCounter(t); return t; }
@@ -1020,7 +1031,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(els.monsterBasePower) els.monsterBasePower.value = monsterCfg.basePower;
         if(els.monsterMaxPower) els.monsterMaxPower.value = monsterCfg.maxPower;
         if(els.monsterCurve) els.monsterCurve.value = monsterCfg.curve;
-        if(els.monsterDifficulty) els.monsterDifficulty.value = monsterCfg.difficultyMultiplier ?? 1;
+        if(els.monsterDifficultyInput) els.monsterDifficultyInput.value = formatMultiplier(monsterCfg.difficultyMultiplier ?? 1);
         updateWeightsInputs(); toggleConfigDisabled(); updateCombatView(); updateInventoryView(); updateShopButtons(); setShopMessage('', null); }
       function updateViewMode(){ const admin = isAdmin(); if(els.whoami){ els.whoami.textContent = state.user? `${state.user.username} (${admin? '관리자':'회원'})` : ''; }
         if(els.adminPanel){ els.adminPanel.style.display = (admin && state.ui.adminView) ? '' : 'none'; if(!admin){ state.ui.adminView = false; } }
@@ -1463,7 +1474,8 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
 
       function performForgeAttempt(opts){ const auto = !!(opts && opts.auto); const item = currentForgeItem(); if(!item){ if(!auto) setForgeMsg('강화할 장비를 선택하세요.', 'warn'); showForgeEffect('fail'); return {status:'no-item'}; }
         const lv = item.lvl || 0; if(lv >= 20){ if(!auto) setForgeMsg('이미 최대 강화 레벨입니다.', 'warn'); showForgeEffect('fail'); return {status:'max'}; }
-        const admin = isAdmin(); if(!admin && !(state.items.enhance > 0)){ if(!auto) setForgeMsg('강화권이 부족합니다.', 'warn'); showForgeEffect('fail'); return {status:'no-enhance'}; }
+        const admin = isAdmin(); if(!auto){ const willProtect = state.forge.protectEnabled && (admin || (state.items.protect||0) > 0); if(!willProtect){ const ok = confirm('강화 실패 시 장비가 파괴될 수 있습니다. 계속하시겠습니까?'); if(!ok){ setForgeMsg('강화를 취소했습니다.', 'warn'); return {status:'cancelled'}; } } }
+        if(!admin && !(state.items.enhance > 0)){ if(!auto) setForgeMsg('강화권이 부족합니다.', 'warn'); showForgeEffect('fail'); return {status:'no-enhance'}; }
         if(!admin){ state.items.enhance = Math.max(0, (state.items.enhance||0) - 1); updateItemCountsView(); }
         const nextLv = lv + 1; const successProb = state.enhance.probs[nextLv] || 0; const rng = getRng(); const success = rng() < successProb;
         if(success){ item.lvl = nextLv; updateInventoryView(); updateForgeInfo(); setForgeMsg(`강화 성공! Lv.${lv} → Lv.${nextLv}`, 'ok'); showForgeEffect('success'); markProfileDirty(); return {status:'success', level: nextLv}; }

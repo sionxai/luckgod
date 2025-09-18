@@ -177,6 +177,11 @@
       .battle-meta .toggle { display: inline-flex; align-items: center; gap: 6px; }
       .battle-meta b { color: var(--text); }
 
+      .level-controls { display:flex; align-items:center; gap:8px; margin-top:8px; }
+      .level-controls button { background: var(--panel-2); border:1px solid rgba(142,238,255,0.2); width:36px; height:32px; font-size:18px; line-height:30px; padding:0; }
+      .level-controls button:hover:not(:disabled) { transform: translateY(-1px); }
+      .level-controls input { width:80px; text-align:center; background: var(--panel-2); color: var(--text); border:1px solid rgba(142,238,255,0.2); border-radius:6px; padding:6px 8px; }
+
       .equipment-slot { background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 10px; margin: 8px 0; border: 1px solid rgba(142, 238, 255, 0.2); }
       .equipment-name { font-weight: bold; color: var(--accent); font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
       .equipment-stats { font-size: 11px; color: var(--muted); margin-top: 6px; }
@@ -321,6 +326,11 @@
             레벨: <span id="levelDisplay">1</span>
             <input type="range" id="monsterLevel" min="1" max="999" value="1" style="width: 100%; margin-top: 6px;" />
           </label>
+          <div class="level-controls">
+            <button id="monsterLevelMinus" type="button">−</button>
+            <input id="monsterLevelInput" type="number" min="1" max="999" value="1" />
+            <button id="monsterLevelPlus" type="button">＋</button>
+          </div>
           <button id="newBattleBtn" style="width: 100%; margin-bottom: 12px;">새 전투 시작</button>
           <button id="generateEquipBtn" style="width: 100%; margin-bottom: 12px;">장비 새로고침</button>
           <button id="autoPlayBtn" style="width: 100%;">자동 전투 OFF</button>
