@@ -8,6 +8,26 @@ import {
   set,
   update
 } from './firebase.js';
+import {
+  PART_DEFS,
+  PART_ICONS,
+  DEFAULT_DROP_RATES,
+  DEFAULT_POTION_SETTINGS,
+  DEFAULT_HYPER_POTION_SETTINGS,
+  DEFAULT_MONSTER_SCALING,
+  clampNumber,
+  sanitizeEquipMap,
+  sanitizeItems,
+  sanitizeEnhanceConfig,
+  normalizeGoldScaling,
+  normalizeMonsterScaling,
+  sanitizeConfig,
+  formatNum,
+  formatMultiplier,
+  computePlayerStats as derivePlayerStats,
+  combatPower,
+  calculateDamage
+} from './combat-core.js';
 
 const qs = (selector) => document.querySelector(selector);
 const qsa = (selector) => Array.from(document.querySelectorAll(selector));
@@ -17,6 +37,7 @@ const els = {
   points: qs('#pointsBattle'),
   gold: qs('#goldBattle'),
   toGacha: qs('#toGacha'),
+  toPvp: qs('#toPvp'),
   logout: qs('#logoutBtn'),
   playerEquipment: qs('#playerEquipment'),
   playerTotalStats: qs('#playerTotalStats'),
@@ -44,6 +65,7 @@ const els = {
   defendBtn: qs('#defendBtn'),
   skillBtn: qs('#skillBtn'),
   potionBtn: qs('#potionBtn'),
+  hyperPotionBtn: qs('#hyperPotionBtn'),
   newBattleBtn: qs('#newBattleBtn'),
   generateEquipBtn: qs('#generateEquipBtn'),
   autoPlayBtn: qs('#autoPlayBtn'),
@@ -55,54 +77,37 @@ const els = {
   skillCooldownView: qs('#skillCooldownView'),
   potionStock: qs('#potionStock'),
   hyperPotionStock: qs('#hyperPotionStock'),
-  hyperPotionBtn: qs('#hyperPotionBtn'),
   battleResToggle: qs('#battleResToggle'),
+  autoPotionToggle: qs('#autoPotionToggle'),
+  autoHyperToggle: qs('#autoHyperToggle'),
   battleResCount: qs('#battleResCount'),
   battleResInline: qs('#battleResInline'),
-  speedStatus: qs('#speedStatus')
+  speedStatus: qs('#speedStatus'),
+  autoStatsPanel: qs('#autoStatsPanel'),
+  autoStatsBattles: qs('#autoStatsBattles'),
+  autoStatsPoints: qs('#autoStatsPoints'),
+  autoStatsGold: qs('#autoStatsGold'),
+  autoStatsEnhance: qs('#autoStatsEnhance'),
+  autoStatsPotion: qs('#autoStatsPotion'),
+  autoStatsHyperPotion: qs('#autoStatsHyperPotion'),
+  autoStatsProtect: qs('#autoStatsProtect'),
+  autoStatsBattleRes: qs('#autoStatsBattleRes')
 };
-
-const TIERS = ['SSS+', 'SS+', 'S+', 'S', 'A', 'B', 'C', 'D'];
-const TIER_INDEX = Object.fromEntries(TIERS.map((t, i) => [t, i]));
-const PART_DEFS = [
-  { key: 'head', name: '투구', type: 'def' },
-  { key: 'body', name: '갑옷', type: 'def' },
-  { key: 'main', name: '주무기', type: 'atk' },
-  { key: 'off', name: '보조무기', type: 'atk' },
-  { key: 'boots', name: '신발', type: 'def' }
-];
-const PART_KEYS = PART_DEFS.map((p) => p.key);
-const PART_ICONS = { head: '🪖', body: '🛡️', main: '⚔️', off: '🗡️', boots: '🥾' };
 
 const MAX_LEVEL = 999;
 const GLOBAL_CONFIG_PATH = 'config/global';
-
-const DEFAULT_DROP_RATES = {
-  potion: { base: 0.04, perLevel: 0.000045, max: 0.25 },
-  hyperPotion: { base: 0.01, perLevel: 0.00005, max: 0.12 },
-  protect: { base: 0.02, perLevel: 0.00003, max: 0.18 },
-  enhance: { base: 0.75, perLevel: 0.0002, max: 1.0 },
-  battleRes: { base: 0.01, perLevel: 0.00002, max: 0.08 }
+const AUTO_DROP_KEYS = ['enhance', 'potion', 'hyperPotion', 'protect', 'battleRes'];
+const AUTO_DROP_LABELS = {
+  enhance: '강화권',
+  potion: '가속 물약',
+  hyperPotion: '초 가속 물약',
+  protect: '보호권',
+  battleRes: '전투부활권'
 };
-const DEFAULT_GOLD_SCALING = { minLow: 120, maxLow: 250, minHigh: 900, maxHigh: 1400 };
-const DEFAULT_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 1000, autoCdMs: 2000, speedMultiplier: 2 };
-const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
-const DEFAULT_MONSTER_SCALING = {
-  basePower: 500,
-  maxPower: 50000000,
-  curve: 1.6,
-  difficultyMultiplier: 1,
-  attackShare: 0.32,
-  defenseShare: 0.22,
-  hpMultiplier: 6.5,
-  speedBase: 100,
-  speedMax: 260,
-  critRateBase: 5,
-  critRateMax: 55,
-  critDmgBase: 160,
-  critDmgMax: 420,
-  dodgeBase: 3,
-  dodgeMax: 40
+const AUTO_STOP_REASON_LABELS = {
+  manual: '사용자 중지',
+  defeat: '패배',
+  other: '중지'
 };
 
 const USERNAME_NAMESPACE = '@gacha.local';
@@ -116,13 +121,21 @@ const state = {
   enhance: null,
   wallet: 0,
   gold: 0,
-  combat: { useBattleRes: true, prefBattleRes: true },
+  combat: { useBattleRes: true, prefBattleRes: true, autoPotion: false, autoHyper: false },
   saveTimer: null,
   pendingUpdates: {},
   buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
   autoNextTimer: null,
   autoPlayerTimer: null,
-  buffTicker: null
+  buffTicker: null,
+  autoStats: {
+    active: false,
+    battles: 0,
+    points: 0,
+    gold: 0,
+    drops: { enhance: 0, potion: 0, hyperPotion: 0, protect: 0, battleRes: 0 },
+    startTime: 0
+  }
 };
 
 const gameState = {
@@ -146,31 +159,10 @@ const gameState = {
     isPlayerTurn: true,
     ongoing: false,
     autoPlay: false,
-    lastLevel: 1
+    lastLevel: 1,
+    actionLock: false
   }
 };
-
-function clampNumber(value, min, max, fallback) {
-  if (typeof value !== 'number' || !isFinite(value)) return fallback;
-  let n = Math.floor(value);
-  if (typeof min === 'number' && n < min) n = min;
-  if (typeof max === 'number' && n > max) n = max;
-  return n;
-}
-
-function defaultEnhance() {
-  const multipliers = Array(21).fill(1);
-  for (let lv = 1; lv <= 20; lv++) {
-    multipliers[lv] = lv < 20 ? 1 + 0.1 * lv : 21;
-  }
-  const probs = Array(21).fill(0);
-  for (let lv = 1; lv <= 20; lv++) {
-    probs[lv] = 0.99 - ((lv - 1) * (0.99 - 0.001)) / 19;
-    if (probs[lv] < 0) probs[lv] = 0;
-  }
-  return { multipliers, probs };
-}
-
 function sanitizeUsername(raw, fallback) {
   if (typeof raw === 'string' && raw.trim().length) {
     return raw.trim();
@@ -190,295 +182,17 @@ function deriveUsernameFromUser(firebaseUser) {
   }
   return email || firebaseUser.displayName || '';
 }
-
-function sanitizeEquipItem(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const tier = TIERS.includes(raw.tier) ? raw.tier : null;
-  const part = PART_KEYS.includes(raw.part) ? raw.part : null;
-  if (!tier || !part) return null;
-  const type = raw.type === 'def' ? 'def' : 'atk';
-  return {
-    id: clampNumber(raw.id, 0, Number.MAX_SAFE_INTEGER, Date.now()),
-    tier,
-    part,
-    base: clampNumber(raw.base ?? raw.stat, 0, Number.MAX_SAFE_INTEGER, 0),
-    lvl: clampNumber(raw.lvl, 0, 20, 0),
-    type
-  };
-}
-
-function sanitizeEquipMap(raw) {
-  const result = { head: null, body: null, main: null, off: null, boots: null };
-  if (raw && typeof raw === 'object') {
-    PART_KEYS.forEach((key) => {
-      result[key] = sanitizeEquipItem(raw[key]);
-    });
-  }
-  return result;
-}
-
-function sanitizeItems(raw) {
-  const template = { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0 };
-  const result = { ...template };
-  if (raw && typeof raw === 'object') {
-    Object.keys(template).forEach((key) => {
-      result[key] = clampNumber(raw[key], 0, Number.MAX_SAFE_INTEGER, 0);
-    });
-  }
-  return result;
-}
-
-function sanitizeEnhanceConfig(raw) {
-  const base = defaultEnhance();
-  if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.multipliers)) {
-      base.multipliers = base.multipliers.map((def, idx) => {
-        const val = raw.multipliers[idx];
-        return typeof val === 'number' && isFinite(val) && val > 0 ? val : def;
-      });
-    }
-    if (Array.isArray(raw.probs)) {
-      base.probs = base.probs.map((def, idx) => {
-        const val = raw.probs[idx];
-        if (typeof val === 'number' && isFinite(val) && val >= 0) {
-          return Math.max(0, Math.min(1, val));
-        }
-        return def;
-      });
-    }
-  }
-  return base;
-}
-
-function cloneDropRates(src) {
-  return JSON.parse(JSON.stringify(src || DEFAULT_DROP_RATES));
-}
-
-function normalizeDropRates(raw) {
-  const base = cloneDropRates(DEFAULT_DROP_RATES);
-  if (!raw) return base;
-  const out = cloneDropRates(base);
-  Object.keys(base).forEach((key) => {
-    const item = raw[key];
-    if (item && typeof item === 'object') {
-      if (typeof item.base === 'number') out[key].base = item.base;
-      if (typeof item.perLevel === 'number') out[key].perLevel = item.perLevel;
-      if (typeof item.max === 'number') out[key].max = item.max;
-    } else if (typeof item === 'number') {
-      out[key].base = item;
-      out[key].perLevel = 0;
-      out[key].max = item;
-    }
-    out[key].base = Math.max(0, Math.min(1, out[key].base));
-    out[key].perLevel = Math.max(0, out[key].perLevel);
-    out[key].max = Math.max(out[key].base, Math.min(1, out[key].max));
-  });
-  return out;
-}
-
-function normalizeGoldScaling(raw) {
-  const base = { ...DEFAULT_GOLD_SCALING };
-  const coerce = (val) => (typeof val === 'number' && isFinite(val) ? val : null);
-  if (raw) {
-    const a = coerce(raw.minLow);
-    const b = coerce(raw.maxLow);
-    const c = coerce(raw.minHigh);
-    const d = coerce(raw.maxHigh);
-    if (a !== null) base.minLow = a;
-    if (b !== null) base.maxLow = b;
-    if (c !== null) base.minHigh = c;
-    if (d !== null) base.maxHigh = d;
-  }
-  if (base.maxLow < base.minLow) base.maxLow = base.minLow;
-  if (base.minHigh < base.minLow) base.minHigh = base.minLow;
-  if (base.maxHigh < base.minHigh) base.maxHigh = base.minHigh;
-  return base;
-}
-
-function normalizePotionSettings(raw, defaults) {
-  const base = { ...defaults };
-  if (raw && typeof raw === 'object') {
-    const coerce = (val, fallback) => (typeof val === 'number' && isFinite(val) && val >= 0 ? Math.round(val) : fallback);
-    const coerceMult = (val, fallback) => (typeof val === 'number' && isFinite(val) && val > 0 ? val : fallback);
-    base.durationMs = coerce(raw.durationMs, base.durationMs);
-    base.manualCdMs = coerce(raw.manualCdMs, base.manualCdMs);
-    base.autoCdMs = coerce(raw.autoCdMs, base.autoCdMs);
-    base.speedMultiplier = coerceMult(raw.speedMultiplier, base.speedMultiplier ?? 1);
-  }
-  return base;
-}
-
-function normalizeMonsterScaling(raw) {
-  const base = { ...DEFAULT_MONSTER_SCALING };
-  const num = (val, fallback, min, max) => {
-    if (typeof val === 'number' && isFinite(val)) {
-      let v = val;
-      if (typeof min === 'number' && v < min) v = min;
-      if (typeof max === 'number' && v > max) v = max;
-      return v;
-    }
-    return fallback;
-  };
-  if (raw && typeof raw === 'object') {
-    base.basePower = num(raw.basePower, base.basePower, 1, 1e12);
-    base.maxPower = num(raw.maxPower, base.maxPower, base.basePower, 1e15);
-    base.curve = num(raw.curve, base.curve, 0.1, 10);
-    base.difficultyMultiplier = num(raw.difficultyMultiplier, base.difficultyMultiplier, 0.1, 10);
-    base.attackShare = num(raw.attackShare, base.attackShare, 0.05, 0.9);
-    base.defenseShare = num(raw.defenseShare, base.defenseShare, 0.05, 0.9);
-    base.hpMultiplier = num(raw.hpMultiplier, base.hpMultiplier, 0.1, 100);
-    base.speedBase = num(raw.speedBase, base.speedBase, 1, 1000);
-    base.speedMax = num(raw.speedMax, base.speedMax, base.speedBase, 2000);
-    base.critRateBase = num(raw.critRateBase, base.critRateBase, 0, 100);
-    base.critRateMax = num(raw.critRateMax, base.critRateMax, base.critRateBase, 100);
-    base.critDmgBase = num(raw.critDmgBase, base.critDmgBase, 100, 1000);
-    base.critDmgMax = num(raw.critDmgMax, base.critDmgMax, base.critDmgBase, 1000);
-    base.dodgeBase = num(raw.dodgeBase, base.dodgeBase, 0, 100);
-    base.dodgeMax = num(raw.dodgeMax, base.dodgeMax, base.dodgeBase, 95);
-  }
-  const share = base.attackShare + base.defenseShare;
-  if (share >= 0.95) {
-    base.attackShare = (base.attackShare / share) * 0.9;
-    base.defenseShare = (base.defenseShare / share) * 0.9;
-  }
-  return base;
-}
-
-function sanitizeConfig(raw) {
-  const weights = TIERS.reduce((acc, tier) => {
-    acc[tier] = 0;
-    return acc;
-  }, {});
-  const baseWeights = { ...weights, ...(raw && raw.weights ? raw.weights : {}) };
-  const cfgWeights = TIERS.reduce((acc, tier) => {
-    const val = baseWeights[tier];
-    acc[tier] = typeof val === 'number' && isFinite(val) && val >= 0 ? val : 0;
-    return acc;
-  }, {});
-  return {
-    weights: cfgWeights,
-    probs: normalizeWeights(cfgWeights),
-    seed: raw && typeof raw.seed === 'string' ? raw.seed : '',
-    locked: !!(raw && raw.locked),
-    version: raw && typeof raw.version === 'string' ? raw.version : 'v1',
-    pity: {
-      enabled: !!(raw && raw.pity && raw.pity.enabled),
-      floorTier: raw && raw.pity && TIERS.includes(raw.pity.floorTier) ? raw.pity.floorTier : 'S',
-      span: clampNumber(raw && raw.pity && raw.pity.span, 1, 9999, 90)
-    },
-    minGuarantee10: {
-      enabled: !!(raw && raw.minGuarantee10 && raw.minGuarantee10.enabled),
-      tier: raw && raw.minGuarantee10 && TIERS.includes(raw.minGuarantee10.tier) ? raw.minGuarantee10.tier : 'A'
-    },
-    dropRates: normalizeDropRates(raw && raw.dropRates),
-    goldScaling: normalizeGoldScaling(raw && raw.goldScaling),
-    shopPrices: raw && raw.shopPrices ? { ...DEFAULT_SHOP_PRICES, ...raw.shopPrices } : { ...DEFAULT_SHOP_PRICES },
-    potionSettings: normalizePotionSettings(raw && raw.potionSettings, DEFAULT_POTION_SETTINGS),
-    hyperPotionSettings: normalizePotionSettings(raw && raw.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS),
-    monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling)
-  };
-}
-
-function normalizeWeights(weights) {
-  const total = Object.values(weights).reduce((sum, val) => sum + val, 0);
-  if (!(total > 0)) {
-    return TIERS.reduce((acc, tier) => {
-      acc[tier] = 0;
-      return acc;
-    }, {});
-  }
-  return TIERS.reduce((acc, tier) => {
-    acc[tier] = weights[tier] / total;
-    return acc;
-  }, {});
-}
-
-const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, starterPack: 5000 };
-
-function formatNum(value) {
-  return Number(value || 0).toLocaleString('ko-KR');
-}
-
-function formatMultiplier(value) {
-  const rounded = Math.round((value ?? 0) * 100) / 100;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toString();
-}
-
-function effectiveStat(item, enhance) {
-  if (!item) return 0;
-  const multipliers = enhance?.multipliers || defaultEnhance().multipliers;
-  const lvl = item.lvl || 0;
-  const mul = multipliers[lvl] || 1;
-  return Math.floor((item.base || 0) * mul);
-}
-
-const TIER_VALUE = {
-  'SSS+': 6,
-  'SS+': 5,
-  'S+': 4,
-  S: 3,
-  A: 2,
-  B: 1.2,
-  C: 0.8,
-  D: 0.4
-};
-
-function tierScore(tier) {
-  return TIER_VALUE[tier] || 1;
-}
-
 function computePlayerStats() {
-  const stats = {
-    atk: 0,
-    def: 0,
-    hp: 5000,
-    critRate: 5,
-    critDmg: 150,
-    dodge: 5,
-    speed: 100
-  };
-  const equipment = [];
-  PART_DEFS.forEach((def) => {
-    const item = state.equip[def.key];
-    if (!item) return;
-    const eff = effectiveStat(item, state.enhance);
-    const score = tierScore(item.tier);
-    equipment.push({
-      ...item,
-      effective: eff
-    });
-    if (item.type === 'atk') {
-      stats.atk += eff;
-      stats.critRate += 2 + score;
-      stats.critDmg += 10 + score * 6;
-      stats.speed += score * 1.5;
-    } else {
-      stats.def += eff;
-      stats.hp += eff * (4 + score);
-      stats.dodge += 1 + score;
-      if (item.part === 'boots') {
-        stats.speed += 5 + score * 2;
-      }
-    }
-  });
-  stats.critRate = Math.min(90, stats.critRate);
-  stats.critDmg = Math.min(400, stats.critDmg);
-  stats.dodge = Math.min(60, stats.dodge);
+  const { stats, equipment } = derivePlayerStats(state.equip || {}, state.enhance);
+  const previousHp = gameState.player.hp;
   gameState.player.equipment = equipment;
   gameState.player.totalStats = stats;
   gameState.player.maxHp = stats.hp;
-  if (!gameState.player.hp) {
+  if (!previousHp) {
     gameState.player.hp = stats.hp;
   } else {
-    gameState.player.hp = Math.min(gameState.player.hp, stats.hp);
+    gameState.player.hp = Math.min(previousHp, stats.hp);
   }
-}
-
-function combatPower(stats) {
-  const critFactor = ((stats.critRate || 0) * (stats.critDmg || 100)) / 100;
-  const dodgeFactor = (stats.dodge || 0) * 20;
-  const speedFactor = (stats.speed || 100) * 2;
-  return Math.floor((stats.atk || 0) + (stats.def || 0) * 2 + (stats.hp || 0) / 10 + critFactor + dodgeFactor + speedFactor);
 }
 
 function dropRateForLevel(type, level) {
@@ -531,6 +245,7 @@ function updateResourceSummary() {
   if (els.potionStock) els.potionStock.textContent = formatNum(state.items?.potion || 0);
   if (els.hyperPotionStock) els.hyperPotionStock.textContent = formatNum(state.items?.hyperPotion || 0);
   updateBattleResUi();
+  updateAutoConsumableUi();
   updateSpeedStatus();
 }
 
@@ -543,6 +258,24 @@ function updateBattleResUi() {
     const hasStock = state.user?.role === 'admin' || brCount > 0;
     els.battleResToggle.checked = !!state.combat.useBattleRes && hasStock;
     els.battleResToggle.disabled = !hasStock;
+  }
+}
+
+function updateAutoConsumableUi() {
+  const isAdmin = state.user?.role === 'admin';
+  const potionStock = state.items?.potion || 0;
+  const hyperStock = state.items?.hyperPotion || 0;
+  if (els.autoPotionToggle) {
+    const disabled = !isAdmin && potionStock <= 0;
+    els.autoPotionToggle.checked = !!state.combat.autoPotion;
+    els.autoPotionToggle.disabled = disabled;
+    els.autoPotionToggle.title = disabled ? '가속 물약이 부족합니다.' : '';
+  }
+  if (els.autoHyperToggle) {
+    const disabled = !isAdmin && hyperStock <= 0;
+    els.autoHyperToggle.checked = !!state.combat.autoHyper;
+    els.autoHyperToggle.disabled = disabled;
+    els.autoHyperToggle.title = disabled ? '초 가속 물약이 부족합니다.' : '';
   }
 }
 
@@ -566,7 +299,9 @@ function persistItems() {
 function persistCombatPreferences() {
   const combatPayload = {
     useBattleRes: !!state.combat.useBattleRes,
-    prefBattleRes: state.combat.prefBattleRes !== false
+    prefBattleRes: state.combat.prefBattleRes !== false,
+    autoPotion: !!state.combat.autoPotion,
+    autoHyper: !!state.combat.autoHyper
   };
   state.profile.combat = { ...combatPayload };
   queueProfileUpdate({ combat: combatPayload });
@@ -712,6 +447,132 @@ function clearAutoSchedules() {
   clearAutoNextTimer();
 }
 
+function resetAutoStatsValues() {
+  state.autoStats.battles = 0;
+  state.autoStats.points = 0;
+  state.autoStats.gold = 0;
+  state.autoStats.startTime = 0;
+  const drops = {};
+  AUTO_DROP_KEYS.forEach((key) => {
+    drops[key] = 0;
+  });
+  state.autoStats.drops = drops;
+}
+
+function updateAutoStatsUi() {
+  if (!els.autoStatsPanel) return;
+  const stats = state.autoStats;
+  els.autoStatsPanel.style.display = stats.active ? 'block' : 'none';
+  if (els.autoStatsBattles) els.autoStatsBattles.textContent = formatNum(stats.battles || 0);
+  if (els.autoStatsPoints) els.autoStatsPoints.textContent = formatNum(stats.points || 0);
+  if (els.autoStatsGold) els.autoStatsGold.textContent = formatNum(stats.gold || 0);
+  const dropElements = {
+    enhance: els.autoStatsEnhance,
+    potion: els.autoStatsPotion,
+    hyperPotion: els.autoStatsHyperPotion,
+    protect: els.autoStatsProtect,
+    battleRes: els.autoStatsBattleRes
+  };
+  AUTO_DROP_KEYS.forEach((key) => {
+    const el = dropElements[key];
+    if (el) el.textContent = formatNum(stats.drops?.[key] || 0);
+  });
+}
+
+function startAutoStatsSession() {
+  if (state.autoStats.active) return;
+  resetAutoStatsValues();
+  state.autoStats.active = true;
+  state.autoStats.startTime = Date.now();
+  updateAutoStatsUi();
+}
+
+function recordAutoStats(rewards = {}) {
+  if (!state.autoStats.active) return;
+  state.autoStats.battles += 1;
+  state.autoStats.points += rewards.points || 0;
+  state.autoStats.gold += rewards.gold || 0;
+  const dropCounts = rewards.dropCounts || {};
+  AUTO_DROP_KEYS.forEach((key) => {
+    const gain = dropCounts[key] || 0;
+    if (!state.autoStats.drops[key]) state.autoStats.drops[key] = 0;
+    state.autoStats.drops[key] += gain;
+  });
+  updateAutoStatsUi();
+}
+
+function endAutoStatsSession(reason = 'manual') {
+  if (!state.autoStats.active) return;
+  const summary = {
+    battles: state.autoStats.battles,
+    points: state.autoStats.points,
+    gold: state.autoStats.gold,
+    drops: { ...state.autoStats.drops },
+    startTime: state.autoStats.startTime
+  };
+  state.autoStats.active = false;
+  const durationMs = summary.startTime ? Date.now() - summary.startTime : 0;
+  const durationSec = durationMs > 0 ? Math.round(durationMs / 1000) : 0;
+  const reasonLabel = AUTO_STOP_REASON_LABELS[reason] || AUTO_STOP_REASON_LABELS.other;
+  const hasDrops = AUTO_DROP_KEYS.some((key) => summary.drops[key] > 0);
+  if (summary.battles > 0 || summary.points > 0 || summary.gold > 0 || hasDrops) {
+    let line = `[자동전투 종료] ${reasonLabel} · 전투 ${formatNum(summary.battles)}회`;
+    if (durationSec > 0) {
+      const minutes = Math.floor(durationSec / 60);
+      const seconds = durationSec % 60;
+      const durationText = minutes ? `${minutes}분 ${seconds}초` : `${seconds}초`;
+      line += ` · ${durationText}`;
+    }
+    addBattleLog(line, 'warn');
+    addBattleLog(`획득 포인트: +${formatNum(summary.points)}, 골드: +${formatNum(summary.gold)}`);
+    if (hasDrops) {
+      const dropDetails = AUTO_DROP_KEYS.filter((key) => summary.drops[key] > 0).map(
+        (key) => `${AUTO_DROP_LABELS[key]} ${formatNum(summary.drops[key])}개`
+      );
+      addBattleLog(`획득 아이템: ${dropDetails.join(', ')}`, 'ok');
+    }
+  } else {
+    addBattleLog(`자동 전투가 종료되었습니다 (${reasonLabel}). 획득한 보상이 없습니다.`, 'warn');
+  }
+  resetAutoStatsValues();
+  updateAutoStatsUi();
+}
+
+function hasItemStock(type) {
+  if (state.user?.role === 'admin') return true;
+  return (state.items?.[type] || 0) > 0;
+}
+
+function isHyperActive(now = Date.now()) {
+  return state.buffs.hyperUntil > now;
+}
+
+function isAccelActive(now = Date.now()) {
+  return state.buffs.accelUntil > now;
+}
+
+function shouldAutoUseHyper(now = Date.now()) {
+  if (!state.combat.autoHyper) return false;
+  if (isHyperActive(now)) return false;
+  return hasItemStock('hyperPotion');
+}
+
+function shouldAutoUsePotion(now = Date.now()) {
+  if (!state.combat.autoPotion) return false;
+  if (isHyperActive(now)) return false;
+  if (isAccelActive(now)) return false;
+  return hasItemStock('potion');
+}
+
+function pickAutoAction() {
+  const now = Date.now();
+  if (shouldAutoUseHyper(now)) return 'hyperPotion';
+  if (shouldAutoUsePotion(now)) return 'potion';
+  if (gameState.player.skillCooldown <= 0 && Math.random() < 0.32) return 'skill';
+  if (Math.random() < 0.18) return 'defend';
+  return 'attack';
+}
+
 function queueAutoPlayerAction(delayMs = 500) {
   clearAutoPlayerTimer();
   if (!gameState.battle.autoPlay || !gameState.battle.ongoing || !gameState.battle.isPlayerTurn) return;
@@ -719,9 +580,8 @@ function queueAutoPlayerAction(delayMs = 500) {
   state.autoPlayerTimer = setTimeout(() => {
     state.autoPlayerTimer = null;
     if (!gameState.battle.autoPlay || !gameState.battle.ongoing || !gameState.battle.isPlayerTurn) return;
-    const actions = ['attack', 'attack', 'attack', 'defend', 'skill'];
-    const pick = actions[Math.floor(Math.random() * actions.length)];
-    playerAction(pick);
+    const action = pickAutoAction();
+    playerAction(action);
   }, delay);
 }
 
@@ -737,6 +597,18 @@ function scheduleNextAutoBattle(result = 'victory') {
     if (!gameState.battle.autoPlay) return;
     startNewBattle();
   }, delay);
+}
+
+function beginPlayerTurn(context = 'default') {
+  if (!gameState.battle.ongoing) return;
+  gameState.battle.isPlayerTurn = true;
+  gameState.battle.actionLock = false;
+  gameState.player.defending = false;
+  updateHpBars();
+  if (gameState.battle.autoPlay) {
+    const initialDelay = context === 'battleStart' ? 500 : 350;
+    queueAutoPlayerAction(initialDelay);
+  }
 }
 
 function updateAutoPlayUi() {
@@ -865,32 +737,6 @@ function calculateWinProbability() {
   let prob = powerRatio - levelPenalty;
   prob = Math.max(0.01, Math.min(0.99, prob));
   return prob;
-}
-
-function calculateDamage(attacker, defender, isSkill = false) {
-  let baseDamage = attacker.atk || attacker.stats?.atk || 100;
-  if (isSkill) baseDamage *= 2;
-  let isCritical = false;
-  const critRate = attacker.critRate || attacker.stats?.critRate || 5;
-  if (Math.random() * 100 < critRate) {
-    isCritical = true;
-    const critDmg = attacker.critDmg || attacker.stats?.critDmg || 150;
-    baseDamage *= critDmg / 100;
-  }
-  const dodgeRate = defender.dodge || defender.stats?.dodge || 5;
-  if (Math.random() * 100 < dodgeRate) {
-    return { damage: 0, type: 'MISS' };
-  }
-  const defense = defender.def || defender.stats?.def || 0;
-  let finalDamage = Math.max(1, baseDamage - defense * 0.5);
-  if (defender.defending) {
-    finalDamage *= 0.35;
-    defender.defending = false;
-  }
-  return {
-    damage: Math.floor(finalDamage),
-    type: isCritical ? 'CRITICAL' : 'NORMAL'
-  };
 }
 
 function clampMonsterLevel(value) {
@@ -1051,14 +897,15 @@ function startNewBattle() {
   clearAutoPlayerTimer();
   const level = clampMonsterLevel(els.monsterLevel?.value || gameState.battle.lastLevel || 1);
   updateMonsterLevelUI(level);
+  if (gameState.battle.ongoing) return;
+  gameState.battle.ongoing = true;
+  gameState.battle.actionLock = false;
   gameState.player.defending = false;
   gameState.player.skillCooldown = 0;
   gameState.player.hp = gameState.player.maxHp;
   gameState.enemy.defending = false;
   updateEnemyStats(level);
   gameState.battle.turn = 0;
-  gameState.battle.isPlayerTurn = true;
-  gameState.battle.ongoing = true;
   if (els.battleLog) els.battleLog.innerHTML = '';
   addBattleLog(`=== 레벨 ${level} 몬스터와 전투 시작! ===`);
   updateHpBars();
@@ -1066,9 +913,7 @@ function startNewBattle() {
   const enemyPower = combatPower({ ...gameState.enemy.stats, hp: gameState.enemy.maxHp });
   addBattleLog(`몬스터 전투력: ${formatNum(enemyPower)}`, 'warn');
   updateAutoPlayUi();
-  if (gameState.battle.autoPlay && gameState.battle.isPlayerTurn) {
-    queueAutoPlayerAction(500);
-  }
+  beginPlayerTurn('battleStart');
 }
 
 function applyRewards(level, rng = Math.random) {
@@ -1078,17 +923,33 @@ function applyRewards(level, rng = Math.random) {
   state.wallet += points;
   state.gold += gold;
   const drops = [];
-  if (maybeDropItem('enhance', level)) drops.push('강화권 +1');
-  if (maybeDropItem('potion', level)) drops.push('가속 물약 +1');
-  if (maybeDropItem('hyperPotion', level)) drops.push('초 가속 물약 +1');
-  if (maybeDropItem('protect', level)) drops.push('보호권 +1');
-  if (maybeDropItem('battleRes', level)) drops.push('전투부활권 +1');
+  const dropCounts = { enhance: 0, potion: 0, hyperPotion: 0, protect: 0, battleRes: 0 };
+  if (maybeDropItem('enhance', level)) {
+    drops.push('강화권 +1');
+    dropCounts.enhance += 1;
+  }
+  if (maybeDropItem('potion', level)) {
+    drops.push('가속 물약 +1');
+    dropCounts.potion += 1;
+  }
+  if (maybeDropItem('hyperPotion', level)) {
+    drops.push('초 가속 물약 +1');
+    dropCounts.hyperPotion += 1;
+  }
+  if (maybeDropItem('protect', level)) {
+    drops.push('보호권 +1');
+    dropCounts.protect += 1;
+  }
+  if (maybeDropItem('battleRes', level)) {
+    drops.push('전투부활권 +1');
+    dropCounts.battleRes += 1;
+  }
   state.profile.wallet = state.wallet;
   state.profile.gold = state.gold;
   persistItems();
   updateResourceSummary();
   queueProfileUpdate({ wallet: state.wallet, gold: state.gold });
-  return { points, gold, drops };
+  return { points, gold, drops, dropCounts };
 }
 
 function maybeDropItem(type, level) {
@@ -1170,6 +1031,9 @@ function handleVictory(level) {
       addBattleLog(rewards.drops.join(', '));
     }
   }
+  if (state.autoStats.active) {
+    recordAutoStats(rewards);
+  }
   if (gameState.battle.autoPlay) {
     scheduleNextAutoBattle('victory');
   }
@@ -1178,6 +1042,7 @@ function handleVictory(level) {
 function handleDefeat(level, context) {
   const resurrected = useBattleResTicket(level, context);
   triggerDeathAnimation('player');
+  gameState.battle.actionLock = false;
   if (resurrected) {
     if (gameState.battle.autoPlay) scheduleNextAutoBattle('defeat');
     return;
@@ -1198,7 +1063,7 @@ function handleDefeat(level, context) {
     gameState.battle.autoPlay = false;
     clearAutoSchedules();
     updateAutoPlayUi();
-    addBattleLog('자동 전투가 중지되었습니다.', 'warn');
+    endAutoStatsSession('defeat');
   }
 }
 
@@ -1207,11 +1072,13 @@ function concludeTurn() {
   updateCombatPowerUI();
   if (gameState.player.hp <= 0) {
     gameState.battle.ongoing = false;
+    gameState.battle.actionLock = false;
     handleDefeat(gameState.enemy.level, 'manual');
     return true;
   }
   if (gameState.enemy.hp <= 0) {
     gameState.battle.ongoing = false;
+    gameState.battle.actionLock = false;
     handleVictory(gameState.enemy.level);
     return true;
   }
@@ -1220,6 +1087,8 @@ function concludeTurn() {
 
 function playerAction(action) {
   if (!gameState.battle.ongoing || !gameState.battle.isPlayerTurn) return;
+  if (gameState.battle.actionLock) return;
+  gameState.battle.actionLock = true;
   clearAutoPlayerTimer();
   gameState.player.defending = false;
   const speedMul = currentSpeedMultiplier();
@@ -1262,6 +1131,7 @@ function playerAction(action) {
     case 'skill': {
       if (gameState.player.skillCooldown > 0) {
         addBattleLog(`스킬 쿨다운 ${gameState.player.skillCooldown}턴 남음`, 'warn');
+        gameState.battle.actionLock = false;
         if (gameState.battle.autoPlay) {
           queueAutoPlayerAction(350);
         }
@@ -1282,6 +1152,10 @@ function playerAction(action) {
     case 'potion': {
       if (!consumePotion()) {
         addBattleLog('가속 물약이 부족합니다.', 'warn');
+        gameState.battle.actionLock = false;
+        if (gameState.battle.autoPlay) {
+          queueAutoPlayerAction(350);
+        }
         return;
       }
       gameState.battle.turn += 1;
@@ -1291,6 +1165,10 @@ function playerAction(action) {
     case 'hyperPotion': {
       if (!consumeHyperPotion()) {
         addBattleLog('초 가속 물약이 부족합니다.', 'warn');
+        gameState.battle.actionLock = false;
+        if (gameState.battle.autoPlay) {
+          queueAutoPlayerAction(350);
+        }
         return;
       }
       gameState.battle.turn += 1;
@@ -1338,8 +1216,7 @@ function enemyAction() {
 
   function postEnemyAction() {
     if (concludeTurn()) return;
-    gameState.battle.isPlayerTurn = true;
-    queueAutoPlayerAction(500);
+    beginPlayerTurn('afterEnemy');
   }
 }
 
@@ -1358,12 +1235,14 @@ function initEventListeners() {
     gameState.battle.autoPlay = !gameState.battle.autoPlay;
     updateAutoPlayUi();
     if (gameState.battle.autoPlay) {
+      startAutoStatsSession();
       if (gameState.battle.ongoing && gameState.battle.isPlayerTurn) {
         queueAutoPlayerAction(450);
       } else if (!gameState.battle.ongoing) {
         scheduleNextAutoBattle('manual');
       }
     } else {
+      endAutoStatsSession('manual');
       clearAutoSchedules();
     }
   });
@@ -1373,6 +1252,16 @@ function initEventListeners() {
     state.combat.prefBattleRes = enabled;
     persistCombatPreferences();
     updateBattleResUi();
+  });
+  els.autoPotionToggle?.addEventListener('change', (e) => {
+    state.combat.autoPotion = !!e.target.checked;
+    persistCombatPreferences();
+    updateAutoConsumableUi();
+  });
+  els.autoHyperToggle?.addEventListener('change', (e) => {
+    state.combat.autoHyper = !!e.target.checked;
+    persistCombatPreferences();
+    updateAutoConsumableUi();
   });
   els.monsterLevel?.addEventListener('input', (e) => {
     const level = clampMonsterLevel(e.target.value);
@@ -1403,8 +1292,18 @@ function initEventListeners() {
   els.toGacha?.addEventListener('click', () => {
     window.location.href = 'index.html';
   });
+  els.toPvp?.addEventListener('click', () => {
+    window.location.href = 'pvp.html';
+  });
   els.logout?.addEventListener('click', async () => {
     await signOut(auth);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'n' && event.key !== 'N') return;
+    const tag = (event.target && event.target.tagName) || '';
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+    event.preventDefault();
+    startNewBattle();
   });
 }
 
@@ -1457,7 +1356,7 @@ async function loadOrInitializeProfile(firebaseUser) {
       spares: null,
       items: null,
       enhance: null,
-      combat: { useBattleRes: true, prefBattleRes: true },
+      combat: { useBattleRes: true, prefBattleRes: true, autoPotion: false, autoHyper: false },
       presets: null,
       selectedPreset: null,
       pitySince: 0,
@@ -1497,7 +1396,9 @@ async function hydrateProfile(firebaseUser) {
   state.gold = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.gold, 0, Number.MAX_SAFE_INTEGER, 10000);
   state.combat = {
     useBattleRes: rawProfile.combat?.useBattleRes !== false,
-    prefBattleRes: rawProfile.combat?.prefBattleRes !== false
+    prefBattleRes: rawProfile.combat?.prefBattleRes !== false,
+    autoPotion: rawProfile.combat?.autoPotion === true,
+    autoHyper: rawProfile.combat?.autoHyper === true
   };
   if (role !== 'admin' && (state.items?.battleRes || 0) <= 0) {
     state.combat.useBattleRes = false;

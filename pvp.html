@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PVP 아레나</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --panel: #161a21;
+        --panel-2: #1c2230;
+        --text: #e7ecf3;
+        --muted: #aeb7c6;
+        --accent: #6aa9ff;
+        --ok: #43c383;
+        --warn: #f6c34a;
+        --danger: #ff6b6b;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans KR, Helvetica, Arial;
+        padding: 20px;
+      }
+      .top-bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      .top-bar h1 { margin: 0; font-size: 20px; }
+      .top-bar .meta { display:flex; gap:12px; flex-wrap:wrap; font-size:13px; color:var(--muted); }
+      .top-bar .meta b { color: var(--text); }
+      .top-bar .sep { flex:1 1 auto; }
+      button {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid rgba(142,238,255,0.2);
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      button.primary { background: var(--accent); color: #06122a; border-color: transparent; }
+      button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(106,169,255,0.35); }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      .panels {
+        display: grid;
+        grid-template-columns: 1.2fr 1.4fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 1200px) { .panels { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 870px) { .panels { grid-template-columns: 1fr; } }
+      .panel {
+        background: var(--panel);
+        border-radius: 12px;
+        border: 1px solid rgba(142, 238, 255, 0.2);
+        padding: 16px;
+      }
+      .panel h2 { margin:0 0 12px; font-size:18px; color: var(--accent); }
+      .player-card, .opponent-card {
+        display:flex; flex-direction:column; gap:10px;
+        background: var(--panel-2);
+        border:1px solid rgba(142,238,255,0.15);
+        border-radius:10px;
+        padding:12px;
+      }
+      .subheading { font-size:14px; color:var(--muted); margin:0 0 6px; }
+      .stats-grid { display:grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap:6px; font-size:13px; }
+      .stats-grid .row { display:flex; justify-content:space-between; padding:4px 6px; background:rgba(0,0,0,0.25); border-radius:6px; }
+      .stats-grid .label { color: var(--muted); }
+      .tier-badge { display:inline-flex; align-items:center; gap:4px; font-size:12px; background:rgba(142,238,255,0.12); border:1px solid rgba(142,238,255,0.25); border-radius:999px; padding:2px 8px; }
+      .opponent-list { max-height:320px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+      .opponent-item { display:flex; justify-content:space-between; align-items:center; gap:10px; background:rgba(10,15,24,0.7); border:1px solid rgba(142,238,255,0.1); border-radius:10px; padding:10px; }
+      .opponent-item .info { display:flex; flex-direction:column; }
+      .opponent-item .name { font-weight:600; }
+      .opponent-item .rating { font-size:12px; color:var(--muted); }
+      .scoreboard-table { width:100%; border-collapse:collapse; margin-top:10px; }
+      .scoreboard-table th, .scoreboard-table td { padding:6px 8px; border-bottom:1px solid rgba(142,238,255,0.15); text-align:left; font-size:13px; }
+      .scoreboard-table th { color:var(--muted); font-weight:600; }
+      .battle-log { background: rgba(0,0,0,0.35); border-radius:10px; border:1px solid rgba(142,238,255,0.15); padding:12px; max-height:260px; overflow:auto; font-size:13px; display:flex; flex-direction:column; gap:6px; }
+      .log-line { padding:4px 6px; border-left:3px solid rgba(142,238,255,0.25); background:rgba(8,12,20,0.6); border-radius:6px; }
+      .log-line.win { border-color: var(--ok); }
+      .log-line.loss { border-color: var(--danger); }
+      .vs-section { display:flex; flex-direction:column; gap:14px; }
+      .versus-summary { display:flex; flex-wrap:wrap; gap:12px; font-size:13px; color:var(--muted); }
+      .versus-summary span { background:rgba(142,238,255,0.12); border:1px solid rgba(142,238,255,0.2); border-radius:999px; padding:4px 10px; }
+      .muted { color: var(--muted); }
+      .ok { color: var(--ok); }
+      .danger { color: var(--danger); }
+      .warn { color: var(--warn); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="top-bar">
+        <h1>PVP 아레나</h1>
+        <div class="meta">
+          <span>플레이어: <b id="whoamiPvp">-</b></span>
+          <span>전적: <b id="pvpRecord">0승 0패</b></span>
+        </div>
+        <span class="sep"></span>
+        <button id="toGacha" class="primary">가챠 페이지</button>
+        <button id="toBattle">전투 페이지</button>
+        <button id="resetPvpData" style="display:none;">랭킹 초기화</button>
+        <button id="logoutBtn">로그아웃</button>
+      </div>
+
+      <div class="panels">
+        <div class="panel">
+          <h2>플레이어 정보</h2>
+          <div class="player-card" id="playerCard">
+            <div class="subheading">나의 장비</div>
+            <div id="playerEquipment"></div>
+            <div class="subheading" style="margin-top:10px;">총합 스탯</div>
+            <div class="stats-grid" id="playerStats"></div>
+          </div>
+          <div class="panel" style="margin-top:16px; background:rgba(0,0,0,0.3);">
+            <h2 style="margin-bottom:10px;">내 PVP 히스토리</h2>
+            <div class="battle-log" id="personalHistory"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>도전 상대</h2>
+          <div class="opponent-list" id="opponentList"></div>
+          <div class="panel" style="margin-top:16px; background:rgba(0,0,0,0.3);">
+            <h2 style="margin-bottom:10px;">전투 로그</h2>
+            <div class="vs-section">
+              <div class="versus-summary" id="versusSummary"></div>
+              <div class="battle-log" id="battleLog"></div>
+              <button id="challengeBtn" class="primary" disabled>도전하기</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>랭킹</h2>
+          <table class="scoreboard-table" id="rankingTable">
+            <thead>
+              <tr><th>순위</th><th>플레이어</th><th>전적</th><th>승률</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="pvp.js"></script>
+  </body>
+</html>

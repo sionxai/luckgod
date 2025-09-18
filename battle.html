@@ -193,6 +193,11 @@
 
       .control-footer { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--muted); }
       .control-footer span { display: inline-flex; align-items: center; gap: 4px; }
+      .auto-stats-panel { display: none; margin-top: 14px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(142, 238, 255, 0.2); border-radius: 10px; padding: 12px; }
+      .auto-stats-panel h3 { margin: 0 0 8px; font-size: 14px; color: var(--accent); }
+      .auto-stats-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
+      .auto-stats-grid span { background: rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px; }
+      .auto-stats-grid span b { color: var(--text); }
 
       .battle-result-banner { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0); font-size: 48px; font-weight: bold; text-shadow: 0 0 20px currentColor; z-index: 100; pointer-events: none; }
       .battle-result-banner.victory { color: #ffd700; animation: victoryBanner calc(1.5s / var(--speed-scale)) ease-out forwards; }
@@ -212,6 +217,7 @@
         </div>
         <span class="sep"></span>
         <button id="toGacha" class="primary">가챠 페이지</button>
+        <button id="toPvp">PVP</button>
         <button id="logoutBtn">로그아웃</button>
       </div>
 
@@ -313,7 +319,9 @@
             <div class="battle-meta">
               <span id="speedStatus">배속 1×</span>
               <span>전투부활권: <b id="battleResCount">0</b></span>
-              <label class="toggle"><input type="checkbox" id="battleResToggle" checked /> 자동 사용</label>
+              <label class="toggle"><input type="checkbox" id="battleResToggle" checked /> 부활 자동</label>
+              <label class="toggle"><input type="checkbox" id="autoPotionToggle" /> 가속 자동</label>
+              <label class="toggle"><input type="checkbox" id="autoHyperToggle" /> 초가속 자동</label>
             </div>
 
             <div class="battle-log" id="battleLog"></div>
@@ -339,6 +347,19 @@
             <span>포션 보유: <b id="potionStock">0</b></span>
             <span>하이퍼 포션: <b id="hyperPotionStock">0</b></span>
             <span>전투부활권: <b id="battleResInline">0</b></span>
+          </div>
+          <div class="auto-stats-panel" id="autoStatsPanel">
+            <h3>자동 전투 누적</h3>
+            <div class="auto-stats-grid">
+              <span>전투 수 <b id="autoStatsBattles">0</b></span>
+              <span>포인트 <b id="autoStatsPoints">0</b></span>
+              <span>골드 <b id="autoStatsGold">0</b></span>
+              <span>강화권 <b id="autoStatsEnhance">0</b></span>
+              <span>가속 물약 <b id="autoStatsPotion">0</b></span>
+              <span>초 가속 물약 <b id="autoStatsHyperPotion">0</b></span>
+              <span>보호권 <b id="autoStatsProtect">0</b></span>
+              <span>전투부활권 <b id="autoStatsBattleRes">0</b></span>
+            </div>
           </div>
         </div>
       </div>

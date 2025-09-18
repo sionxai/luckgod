@@ -64,7 +64,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const $$ = (q)=>Array.from(document.querySelectorAll(q));
 
       const els = {
-        appWrap: $('#appWrap'), logoutBtn: $('#logoutBtn'), whoami: $('#whoami'), toAdmin: $('#toAdmin'), toUser: $('#toUser'), toBattle: $('#toBattle'), goBattle: $('#goBattle'), adminPanel: $('#adminPanel'), adminOldPass: $('#adminOldPass'), adminNewPass: $('#adminNewPass'), adminChangePw: $('#adminChangePw'), adminMsg: $('#adminMsg'),
+        appWrap: $('#appWrap'), logoutBtn: $('#logoutBtn'), whoami: $('#whoami'), toAdmin: $('#toAdmin'), toUser: $('#toUser'), toBattle: $('#toBattle'), goBattle: $('#goBattle'), toPvp: $('#toPvp'), adminPanel: $('#adminPanel'), adminOldPass: $('#adminOldPass'), adminNewPass: $('#adminNewPass'), adminChangePw: $('#adminChangePw'), adminMsg: $('#adminMsg'),
         dropPotionBase: $('#dropPotionBase'), dropPotionPer: $('#dropPotionPer'), dropPotionMax: $('#dropPotionMax'),
         dropHyperBase: $('#dropHyperBase'), dropHyperPer: $('#dropHyperPer'), dropHyperMax: $('#dropHyperMax'),
         dropProtectBase: $('#dropProtectBase'), dropProtectPer: $('#dropProtectPer'), dropProtectMax: $('#dropProtectMax'),
@@ -749,6 +749,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         els.toAdmin.addEventListener('click', ()=>{ if(!isAdmin()) { alert('관리자만 접근 가능합니다.'); return; } state.ui.adminView = true; updateViewMode(); });
         els.toUser.addEventListener('click', ()=>{ state.ui.adminView = false; updateViewMode(); });
         if(els.toBattle){ els.toBattle.addEventListener('click', ()=>{ window.location.href = 'battle.html'; }); }
+        if(els.toPvp){ els.toPvp.addEventListener('click', ()=>{ window.location.href = 'pvp.html'; }); }
         if(els.goBattle){ els.goBattle.addEventListener('click', ()=>{ window.location.href = 'battle.html'; }); }
         els.adminChangePw.addEventListener('click', changeAdminPassword);
         els.saveDrops.addEventListener('click', ()=>{
