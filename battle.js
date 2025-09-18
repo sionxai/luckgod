@@ -947,7 +947,7 @@ function updateEnemyStats(level) {
     dodge
   };
   gameState.enemy.power = power;
-  state.battle.lastLevel = lvl;
+  gameState.battle.lastLevel = lvl;
   gameState.enemy.defending = false;
   if (els.enemyLevel) els.enemyLevel.textContent = String(lvl);
   if (els.enemyAtk) els.enemyAtk.textContent = formatNum(gameState.enemy.stats.atk);
@@ -1049,7 +1049,7 @@ function ensurePlayerReady() {
 function startNewBattle() {
   clearAutoNextTimer();
   clearAutoPlayerTimer();
-  const level = clampMonsterLevel(els.monsterLevel?.value || state.battle.lastLevel || 1);
+  const level = clampMonsterLevel(els.monsterLevel?.value || gameState.battle.lastLevel || 1);
   updateMonsterLevelUI(level);
   gameState.player.defending = false;
   gameState.player.skillCooldown = 0;
