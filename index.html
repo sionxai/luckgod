@@ -6,7 +6,7 @@
     <title>가챠 시뮬레이터 — 확률 지정 · 시드 · 통계</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body data-page="index" data-default-section="gacha" data-active-section="gacha">
     <div id="appWrap" class="wrap">
       <header class="top">
         <h1>가챠 시뮬레이터</h1>
@@ -28,7 +28,7 @@
       </header>
 
       <div class="grid" style="margin-top:10px">
-        <section class="panel" data-admin="true" id="adminPanel" style="display:none">
+        <section class="panel" data-admin="true" id="adminPanel" data-section="gacha" style="display:none">
           <h2>관리자 페이지</h2>
           <div class="row">
             <div class="muted">확률/설정 편집 권한은 관리자만 가능</div>
@@ -192,7 +192,7 @@
           </div>
         </section>
 
-        <section class="panel" id="configPanel">
+        <section class="panel" id="configPanel" data-section="gacha">
           <h2>설정</h2>
           <div class="row preset-user-row">
             <label>관리자 프리셋<select id="globalPresetSelect"></select></label>
@@ -226,7 +226,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="drawPanel" data-section="gacha">
           <h2>실행</h2>
           <div class="row">
             <button id="draw1" class="primary">1회</button>
@@ -244,7 +244,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="equipment" data-section="equipment">
           <h2>장비창</h2>
           <div class="row">
             <div class="muted">장착 5부위 + 예비 2개(자동 정리)</div>
@@ -256,7 +256,7 @@
           <div id="spareList"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel" data-section="equipment">
           <h2>대장간</h2>
           <div class="row">
             <label>강화 대상<select id="forgeTarget"></select></label>
@@ -287,13 +287,13 @@
           </details>
         </section>
 
-        <section class="panel" id="battleRedirectPanel">
+        <section class="panel" id="battleRedirectPanel" data-section="gacha">
           <h2>전투</h2>
           <p class="muted small">새로운 전투 시스템은 전용 페이지에서 즐길 수 있어요.</p>
           <button id="goBattle" class="primary">전투 페이지 열기</button>
         </section>
 
-        <section class="panel" id="shopPanel">
+        <section class="panel" id="shop" data-section="shop">
           <h2>상점</h2>
           <div class="row">
             <div class="muted small">골드를 소비해 아이템을 구매하세요.</div>
@@ -376,8 +376,10 @@
           <div id="shopMsg" class="shop-msg" aria-live="polite"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="statsPanel" data-section="gacha">
           <h2>통계</h2>
+          <details id="statsDetails" class="stats-fold">
+            <summary>상세 통계 보기</summary>
           <div class="row">
             <label>보기<select id="scope"><option value="session">세션</option><option value="global">전체</option></select></label>
             <div class="muted">표본 수: <span id="nDraws">0</span></div>
@@ -393,9 +395,10 @@
             <tbody></tbody>
           </table>
           <div class="barwrap" style="margin-top:8px"><canvas id="chart" width="900" height="220"></canvas></div>
+          </details>
         </section>
 
-        <section class="panel">
+        <section class="panel" data-section="gacha" id="logPanel">
           <h2>결과 로그</h2>
           <div class="row">
             <button id="exportCsv">CSV 내보내기</button>
@@ -407,5 +410,6 @@
     </div>
 
     <script type="module" src="app.js"></script>
+    <script type="module" src="navigation.js"></script>
   </body>
 </html>

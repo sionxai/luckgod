@@ -87,7 +87,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         invCount: $('#invCount'), equipGrid: $('#equipGrid'), spareList: $('#spareList'),
         forgeTarget: $('#forgeTarget'), forgeLv: $('#forgeLv'), forgeMul: $('#forgeMul'), forgeP: $('#forgeP'), forgePreview: $('#forgePreview'), forgeOnce: $('#forgeOnce'), forgeAuto: $('#forgeAuto'), forgeTableBody: $('#forgeTableBody'), forgeReset: $('#forgeReset'), forgeMsg: $('#forgeMsg'), forgeEffect: $('#forgeEffect'), forgeProtectUse: $('#forgeProtectUse'), protectCount: $('#protectCount'), enhanceCount: $('#enhanceCount'), reviveCount: $('#reviveCount'),
         pricePotion: $('#pricePotion'), priceHyper: $('#priceHyper'), priceProtect: $('#priceProtect'), priceEnhance: $('#priceEnhance'), priceBattleRes: $('#priceBattleRes'), priceStarter: $('#priceStarter'),
-        invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), shopPanel: $('#shopPanel'),
+        invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), shopPanel: $('#shop'),
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantSubmit: $('#adminGrantSubmit'),
@@ -1607,7 +1607,24 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       }
       function claimRevive(){ if(!canClaimRevive()){ alert('부활권을 받을 조건이 아닙니다. (장비 0개, 포인트 100 이하 필요)'); return; } state.items.revive = (state.items.revive||0) + 1; addPoints(1000); updateItemCountsView(); updateReviveButton(); markProfileDirty(); alert('부활권을 획득하고 1,000 포인트를 받았습니다!'); }
       function onSpareListClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(!target.classList.contains('equip-btn')) return; const part = target.dataset.part; if(!part) return; equipSpare(part); }
-      function equipSpare(part){ const item = state.spares[part]; if(!item){ alert('예비 장비가 없습니다.'); return; } if(state.equip[part]){ alert('해당 부위에 이미 장비가 있습니다. 먼저 해제하거나 다른 부위를 선택하세요.'); return; } state.equip[part] = item; state.spares[part] = null; updateInventoryView(); buildForgeTargetOptions(); updateItemCountsView(); setForgeMsg('장비를 착용했습니다.', 'ok'); markProfileDirty(); }
+      function equipSpare(part){
+        const spareItem = state.spares[part];
+        if(!spareItem){ alert('예비 장비가 없습니다.'); return; }
+        const equipped = state.equip[part];
+        if(equipped){
+          const ok = confirm(`${PART_DEFS.find(p=>p.key===part)?.name || '장비'} 부위에 장착된 장비를 예비로 이동하고 선택한 장비로 교체할까요?`);
+          if(!ok) return;
+          state.spares[part] = equipped;
+        } else {
+          state.spares[part] = null;
+        }
+        state.equip[part] = spareItem;
+        updateInventoryView();
+        buildForgeTargetOptions();
+        updateItemCountsView();
+        setForgeMsg('장비를 교체했습니다.', 'ok');
+        markProfileDirty();
+      }
       function currentForgeItem(){ const v = els.forgeTarget.value||''; if(!v) return null; const [kind, id] = v.split(':'); if(kind==='equip'){ return state.equip[id] || null; } if(kind==='spare'){ return state.spares[id] || null; } return null; }
       function updateForgeInfo(){ const it = currentForgeItem(); if(!it){ els.forgeLv.textContent = '0'; els.forgeMul.textContent = '1.00×'; els.forgeP.textContent = '-'; els.forgePreview.textContent='-'; els.forgeOnce.disabled = true; return; } const lv = it.lvl||0; const next = Math.min(20, lv+1); const mul = state.enhance.multipliers[lv]||1; const p = state.enhance.probs[next]||0; els.forgeLv.textContent = String(lv); els.forgeMul.textContent = mul.toFixed(2)+'×'; els.forgeP.textContent = (p*100).toFixed(2)+'%'; const cur = effectiveStat(it); const nextMul = state.enhance.multipliers[next]||mul; const after = Math.floor((it.base||0) * nextMul); els.forgePreview.textContent = `${formatNum(cur)} → ${formatNum(after)} (Lv.${next})`; els.forgeOnce.disabled = (lv>=20);
       }
