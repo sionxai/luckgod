@@ -1635,14 +1635,16 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const prev = typeof userProfile.gold === 'number' && isFinite(userProfile.gold) ? userProfile.gold : null;
         userProfile.gold = coerced;
         if(state.profile) state.profile.gold = coerced;
-        if(opts?.force || prev !== coerced){
-          pushProfileUpdate({ gold: coerced });
+        const extra = opts?.extraUpdates && Object.keys(opts.extraUpdates).length ? { ...opts.extraUpdates } : null;
+        if(opts?.force || prev !== coerced || extra){
+          const payload = extra ? { gold: coerced, ...extra } : { gold: coerced };
+          pushProfileUpdate(payload);
         }
         if(!opts || !opts.silent) updateGoldView();
       }
       function updateGoldView(){ if(els.gold){ if(isAdmin()){ els.gold.textContent = '∞'; } else { els.gold.textContent = formatNum(state.gold||0); } } updateShopButtons(); }
       function addGold(amount){ if(!(amount>0)) return; state.gold = (state.gold||0) + Math.floor(amount); saveGold(); }
-      function spendGold(amount){ amount = Math.floor(amount); if(!(amount>0)) return false; if((state.gold||0) < amount) return false; state.gold -= amount; saveGold(); return true; }
+      function spendGold(amount, opts){ amount = Math.floor(amount); if(!(amount>0)) return false; if((state.gold||0) < amount) return false; state.gold -= amount; if(opts?.deferSave) return true; saveGold(opts); return true; }
       function loadDiamonds(){
         if(isAdmin()){
           state.diamonds = Number.POSITIVE_INFINITY;
@@ -2506,8 +2508,53 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function setShopMessage(msg, status){ if(!els.shopMsg) return; els.shopMsg.textContent = msg || ''; els.shopMsg.classList.remove('ok','warn','error'); if(status){ els.shopMsg.classList.add(status); } }
       function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack')); const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0); const buttons = els.shopPanel.querySelectorAll('.shop-buy'); buttons.forEach(function(btn){ const type = btn.dataset.item; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; }); }
       function grantStarterPack(count){ count = Math.max(1, parseInt(count,10)||1); const rng = getRng(); for(let n=0;n<count;n++){ PART_DEFS.forEach(function(part){ const item = { id: state.itemSeq++, tier: 'B', part: part.key, base: rollStatFor('B', part.key, rng), lvl: 0, type: part.type }; applyEquipAndInventory(item); }); } updateInventoryView(); }
-      function buyShopItem(type, count){ count = Math.max(1, parseInt(count,10)||1); const totalCost = shopPrice(type) * count; if(state.gold !== Number.POSITIVE_INFINITY && (state.gold||0) < totalCost){ setShopMessage('골드가 부족합니다.', 'error'); return; } if(!spendGold(totalCost)){ setShopMessage('골드 차감에 실패했습니다.', 'error'); return; } switch(type){ case 'potion': state.items.potion = (state.items.potion||0)+count; setShopMessage(`가속 물약 ${count}개를 구매했습니다.`, 'ok'); break; case 'hyperPotion': state.items.hyperPotion = (state.items.hyperPotion||0)+count; setShopMessage(`초 가속 물약 ${count}개를 구매했습니다.`, 'ok'); break; case 'protect': state.items.protect = (state.items.protect||0)+count; setShopMessage(`보호권 ${count}개를 구매했습니다.`, 'ok'); break; case 'enhance': state.items.enhance = (state.items.enhance||0)+count; setShopMessage(`강화권 ${count}개를 구매했습니다.`, 'ok'); break; case 'battleRes': state.items.battleRes = (state.items.battleRes||0)+count; setShopMessage(`전투부활권 ${count}개를 구매했습니다.`, 'ok'); break; case 'starterPack': grantStarterPack(count); setShopMessage(`초보자 패키지를 구매했습니다! B 등급 장비 ${count*PART_KEYS.length}개를 획득했습니다.`, 'ok'); break; default: setShopMessage('알 수 없는 아이템입니다.', 'warn'); addGold(totalCost); return; }
-        updateItemCountsView(); updateShopButtons(); markProfileDirty(); }
+      function buyShopItem(type, count){
+        count = Math.max(1, parseInt(count,10)||1);
+        const totalCost = shopPrice(type) * count;
+        if(state.gold !== Number.POSITIVE_INFINITY && (state.gold||0) < totalCost){ setShopMessage('골드가 부족합니다.', 'error'); return; }
+        if(!spendGold(totalCost, { deferSave:true })){ setShopMessage('골드 차감에 실패했습니다.', 'error'); return; }
+        switch(type){
+          case 'potion':
+            state.items.potion = (state.items.potion||0) + count;
+            setShopMessage(`가속 물약 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'hyperPotion':
+            state.items.hyperPotion = (state.items.hyperPotion||0) + count;
+            setShopMessage(`초 가속 물약 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'protect':
+            state.items.protect = (state.items.protect||0) + count;
+            setShopMessage(`보호권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'enhance':
+            state.items.enhance = (state.items.enhance||0) + count;
+            setShopMessage(`강화권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'battleRes':
+            state.items.battleRes = (state.items.battleRes||0) + count;
+            setShopMessage(`전투부활권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'starterPack':
+            grantStarterPack(count);
+            setShopMessage(`초보자 패키지를 구매했습니다! B 등급 장비 ${count*PART_KEYS.length}개를 획득했습니다.`, 'ok');
+            break;
+          default:
+            setShopMessage('알 수 없는 아이템입니다.', 'warn');
+            addGold(totalCost);
+            return;
+        }
+        const itemsPayload = sanitizeItems(state.items);
+        state.items = itemsPayload;
+        if(userProfile){ userProfile.items = { ...itemsPayload }; }
+        if(state.profile){ state.profile.items = { ...itemsPayload }; }
+        if(isAdmin()){
+          pushProfileUpdate({ items: itemsPayload });
+        } else {
+          saveGold({ extraUpdates: { items: itemsPayload } });
+        }
+        updateItemCountsView();
+        markProfileDirty();
+      }
       function canClaimRevive(){ if(isAdmin()) return false; if(totalKept() !== 0) return false; if((state.wallet||0) > 100) return false; return true; }
       function updateReviveButton(){ if(!els.claimRevive) return; const show = canClaimRevive(); els.claimRevive.style.display = show ? '' : 'none'; els.claimRevive.disabled = !show; }
       function updateBattleResControls(){ if(!els.battleResUse) return; const count = state.items.battleRes||0; if(typeof state.combat.prefBattleRes === 'undefined'){ state.combat.prefBattleRes = true; }
