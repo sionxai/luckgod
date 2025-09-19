@@ -30,7 +30,13 @@ import {
   createDefaultPetState,
   sanitizePetState,
   getPetDefinition,
-  describePetAbilities
+  describePetAbilities,
+  createDefaultCharacterState,
+  sanitizeCharacterState,
+  CHARACTER_IDS,
+  getCharacterDefinition,
+  getCharacterImageVariants,
+  characterBaseStats
 } from './combat-core.js';
 
 const qs = (selector) => document.querySelector(selector);
@@ -63,6 +69,7 @@ const els = {
   enemyDef: qs('#enemyDef'),
   enemySpeed: qs('#enemySpeed'),
   playerSprite: qs('#playerSprite'),
+  playerCharacterImage: qs('#playerCharacterImage'),
   monsterSprite: qs('#monsterSprite'),
   monsterSvg: qs('#monsterSvg'),
   battleLog: qs('#battleLog'),
@@ -105,6 +112,36 @@ const els = {
   petCompanion: qs('#petCompanion'),
   petCompanionImg: qs('#petCompanionImg')
 };
+
+const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
+
+function applyCharacterImageFallback(img, sources) {
+  if (!(img instanceof HTMLImageElement)) return;
+  img.onerror = null;
+  const list = Array.isArray(sources) ? sources.filter(Boolean) : [];
+  const unique = Array.from(new Set(list));
+  let index = 0;
+  const applyNext = () => {
+    while (index < unique.length) {
+      const candidate = unique[index++];
+      if (candidate) {
+        img.src = candidate;
+        return;
+      }
+    }
+    img.onerror = null;
+    img.src = CHARACTER_IMAGE_PLACEHOLDER;
+  };
+  const handleError = () => {
+    applyNext();
+  };
+  img.onerror = handleError;
+  if (unique.length === 0) {
+    img.src = CHARACTER_IMAGE_PLACEHOLDER;
+    return;
+  }
+  applyNext();
+}
 
 const MAX_LEVEL = 999;
 const GLOBAL_CONFIG_PATH = 'config/global';
@@ -344,6 +381,7 @@ const state = {
   bossProgress: sanitizeBossProgress(null),
   battleProgress: sanitizeBattleProgress(null),
   pets: createDefaultPetState(),
+  characters: createDefaultCharacterState(),
   selectedBossId: null,
   lastNormalLevel: 1,
   petEffectTimers: [],
@@ -359,6 +397,8 @@ const gameState = {
     totalStats: {},
     defending: false,
     skillCooldown: 0,
+    classId: 'warrior',
+    character: null,
     activePet: null,
     petShield: 0,
     petAttackBonus: 0,
@@ -372,6 +412,8 @@ const gameState = {
     hp: 0,
     maxHp: 0,
     stats: {},
+    baseStats: {},
+    status: {},
     defending: false
   },
   battle: {
@@ -384,6 +426,68 @@ const gameState = {
     bossFight: null
   }
 };
+
+const DEFAULT_CHARACTER_ID = createDefaultCharacterState().active;
+
+function ensureCharacterState() {
+  if (!state.characters || typeof state.characters !== 'object') {
+    state.characters = createDefaultCharacterState();
+  }
+  if (!state.characters.owned || typeof state.characters.owned !== 'object') {
+    state.characters.owned = createDefaultCharacterState().owned;
+  }
+  Object.keys(createDefaultCharacterState().owned).forEach((id) => {
+    if (typeof state.characters.owned[id] !== 'number' || !isFinite(state.characters.owned[id])) {
+      state.characters.owned[id] = 0;
+    }
+  });
+  if (DEFAULT_CHARACTER_ID && (state.characters.owned[DEFAULT_CHARACTER_ID] || 0) <= 0) {
+    state.characters.owned[DEFAULT_CHARACTER_ID] = 1;
+  }
+  if (!state.characters.active || (state.characters.owned[state.characters.active] || 0) <= 0) {
+    state.characters.active = DEFAULT_CHARACTER_ID;
+  }
+  return state.characters;
+}
+
+function getActiveCharacterId() {
+  const characters = ensureCharacterState();
+  return characters.active || DEFAULT_CHARACTER_ID;
+}
+
+function getActiveCharacterDefinition() {
+  const id = getActiveCharacterId();
+  return id ? getCharacterDefinition(id) : null;
+}
+
+function getActiveCharacterBaseStats() {
+  const def = getActiveCharacterDefinition();
+  if (def && def.stats) {
+    return { ...def.stats };
+  }
+  return { atk: 0, def: 0, hp: 5000, critRate: 5, critDmg: 150, dodge: 5, speed: 100 };
+}
+
+function updatePlayerCharacterSprite() {
+  ensureCharacterState();
+  const imgEl = els.playerCharacterImage;
+  if (!imgEl) return;
+  const def = getActiveCharacterDefinition();
+  const svg = els.playerSprite ? els.playerSprite.querySelector('svg') : null;
+  if (def) {
+    const sources = getCharacterImageVariants(def.id || getActiveCharacterId());
+    if (def.image && !sources.includes(def.image)) {
+      sources.unshift(def.image);
+    }
+    applyCharacterImageFallback(imgEl, sources);
+    imgEl.alt = def.name || '캐릭터';
+    imgEl.style.display = 'block';
+    if (svg) svg.style.display = 'none';
+  } else {
+    imgEl.style.display = 'none';
+    if (svg) svg.style.display = '';
+  }
+}
 function sanitizeUsername(raw, fallback) {
   if (typeof raw === 'string' && raw.trim().length) {
     return raw.trim();
@@ -1127,6 +1231,194 @@ function applyDamageToEnemy(amount, message = '') {
   return actual;
 }
 
+function ensureEnemyStatus() {
+  if (!gameState.enemy.status || typeof gameState.enemy.status !== 'object') {
+    gameState.enemy.status = {};
+  }
+  return gameState.enemy.status;
+}
+
+function refreshEnemyDerivedStats(updateUi = true) {
+  const base = gameState.enemy.baseStats ? { ...gameState.enemy.baseStats } : { ...gameState.enemy.stats };
+  const status = ensureEnemyStatus();
+  let def = base.def || 0;
+  if (status.defBreak && status.defBreak.turns > 0) {
+    def = Math.max(0, def - status.defBreak.amount);
+  }
+  gameState.enemy.stats = {
+    ...base,
+    def
+  };
+  if (updateUi) {
+    if (els.enemyAtk) els.enemyAtk.textContent = formatNum(gameState.enemy.stats.atk || 0);
+    if (els.enemyDef) els.enemyDef.textContent = formatNum(gameState.enemy.stats.def || 0);
+    if (els.enemySpeed) els.enemySpeed.textContent = Math.round(gameState.enemy.stats.speed || 0);
+    updateCombatPowerUI();
+  }
+}
+
+function clearEnemyStatusEffects() {
+  gameState.enemy.status = {};
+  refreshEnemyDerivedStats(true);
+}
+
+function tickEnemyStatusBeforeEnemyAction() {
+  const status = ensureEnemyStatus();
+  let battleEnded = false;
+  if (status.bleed && status.bleed.turns > 0) {
+    const bleedDamage = Math.max(1, Math.round(status.bleed.damage || 0));
+    const dealt = applyDamageToEnemy(bleedDamage, status.bleed.message || `출혈 피해! {dmg}`);
+    status.bleed.turns -= 1;
+    if (status.bleed.turns <= 0) {
+      delete status.bleed;
+      addBattleLog('출혈 효과가 사라졌습니다.', 'warn');
+    }
+    if (dealt > 0 && gameState.enemy.hp <= 0) {
+      battleEnded = true;
+    }
+  }
+  if (status.defBreak && status.defBreak.turns > 0) {
+    status.defBreak.turns -= 1;
+    if (status.defBreak.turns <= 0) {
+      delete status.defBreak;
+      refreshEnemyDerivedStats(true);
+      addBattleLog('마법 방어 약화가 해제되었습니다.', 'warn');
+    }
+  }
+  return battleEnded;
+}
+
+function healPlayer(amount, message = '') {
+  const healValue = Math.max(0, Math.round(amount || 0));
+  if (healValue <= 0) return 0;
+  const before = gameState.player.hp;
+  gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + healValue);
+  const actual = Math.max(0, Math.round(gameState.player.hp - before));
+  if (actual > 0) {
+    if (message) {
+      addBattleLog(message.replace('{heal}', formatNum(actual)), 'heal');
+    } else {
+      addBattleLog(`체력이 ${formatNum(actual)} 회복되었습니다.`, 'heal');
+    }
+    updateHpBars();
+  }
+  return actual;
+}
+
+function getClassSkillCooldown(classId = 'warrior') {
+  switch (classId) {
+    case 'archer':
+      return 2;
+    case 'mage':
+      return 4;
+    case 'rogue':
+      return 3;
+    case 'goddess':
+      return 4;
+    default:
+      return 3;
+  }
+}
+
+function performClassSkill(classId = 'warrior') {
+  const offensive = getPlayerOffensiveStats();
+  let cooldown = getClassSkillCooldown(classId);
+  switch (classId) {
+    case 'warrior': {
+      const result = calculateDamage(offensive, gameState.enemy, true);
+      const damage = Math.max(1, Math.round(result.damage * 1.5));
+      const dealt = applyDamageToEnemy(damage, `강철의 격타! {dmg} 피해`);
+      const shield = Math.max(1, Math.round((gameState.player.totalStats.def || 0) * 2.4));
+      gameState.player.petShield = (gameState.player.petShield || 0) + shield;
+      addBattleLog(`강철 방패! ${formatNum(shield)} 피해를 흡수합니다.`, 'heal');
+      if (dealt <= 0) {
+        addBattleLog('강철의 격타가 막혀 피해를 주지 못했습니다.', 'warn');
+      }
+      cooldown = 3;
+      break;
+    }
+    case 'mage': {
+      const burstDamage = Math.max(1, Math.round((offensive.atk || 0) * 1.6 + (offensive.critDmg || 0) * 25));
+      const dealt = applyDamageToEnemy(burstDamage, `마나 폭발! {dmg} 피해`);
+      if (dealt > 0) {
+        const healAmount = Math.max(1, Math.round(dealt * 0.35));
+        healPlayer(healAmount, `아케인 회복! 체력 {heal} 회복`);
+      } else {
+        addBattleLog('마나 폭발이 적의 방어에 막혔습니다.', 'warn');
+      }
+      const baseDef = gameState.enemy.baseStats?.def || gameState.enemy.stats.def || 0;
+      if (baseDef > 0) {
+        const amount = Math.max(1, Math.round(baseDef * 0.35));
+        const status = ensureEnemyStatus();
+        status.defBreak = { turns: 2, amount };
+        refreshEnemyDerivedStats(true);
+        addBattleLog('마법 방어가 2턴 동안 크게 약화되었습니다!', 'warn');
+      }
+      cooldown = 4;
+      break;
+    }
+    case 'archer': {
+      let total = 0;
+      let hits = 0;
+      let misses = 0;
+      for (let i = 0; i < 3; i += 1) {
+        const result = calculateDamage(offensive, gameState.enemy, false);
+        if (result.type === 'MISS') {
+          misses += 1;
+          continue;
+        }
+        const damage = Math.max(1, Math.round(result.damage * 0.75));
+        const dealt = applyDamageToEnemy(damage, null);
+        if (dealt > 0) {
+          total += dealt;
+          hits += 1;
+        }
+      }
+      if (total > 0) {
+        addBattleLog(`연속 사격! ${hits}회 명중, 총 ${formatNum(total)} 피해!`, 'critical');
+      }
+      if (misses > 0) {
+        const message = hits === 0 ? '연속 사격이 모두 빗나갔습니다...' : `${misses}발이 빗나갔습니다.`;
+        addBattleLog(message, 'warn');
+      }
+      cooldown = 2;
+      break;
+    }
+    case 'rogue': {
+      const result = calculateDamage(offensive, gameState.enemy, true);
+      const damage = Math.max(1, Math.round(result.damage * 1.1));
+      applyDamageToEnemy(damage, `그림자 일격! {dmg} 피해`);
+      const bleedDamage = Math.max(1, Math.round((gameState.player.totalStats.atk || 0) * 0.5));
+      const status = ensureEnemyStatus();
+      status.bleed = { turns: 3, damage: bleedDamage, message: `출혈 피해! {dmg}` };
+      addBattleLog(`적이 깊은 출혈을 입었습니다! 3턴 동안 매턴 ${formatNum(bleedDamage)} 피해`, 'warn');
+      cooldown = 3;
+      break;
+    }
+    case 'goddess': {
+      const holyDamage = Math.max(1, Math.round((offensive.atk || 0) * 1.05 + (gameState.player.totalStats.def || 0) * 1.35));
+      applyDamageToEnemy(holyDamage, `여신의 심판! {dmg} 피해`);
+      const healAmount = Math.max(1, Math.round(gameState.player.maxHp * 0.28));
+      const healed = healPlayer(healAmount, `여신의 은총! 체력 {heal} 회복`);
+      const shield = Math.max(1, Math.round((gameState.player.totalStats.def || 0) * 2.0));
+      gameState.player.petShield = (gameState.player.petShield || 0) + shield;
+      addBattleLog(`여신의 보호막! ${formatNum(shield)} 피해 흡수`, 'heal');
+      if (healed === 0) {
+        addBattleLog('이미 체력이 가득 차 있어 회복 효과가 무효화되었습니다.', 'warn');
+      }
+      cooldown = 4;
+      break;
+    }
+    default: {
+      const result = calculateDamage(offensive, gameState.enemy, true);
+      applyDamageToEnemy(result.damage, `필살기! {dmg} 피해`);
+      cooldown = 3;
+      break;
+    }
+  }
+  gameState.player.skillCooldown = cooldown;
+}
+
 function handlePetTurnStart() {
   const pet = activePetDefinition();
   gameState.player.petAttackMultiplier = 1;
@@ -1222,9 +1514,13 @@ function handlePetTurnStart() {
 
 function computePlayerStats() {
   const petDef = activePetDefinition();
-  const { stats, equipment } = derivePlayerStats(state.equip || {}, state.enhance, {}, petDef);
+  const charDef = getActiveCharacterDefinition();
+  const baseStats = charDef?.stats ? { ...charDef.stats } : getActiveCharacterBaseStats();
+  const { stats, equipment } = derivePlayerStats(state.equip || {}, state.enhance, baseStats, petDef);
   const previousHp = gameState.player.hp;
   gameState.player.equipment = equipment;
+  gameState.player.character = charDef || null;
+  gameState.player.classId = charDef?.classId || 'warrior';
   const prevPetId = gameState.player.activePet?.id || null;
   gameState.player.totalStats = stats;
   if ((petDef?.id || null) !== prevPetId) {
@@ -1232,7 +1528,12 @@ function computePlayerStats() {
   }
   gameState.player.activePet = petDef || null;
   gameState.player.maxHp = stats.hp;
+  const desiredCooldown = getClassSkillCooldown(gameState.player.classId);
+  if (gameState.player.skillCooldown > desiredCooldown) {
+    gameState.player.skillCooldown = desiredCooldown;
+  }
   updatePetCompanion();
+  updatePlayerCharacterSprite();
   if (!previousHp) {
     gameState.player.hp = stats.hp;
   } else {
@@ -1911,7 +2212,7 @@ function updateEnemyStats(level) {
   const dodge = Math.min(dodgeMax, dodgeBase + (dodgeMax - dodgeBase) * Math.pow(norm, 0.95));
   gameState.enemy.maxHp = hp;
   gameState.enemy.hp = gameState.enemy.maxHp;
-  gameState.enemy.stats = {
+  gameState.enemy.baseStats = {
     atk,
     def,
     speed,
@@ -1919,15 +2220,12 @@ function updateEnemyStats(level) {
     critDmg,
     dodge
   };
+  clearEnemyStatusEffects();
   gameState.enemy.power = power;
   gameState.battle.lastLevel = lvl;
   gameState.enemy.defending = false;
   if (els.enemyLevel) els.enemyLevel.textContent = String(lvl);
-  if (els.enemyAtk) els.enemyAtk.textContent = formatNum(gameState.enemy.stats.atk);
-  if (els.enemyDef) els.enemyDef.textContent = formatNum(gameState.enemy.stats.def);
-  if (els.enemySpeed) els.enemySpeed.textContent = Math.round(gameState.enemy.stats.speed);
   updateMonsterImage(lvl);
-  updateCombatPowerUI();
   updateHpBars();
 }
 
@@ -2286,6 +2584,7 @@ function playerAction(action) {
       gameState.player.skillCooldown -= 1;
       if (gameState.player.skillCooldown < 0) gameState.player.skillCooldown = 0;
     }
+    updateHpBars();
     if (concludeTurn()) return;
     gameState.battle.isPlayerTurn = false;
     setTimeout(enemyAction, delay(900));
@@ -2330,14 +2629,7 @@ function playerAction(action) {
       gameState.battle.turn += 1;
       triggerAnimation('playerSprite', 'attacking');
       setTimeout(() => {
-        const result = calculateDamage(getPlayerOffensiveStats(), gameState.enemy, true);
-        const dealt = applyDamageToEnemy(result.damage, null);
-        if (dealt > 0) {
-          addBattleLog(`필살기! ${formatNum(dealt)} 피해!`, 'critical');
-        } else {
-          addBattleLog('필살기가 보호막에 막혔습니다.', 'warn');
-        }
-        gameState.player.skillCooldown = 3;
+        performClassSkill(gameState.player.classId || 'warrior');
         postPlayerAction();
       }, delay(320));
       break;
@@ -2378,6 +2670,10 @@ function enemyAction() {
   const bossContext = gameState.battle.bossFight;
   if (bossContext) {
     tickBossStateBeforeAction(bossContext);
+  }
+  if (tickEnemyStatusBeforeEnemyAction()) {
+    if (concludeTurn()) return;
+    if (!gameState.battle.ongoing) return;
   }
   const choice = Math.random();
   gameState.enemy.defending = false;
@@ -2603,6 +2899,8 @@ async function hydrateProfile(firebaseUser) {
   state.bossProgress = sanitizeBossProgress(rawProfile.bossProgress);
   state.battleProgress = sanitizeBattleProgress(rawProfile.battleProgress);
   state.pets = sanitizePetState(rawProfile.pets);
+  state.characters = sanitizeCharacterState(rawProfile.characters);
+  ensureCharacterState();
   state.wallet = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.wallet, 0, Number.MAX_SAFE_INTEGER, 1000);
   state.gold = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.gold, 0, Number.MAX_SAFE_INTEGER, 10000);
   state.combat = {
@@ -2626,6 +2924,7 @@ async function hydrateProfile(firebaseUser) {
     gold: state.gold,
     combat: { ...state.combat },
     pets: state.pets,
+    characters: state.characters,
     bossProgress: state.bossProgress,
     battleProgress: state.battleProgress
   };

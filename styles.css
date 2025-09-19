@@ -97,6 +97,22 @@
       .pet-card .count { font-size:12px; color: var(--muted); }
       .pet-card .actions { display:flex; align-items:center; }
       .pet-card .desc { font-size:11px; color: var(--muted); line-height:1.4; margin-top:2px; }
+      .character-list { display:grid; gap:8px; margin-top:8px; }
+      .character-card { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:8px; border:1px solid rgba(142,238,255,0.2); background: rgba(0,0,0,0.28); }
+      .character-card.active { border-color: var(--accent); box-shadow:0 0 0 1px rgba(106,169,255,0.4); }
+      .character-card .character-info { display:flex; align-items:center; gap:12px; }
+      .character-card .character-info img { width:52px; height:52px; border-radius:50%; object-fit:cover; border:1px solid rgba(142,238,255,0.25); background: rgba(255,255,255,0.05); }
+      .character-skill-detail { margin-top:12px; padding:12px; border:1px solid rgba(142,238,255,0.2); border-radius:10px; background: rgba(16,24,40,0.6); line-height:1.5; }
+      .character-skill-detail .skill-title { display:block; font-weight:600; color:#aeeeff; margin-bottom:4px; }
+      .character-skill-detail .skill-summary { display:block; }
+      .character-skill-detail .skill-detail { display:block; margin-top:6px; color:#d3d9ff; }
+      .character-card .class { font-size:12px; color: var(--muted); }
+      .character-card .actions button { min-width:64px; }
+      .pill.active-pill { display:inline-block; padding:2px 6px; border-radius:999px; background: rgba(142,238,255,0.15); border:1px solid rgba(142,238,255,0.4); font-size:11px; color: var(--accent); }
+      .draw-card.character { text-align:center; }
+      .draw-card.character img { width:48px; height:48px; border-radius:10px; object-fit:cover; border:1px solid rgba(142,238,255,0.25); background: rgba(255,255,255,0.05); }
+      .draw-card .draw-sub { font-size:11px; margin-top:4px; }
+      .draw-char-placeholder { font-size:32px; }
       button.forge-auto-running { background: linear-gradient(90deg, rgba(106,169,255,0.5), rgba(142,238,255,0.65)); color: #06122a; border-color: rgba(142,238,255,0.4); box-shadow: 0 0 10px rgba(142,238,255,0.3); }
       .msg-ok { color: var(--ok); }
       .msg-warn { color: var(--warn); }

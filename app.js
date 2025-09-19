@@ -19,7 +19,14 @@ import {
   PET_DEFS,
   sanitizePetWeights,
   describePetAbilities,
-  computePlayerStats as deriveCombatStats
+  computePlayerStats as deriveCombatStats,
+  CHARACTER_IDS,
+  CHARACTER_IDS_BY_TIER,
+  createDefaultCharacterState,
+  sanitizeCharacterState,
+  getCharacterDefinition,
+  getCharacterImageVariants,
+  characterBaseStats
 } from './combat-core.js';
 
 const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
@@ -59,6 +66,7 @@ const DEFAULT_MONSTER_SCALING = {
         dodgeBase: 3,
         dodgeMax: 40
 };
+const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
 const GLOBAL_CONFIG_PATH = 'config/global';
 const PART_DEFS = [
   {key:'head', name:'투구', type:'def'},
@@ -120,18 +128,25 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         saveDrops: $('#saveDrops'),
         mode: $('#mode'), seed: $('#seed'), lock: $('#lock'), petTickets: $('#petTicketCount'),
         weightsTable: $('#weightsTable tbody'),
+        characterWeightsTable: $('#characterWeightsTable'),
+        characterWeightsBody: $('#characterWeightsBody'),
         gearConfigWrap: $('#gearConfigWrap'),
         petConfigWrap: $('#petConfigWrap'),
+        characterConfigWrap: $('#characterConfigWrap'),
         petWeightTableBody: $('#petWeightTableBody'),
         gachaModeGearConfig: $('#gachaModeGearConfig'),
         gachaModePetConfig: $('#gachaModePetConfig'),
+        gachaModeCharacterConfig: $('#gachaModeCharacterConfig'),
         pityEnabled: $('#pityEnabled'), pityFloor: $('#pityFloor'), pitySpan: $('#pitySpan'),
         g10Enabled: $('#g10Enabled'), g10Tier: $('#g10Tier'),
-        draw1: $('#draw1'), draw10: $('#draw10'), draw100: $('#draw100'), draw1k: $('#draw1k'), draw10k: $('#draw10k'), drawPet1: $('#drawPet1'), drawPet10: $('#drawPet10'), cancel: $('#cancel'), speed: $('#speed'), bar: $('#bar'),
-        gearDrawControls: $('#gearDrawControls'), petDrawControls: $('#petDrawControls'),
-        gachaModeGearDraw: $('#gachaModeGearDraw'), gachaModePetDraw: $('#gachaModePetDraw'),
-        scope: $('#scope'), statsMode: $('#statsMode'), nDraws: $('#nDraws'), pval: $('#pval'), statsTable: $('#statsTable tbody'), petStatsTable: $('#petStatsTable tbody'), resetSession: $('#resetSession'), resetGlobal: $('#resetGlobal'),
-        gearStatsWrap: $('#gearStatsWrap'), petStatsWrap: $('#petStatsWrap'),
+        draw1: $('#draw1'), draw10: $('#draw10'), draw100: $('#draw100'), draw1k: $('#draw1k'), draw10k: $('#draw10k'),
+        drawPet1: $('#drawPet1'), drawPet10: $('#drawPet10'),
+        drawChar1: $('#drawChar1'), drawChar10: $('#drawChar10'),
+        cancel: $('#cancel'), speed: $('#speed'), bar: $('#bar'),
+        gearDrawControls: $('#gearDrawControls'), petDrawControls: $('#petDrawControls'), characterDrawControls: $('#characterDrawControls'),
+        gachaModeGearDraw: $('#gachaModeGearDraw'), gachaModePetDraw: $('#gachaModePetDraw'), gachaModeCharacterDraw: $('#gachaModeCharacterDraw'),
+        scope: $('#scope'), statsMode: $('#statsMode'), nDraws: $('#nDraws'), pval: $('#pval'), statsTable: $('#statsTable tbody'), petStatsTable: $('#petStatsTable tbody'), characterStatsTable: $('#characterStatsTable tbody'), resetSession: $('#resetSession'), resetGlobal: $('#resetGlobal'),
+        gearStatsWrap: $('#gearStatsWrap'), petStatsWrap: $('#petStatsWrap'), characterStatsWrap: $('#characterStatsWrap'),
         chart: $('#chart'), log: $('#log'),
         atkTotal: $('#atkTotal'), defTotal: $('#defTotal'), nextMonster: $('#nextMonster'), monLevel: $('#monLevel'), monLevelVal: $('#monLevelVal'), winProb: $('#winProb'), fightBtn: $('#fightBtn'), fightResult: $('#fightResult'), autoHuntBtn: $('#autoHuntBtn'), manualCd: $('#manualCd'), autoCd: $('#autoCd'), lvlDec: $('#lvlDec'), lvlInc: $('#lvlInc'), potionCount: $('#potionCount'), usePotion: $('#usePotion'), hyperPotionCount: $('#hyperPotionCount'), useHyperPotion: $('#useHyperPotion'), buffInfo: $('#buffInfo'), claimRevive: $('#claimRevive'), battleResUse: $('#battleResUse'), battleResRemain: $('#battleResRemain'), battleWinProb: $('#battleWinProb'), playerHealthBar: $('#playerHealthBar'), enemyHealthBar: $('#enemyHealthBar'), playerAtkStat: $('#playerAtkStat'), playerDefStat: $('#playerDefStat'), battleEnemyLevel: $('#battleEnemyLevel'), battleEnemyReward: $('#battleEnemyReward'),
         invCount: $('#invCount'), equipGrid: $('#equipGrid'), spareList: $('#spareList'),
@@ -139,6 +154,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         pricePotion: $('#pricePotion'), priceHyper: $('#priceHyper'), priceProtect: $('#priceProtect'), priceEnhance: $('#priceEnhance'), priceBattleRes: $('#priceBattleRes'), priceStarter: $('#priceStarter'),
         invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), shopPanel: $('#shop'),
         petList: $('#petList'),
+        characterList: $('#characterList'),
+        characterSkillDetail: $('#characterSkillDetail'),
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantPetTickets: $('#adminGrantPetTickets'), adminGrantSubmit: $('#adminGrantSubmit'),
@@ -161,6 +178,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         config: {
           weights: {...defaultWeights},
           probs: {},
+          characterWeights: {...defaultWeights},
+          characterProbs: {},
           pity: { enabled:false, floorTier:'S', span:90 },
           minGuarantee10: { enabled:false, tier:'A' },
           seed: '', locked: false, version: cfgVersion,
@@ -195,6 +214,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         inRun: false,
         items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, petTicket: 0 },
         pets: createDefaultPetState(),
+        characters: createDefaultCharacterState(),
         petGachaWeights: sanitizePetWeights(null),
         buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
         combat: { useBattleRes: true, prefBattleRes: true },
@@ -202,6 +222,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       };
       state.config.petWeights = sanitizePetWeights(state.config.petWeights);
       state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
+      state.config.characterWeights = sanitizeWeights(state.config.characterWeights);
+      state.config.characterProbs = normalize(state.config.characterWeights);
       state.config.shopPrices = normalizeShopPrices(state.config.shopPrices);
       state.config.potionSettings = normalizePotionSettings(state.config.potionSettings, DEFAULT_POTION_SETTINGS);
       state.config.hyperPotionSettings = normalizePotionSettings(state.config.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS);
@@ -269,6 +291,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
       function sanitizeConfig(raw){
         const weights = sanitizeWeights(raw && raw.weights);
+        const characterWeights = sanitizeWeights(raw && (raw.characterWeights || raw.characterGachaWeights));
         const pityRaw = raw && raw.pity ? raw.pity : {};
         const min10Raw = raw && raw.minGuarantee10 ? raw.minGuarantee10 : {};
         const pityFloor = TIERS.includes(pityRaw.floorTier) ? pityRaw.floorTier : 'S';
@@ -278,6 +301,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         return {
           weights,
           probs: normalize(weights),
+          characterWeights,
+          characterProbs: normalize(characterWeights),
           seed: (raw && typeof raw.seed === 'string') ? raw.seed : '',
           locked: !!(raw && raw.locked),
           pity: {
@@ -889,15 +914,32 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
             <td class="prob" data-prob="${tier}">-</td>`; els.weightsTable.appendChild(tr); }
         updateWeightsInputs(); }
 
+      function buildCharacterWeightsTable(){ if(!els.characterWeightsBody) return; els.characterWeightsBody.innerHTML=''; for(const tier of TIERS){ const tr = document.createElement('tr'); tr.innerHTML = `
+            <td class="tier ${tier}">${tier}</td>
+            <td><input type="number" step="any" min="0" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" data-char-tier="${tier}" class="cwinput" style="width:120px" /></td>
+            <td class="prob" data-char-prob="${tier}">-</td>`; els.characterWeightsBody.appendChild(tr); }
+        updateCharacterWeightsInputs(); }
+
       function updateWeightsInputs(){ const mode = els.mode.value; const cfg = state.config; const weights = cfg.weights; cfg.probs = normalize(weights);
         const dis = cfg.locked || !isAdmin();
         $$('.winput').forEach(inp=>{ const t = inp.dataset.tier; inp.disabled = dis; inp.value = mode==='weight' ? weights[t] : (cfg.probs[t]*100).toFixed(5); });
         for(const t of TIERS){ const td = els.weightsTable.querySelector(`[data-prob="${t}"]`); td.textContent = formatPct(cfg.probs[t]); }
+        updateCharacterWeightsInputs();
         syncStats(); drawChart(); }
+
+      function updateCharacterWeightsInputs(){ if(!els.characterWeightsBody) return; const mode = els.mode.value; const cfg = state.config; const weights = cfg.characterWeights || sanitizeWeights(null); cfg.characterWeights = weights; cfg.characterProbs = normalize(weights); const disabled = cfg.locked || !isAdmin();
+        els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ const tier = input.dataset.charTier; const weight = weights[tier]; input.disabled = disabled; if(mode === 'weight'){ input.value = weight; } else { input.value = (cfg.characterProbs[tier] * 100).toFixed(5); } });
+        for(const tier of TIERS){ const cell = els.characterWeightsBody.querySelector(`[data-char-prob="${tier}"]`); if(cell) cell.textContent = formatPct(cfg.characterProbs[tier] || 0); }
+      }
 
       function applyInputsToConfig(){ const mode = els.mode.value; const weights = {...state.config.weights}; $$('.winput').forEach(inp=>{ const t=inp.dataset.tier; const raw = (inp.value||'').replace(',', '.'); let v=parseFloat(raw); if(!(v>=0)) v=0; if(mode==='weight'){ weights[t]=v; } else { weights[t]=v/100 || 0; } }); if(mode==='percent'){ // convert percents to comparable weights (just keep as probs, re-normalize below)
           const sum = TIERS.reduce((s,t)=>s+weights[t],0); if(sum>0){ for(const t of TIERS){ weights[t] = weights[t]/sum; } } }
         state.config.weights = weights; state.config.probs = normalize(weights); if(isAdmin()) clearActivePreset(); }
+
+      function applyCharacterInputsToConfig(){ if(!els.characterWeightsBody) return; const mode = els.mode.value; const weights = {...state.config.characterWeights}; els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ const tier = input.dataset.charTier; const raw = (input.value||'').replace(',', '.'); let value = parseFloat(raw); if(!(value>=0)) value = 0; if(mode === 'weight'){ weights[tier] = value; } else { weights[tier] = value/100 || 0; } }); if(mode === 'percent'){ const sum = TIERS.reduce((acc, tier)=> acc + weights[tier], 0); if(sum>0){ TIERS.forEach((tier)=>{ weights[tier] = weights[tier]/sum; }); } }
+        state.config.characterWeights = weights; state.config.characterProbs = normalize(weights); if(isAdmin()) clearActivePreset(); }
+
+      function refreshCharacterProbCells(){ if(!els.characterWeightsBody) return; const probs = state.config.characterProbs || {}; for(const tier of TIERS){ const cell = els.characterWeightsBody.querySelector(`[data-char-prob="${tier}"]`); if(cell) cell.textContent = formatPct(probs[tier] || 0); } }
 
       function refreshProbsAndStats(){ // update only probability cells and stats, do not overwrite input fields
         const probs = state.config.probs;
@@ -911,11 +953,15 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         els.weightsTable.addEventListener('input', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; applyInputsToConfig(); refreshProbsAndStats(); markProfileDirty(); });
         // On commit (change/blur), format inputs from config
         els.weightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; updateWeightsInputs(); });
+        if(els.characterWeightsTable){ els.characterWeightsTable.addEventListener('input', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(!e.target.dataset.charTier) return; if(state.config.locked || !isAdmin()) return; applyCharacterInputsToConfig(); refreshCharacterProbCells(); markProfileDirty(); });
+          els.characterWeightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(!e.target.dataset.charTier) return; if(state.config.locked || !isAdmin()) return; updateCharacterWeightsInputs(); }); }
         els.seed.addEventListener('input', ()=>{ state.config.seed = els.seed.value.trim(); markProfileDirty(); });
         if(els.gachaModeGearConfig) els.gachaModeGearConfig.addEventListener('click', ()=> updateGachaModeView('gear'));
         if(els.gachaModePetConfig) els.gachaModePetConfig.addEventListener('click', ()=> updateGachaModeView('pet'));
+        if(els.gachaModeCharacterConfig) els.gachaModeCharacterConfig.addEventListener('click', ()=> updateGachaModeView('character'));
         if(els.gachaModeGearDraw) els.gachaModeGearDraw.addEventListener('click', ()=> updateGachaModeView('gear'));
         if(els.gachaModePetDraw) els.gachaModePetDraw.addEventListener('click', ()=> updateGachaModeView('pet'));
+        if(els.gachaModeCharacterDraw) els.gachaModeCharacterDraw.addEventListener('click', ()=> updateGachaModeView('character'));
         els.lock.addEventListener('change', ()=>{ state.config.locked = els.lock.checked; updateWeightsInputs(); toggleConfigDisabled(); markProfileDirty(); });
         els.pityEnabled.addEventListener('change', ()=>{ state.config.pity.enabled = els.pityEnabled.checked; markProfileDirty(); });
         els.pityFloor.addEventListener('change', ()=>{ state.config.pity.floorTier = els.pityFloor.value; markProfileDirty(); });
@@ -929,6 +975,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         els.draw10k.addEventListener('click', ()=> runDraws(10000));
         if (els.drawPet1) els.drawPet1.addEventListener('click', ()=> runPetDraws(1));
         if (els.drawPet10) els.drawPet10.addEventListener('click', ()=> runPetDraws(10));
+        if (els.drawChar1) els.drawChar1.addEventListener('click', ()=> runCharacterDraws(1));
+        if (els.drawChar10) els.drawChar10.addEventListener('click', ()=> runCharacterDraws(10));
         els.cancel.addEventListener('click', ()=>{ state.cancelFlag = true; });
         els.scope.addEventListener('change', ()=>{ syncStats(); drawChart(); });
         if (els.petWeightTableBody) {
@@ -951,8 +999,14 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           });
         }
         if (els.statsMode) els.statsMode.addEventListener('change', ()=>{
-          const val = els.statsMode.value === 'pet' ? 'pet' : 'gear';
-          updateGachaModeView(val);
+          const value = els.statsMode.value;
+          if(value === 'pet'){
+            updateGachaModeView('pet');
+          } else if(value === 'character'){
+            updateGachaModeView('character');
+          } else {
+            updateGachaModeView('gear');
+          }
         });
         els.saveCfg.addEventListener('click', saveConfigFile);
         els.loadCfg.addEventListener('click', ()=> els.cfgFile.click());
@@ -1090,7 +1144,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(els.spareList){ els.spareList.addEventListener('click', onSpareListClick); }
       }
 
-      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficultyInput].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.monsterDifficultyMinus) els.monsterDifficultyMinus.disabled = disabled; if(els.monsterDifficultyPlus) els.monsterDifficultyPlus.disabled = disabled; if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; updatePetWeightInputs(); }
+      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); if(els.characterWeightsBody){ els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ input.disabled = disabled; }); }
+        [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficultyInput].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.monsterDifficultyMinus) els.monsterDifficultyMinus.disabled = disabled; if(els.monsterDifficultyPlus) els.monsterDifficultyPlus.disabled = disabled; if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; updatePetWeightInputs(); updateCharacterWeightsInputs(); }
 
       // Draw engine with pity
       function drawOne(rng){ const cfg = state.config; const probs = cfg.probs; const t = chooseTier(probs, rng); applyPityCounter(t); return t; }
@@ -1168,11 +1223,23 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         <span class="small muted">run:${rec.runId}</span>
         <span class="small muted">cfg:${rec.cfgHash.slice(0,8)}</span>`; els.log.prepend(div); const maxItems = 200; while(els.log.children.length>maxItems){ els.log.removeChild(els.log.lastChild); } }
 
+      function applyCharacterImageFallback(img, sources){ if(!(img instanceof HTMLImageElement)) return; const list = Array.isArray(sources) ? sources.filter(Boolean) : []; const unique = Array.from(new Set(list)); let index = 0; const handleFallback = ()=>{ while(index < unique.length){ const candidate = unique[index++]; if(candidate){ img.src = candidate; return; } }
+          img.removeEventListener('error', handleError);
+          img.src = CHARACTER_IMAGE_PLACEHOLDER;
+        };
+        const handleError = ()=>{ handleFallback(); };
+        img.addEventListener('error', handleError);
+        if(unique.length === 0){ img.src = CHARACTER_IMAGE_PLACEHOLDER; return; }
+        handleFallback(); }
+
+      function createCharacterImageElement(name, sources){ const img = document.createElement('img'); img.alt = name || '캐릭터'; img.decoding = 'async'; img.loading = 'lazy'; applyCharacterImageFallback(img, sources); return img; }
+
       function renderDrawResults(items, count){ if(!els.drawResults) return; const wrap = els.drawResults; const grid = wrap.querySelector('.draw-result-grid'); const title = wrap.querySelector('h3'); if(!items || !items.length){ wrap.style.display = 'none'; if(grid) grid.innerHTML=''; return; }
         if(title){ title.textContent = `${count}회 뽑기 결과`; }
         if(grid){ const frag = document.createDocumentFragment(); items.forEach(function(entry){ const card = document.createElement('div'); card.className = 'draw-card'; if(entry.type === 'pet'){ card.classList.add('pet'); const icon = entry.icon || '🐾'; const name = entry.name || entry.petId || '펫'; card.innerHTML = `
                 <div class="draw-icon">${icon}</div>
                 <div class="draw-part">${name}</div>`;
+          } else if(entry.type === 'character'){ card.classList.add('character'); const tierLabel = document.createElement('div'); tierLabel.className = `tier-label tier ${entry.tier || ''}`; tierLabel.textContent = entry.tier || ''; const iconWrap = document.createElement('div'); iconWrap.className = 'draw-icon'; const imgEl = createCharacterImageElement(entry.name || entry.characterId || '캐릭터', entry.imageSources || (entry.image ? [entry.image] : [])); iconWrap.appendChild(imgEl); const nameEl = document.createElement('div'); nameEl.className = 'draw-part'; nameEl.textContent = entry.name || entry.characterId || '캐릭터'; const subEl = document.createElement('div'); subEl.className = 'draw-sub muted small'; subEl.textContent = entry.className || ''; card.appendChild(tierLabel); card.appendChild(iconWrap); card.appendChild(nameEl); card.appendChild(subEl);
           } else {
             card.innerHTML = `
                 <div class="tier-label tier ${entry.tier}">${entry.tier}</div>
@@ -1206,6 +1273,24 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           tbody.appendChild(tr);
         }); }
 
+      function renderCharacterStats(){ if(!els.characterStatsTable) return; const tbody = els.characterStatsTable; tbody.innerHTML=''; const characters = ensureCharacterState(); const activeId = getActiveCharacterId(); const rows = CHARACTER_IDS.map((id) => ({ id, count: characters.owned?.[id] || 0 })).filter((row) => row.count > 0 || row.id === activeId);
+        if(rows.length === 0){ const tr = document.createElement('tr'); tr.innerHTML = `<td colspan="5" class="muted small">보유한 캐릭터가 없습니다.</td>`; tbody.appendChild(tr); return; }
+        rows.forEach((row) => {
+          const def = getCharacterDefinition(row.id) || { name: row.id, className: '', tier: '', stats: {} };
+          const stats = def.stats || {};
+          const statSummary = `HP ${formatNum(stats.hp || 0)}, ATK ${formatNum(stats.atk || 0)}, DEF ${formatNum(stats.def || 0)}`;
+          const activeTag = row.id === activeId ? '<span class="pill active-pill">사용중</span>' : '';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${def.name || row.id} ${activeTag}</td>
+            <td>${def.tier || '-'}</td>
+            <td>${def.className || '-'}</td>
+            <td>${formatNum(row.count)}</td>
+            <td>${statSummary}</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+
       function renderPetWeightTable(){ if(!els.petWeightTableBody) return; const tbody = els.petWeightTableBody; tbody.innerHTML = ''; PET_IDS.forEach((id) => {
           const def = PET_DEFS[id] || { name: id, icon: '🐾' };
           const tr = document.createElement('tr');
@@ -1225,24 +1310,35 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         renderPetStats();
       }
 
-      function updateGachaModeView(mode){ if(mode){ state.ui.gachaMode = mode === 'pet' ? 'pet' : 'gear'; }
+      function updateGachaModeView(mode){ if(mode){ state.ui.gachaMode = mode === 'pet' ? 'pet' : (mode === 'character' ? 'character' : 'gear'); }
         const current = state.ui.gachaMode || 'gear';
         const isGear = current === 'gear';
-        const isPet = !isGear;
-        const togglePairs = [
-          [els.gachaModeGearConfig, els.gachaModePetConfig],
-          [els.gachaModeGearDraw, els.gachaModePetDraw]
-        ];
-        togglePairs.forEach(([gearBtn, petBtn]) => {
-          if (gearBtn) gearBtn.classList.toggle('active', isGear);
-          if (petBtn) petBtn.classList.toggle('active', isPet);
+        const isPet = current === 'pet';
+        const isCharacter = current === 'character';
+        const configButtons = {
+          gear: els.gachaModeGearConfig,
+          pet: els.gachaModePetConfig,
+          character: els.gachaModeCharacterConfig
+        };
+        const drawButtons = {
+          gear: els.gachaModeGearDraw,
+          pet: els.gachaModePetDraw,
+          character: els.gachaModeCharacterDraw
+        };
+        Object.entries(configButtons).forEach(([key, btn]) => {
+          if(btn) btn.classList.toggle('active', key === current);
+        });
+        Object.entries(drawButtons).forEach(([key, btn]) => {
+          if(btn) btn.classList.toggle('active', key === current);
         });
         if(els.gearConfigWrap) els.gearConfigWrap.style.display = isGear ? '' : 'none';
         if(els.petConfigWrap) els.petConfigWrap.style.display = isPet ? '' : 'none';
-        updatePetWeightInputs();
+        if(els.characterConfigWrap) els.characterConfigWrap.style.display = isCharacter ? '' : 'none';
+        if(isPet){ updatePetWeightInputs(); }
         if(els.gearDrawControls) els.gearDrawControls.style.display = isGear ? '' : 'none';
         if(els.petDrawControls) els.petDrawControls.style.display = isPet ? '' : 'none';
-        const desiredStats = isGear ? 'gear' : 'pet';
+        if(els.characterDrawControls) els.characterDrawControls.style.display = isCharacter ? '' : 'none';
+        const desiredStats = isGear ? 'gear' : (isPet ? 'pet' : 'character');
         state.ui.statsMode = desiredStats;
         if(els.statsMode && els.statsMode.value !== desiredStats){ els.statsMode.value = desiredStats; }
         updateStatsModeView();
@@ -1306,13 +1402,50 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         markProfileDirty();
       }
 
+      function runCharacterDraws(count){ if((state.ui.gachaMode || 'gear') !== 'character'){ updateGachaModeView('character'); }
+        const n = Math.max(1, parseInt(count, 10) || 1);
+        const admin = isAdmin();
+        if(!admin && state.wallet < CHARACTER_DRAW_COST){ alert('포인트가 부족합니다.'); return; }
+        ensureCharacterState();
+        const characters = state.characters;
+        state.inRun = true;
+        updateDrawButtons();
+        const rng = getRng();
+        const results = [];
+        const characterProbs = (()=>{ const probs = state.config.characterProbs || {}; if(Object.values(probs).some((v)=> v > 0)){ return probs; } return state.config.probs; })();
+        for(let i = 0; i < n; i += 1){
+          if(!admin && !canSpend(CHARACTER_DRAW_COST)){ alert('포인트가 부족합니다.'); break; }
+          if(!admin && !spendPoints(CHARACTER_DRAW_COST)){ break; }
+          const tier = chooseTier(characterProbs, rng);
+          const charId = randomCharacterIdForTier(tier, rng) || DEFAULT_CHARACTER_ID;
+          if(!charId) continue;
+          characters.owned[charId] = (characters.owned[charId] || 0) + 1;
+          const def = getCharacterDefinition(charId) || { name: charId, image: '', className: '' };
+          const imageSources = getCharacterImageVariants(charId);
+          if(def.image && !imageSources.includes(def.image)){ imageSources.unshift(def.image); }
+          results.push({ type: 'character', characterId: charId, tier, name: def.name || charId, image: imageSources[0] || '', imageSources, className: def.className || '' });
+        }
+        ensureCharacterState();
+        state.characters = characters;
+        if(userProfile) userProfile.characters = characters;
+        state.inRun = false;
+        updateInventoryView();
+        updateDrawButtons();
+        renderDrawResults(results, results.length);
+        updateProgress(0, 100);
+        markProfileDirty();
+      }
+
       function updateStatsModeView(){ let mode = state.ui.statsMode || 'gear'; if(els.statsMode){ mode = els.statsMode.value || mode; state.ui.statsMode = mode; } if(els.statsMode && els.statsMode.value !== mode){ els.statsMode.value = mode; }
         if(els.gearStatsWrap) els.gearStatsWrap.style.display = mode === 'gear' ? '' : 'none';
         if(els.petStatsWrap) els.petStatsWrap.style.display = mode === 'pet' ? '' : 'none';
+        if(els.characterStatsWrap) els.characterStatsWrap.style.display = mode === 'character' ? '' : 'none';
         if(els.resetSession) els.resetSession.style.display = mode === 'gear' ? '' : 'none';
         if(els.resetGlobal) els.resetGlobal.style.display = mode === 'gear' ? '' : 'none';
         if(mode === 'pet'){
           renderPetStats();
+        } else if(mode === 'character'){
+          renderCharacterStats();
         } else {
           syncStats();
           drawChart();
@@ -1323,10 +1456,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function resetGlobal(){ if(!confirm('전체(전역) 통계를 초기화할까요? 이 작업은 취소할 수 없습니다.')) return; state.global = { draws:0, counts:Object.fromEntries(TIERS.map(t=>[t,0])) }; saveGlobal(); if(els.scope.value==='global'){ syncStats(); drawChart(); } }
 
       // Save/Load/Share
-      function compactConfig(){ const {weights, probs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights} = state.config; return {weights, probs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights}; }
+      function compactConfig(){ const {weights, probs, characterWeights, characterProbs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights} = state.config; return {weights, probs, characterWeights, characterProbs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights}; }
       function saveConfigFile(){ const data = JSON.stringify(compactConfig(), null, 2); const blob = new Blob([data], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gacha-config.json'; a.click(); URL.revokeObjectURL(a.href); }
       function loadConfigFile(e){ const f = e.target.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = ()=>{ try{ const cfg = JSON.parse(rd.result); applyLoadedConfig(cfg); } catch(err){ alert('불러오기 실패: '+err); } }; rd.readAsText(f); e.target.value=''; }
-      function applyLoadedConfig(cfg){ if(!cfg || !cfg.weights) { alert('형식이 올바르지 않습니다.'); return; } state.config.weights = {...defaultWeights, ...cfg.weights}; state.config.probs = normalize(state.config.weights); state.config.seed = cfg.seed||''; state.config.locked = !!cfg.locked; state.config.pity = cfg.pity||{enabled:false,floorTier:'S',span:90}; state.config.minGuarantee10 = cfg.minGuarantee10||{enabled:false,tier:'A'}; state.config.dropRates = migrateLegacyDropRates(cfg.dropRates); state.config.goldScaling = normalizeGoldScaling(cfg.goldScaling); state.config.shopPrices = normalizeShopPrices(cfg.shopPrices); state.config.potionSettings = normalizePotionSettings(cfg.potionSettings, DEFAULT_POTION_SETTINGS); state.config.hyperPotionSettings = normalizePotionSettings(cfg.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.monsterScaling = normalizeMonsterScaling(cfg.monsterScaling); state.config.petWeights = sanitizePetWeights(cfg.petWeights || cfg.petGachaWeights || state.config.petWeights); reflectConfig(); if(isAdmin()) clearActivePreset(); else clearSelectedPreset(); markProfileDirty(); }
+      function applyLoadedConfig(cfg){ if(!cfg || !cfg.weights) { alert('형식이 올바르지 않습니다.'); return; } state.config.weights = {...defaultWeights, ...cfg.weights}; state.config.probs = normalize(state.config.weights); state.config.characterWeights = sanitizeWeights(cfg.characterWeights || cfg.characterGachaWeights || state.config.characterWeights); state.config.characterProbs = normalize(state.config.characterWeights); state.config.seed = cfg.seed||''; state.config.locked = !!cfg.locked; state.config.pity = cfg.pity||{enabled:false,floorTier:'S',span:90}; state.config.minGuarantee10 = cfg.minGuarantee10||{enabled:false,tier:'A'}; state.config.dropRates = migrateLegacyDropRates(cfg.dropRates); state.config.goldScaling = normalizeGoldScaling(cfg.goldScaling); state.config.shopPrices = normalizeShopPrices(cfg.shopPrices); state.config.potionSettings = normalizePotionSettings(cfg.potionSettings, DEFAULT_POTION_SETTINGS); state.config.hyperPotionSettings = normalizePotionSettings(cfg.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.monsterScaling = normalizeMonsterScaling(cfg.monsterScaling); state.config.petWeights = sanitizePetWeights(cfg.petWeights || cfg.petGachaWeights || state.config.petWeights); reflectConfig(); if(isAdmin()) clearActivePreset(); else clearSelectedPreset(); markProfileDirty(); }
       function shareLink(){ const cfg = compactConfig(); const json = JSON.stringify(cfg); const b = btoa(unescape(encodeURIComponent(json))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_'); const url = location.origin + location.pathname + '?cfg='+b; if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){ alert('링크가 클립보드에 복사되었습니다.'); }).catch(function(){ prompt('아래 링크를 복사하세요', url); }); } else { prompt('아래 링크를 복사하세요', url); } }
       function readLink(){ const m = location.search.match(/[?&]cfg=([^&]+)/); if(!m) return; try{ const b = m[1].replace(/-/g,'+').replace(/_/g,'/'); const json = decodeURIComponent(escape(atob(b))); const cfg = JSON.parse(json); applyLoadedConfig(cfg); } catch(e){ console.warn('링크 파싱 실패', e); }
       }
@@ -1340,6 +1473,93 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }
         return state.pets;
       }
+
+      const DEFAULT_CHARACTER_ID = CHARACTER_IDS.includes('waD') ? 'waD' : (CHARACTER_IDS[0] || null);
+      const CHARACTER_DRAW_COST = 10000;
+      const CHARACTER_SKILL_INFO = Object.freeze({
+        warrior: {
+          title: '강철의 격타',
+          summary: '강력한 일격으로 큰 피해를 주고 두꺼운 보호막을 전개합니다.',
+          detail: '필살기 피해가 150%로 강화되며, 방어력의 240%만큼 피해를 흡수하는 보호막을 전개합니다.'
+        },
+        mage: {
+          title: '마나 폭발',
+          summary: '마법 폭발로 높은 피해를 주고 흡혈하며, 적의 방어를 크게 약화시킵니다.',
+          detail: '공격력과 치명 피해에 비례한 강력한 피해를 주고, 피해의 35%만큼 체력을 회복하며 2턴 동안 적의 방어력을 35% 낮춥니다.'
+        },
+        archer: {
+          title: '연속 사격',
+          summary: '최대 3연타로 적을 사격하여 폭발적인 연속 피해를 노립니다.',
+          detail: '1회당 75% 피해로 최대 3번 공격하며, 명중 시 누적 피해를 줍니다. 빗나간 횟수도 전투 로그에 표시됩니다.'
+        },
+        rogue: {
+          title: '그림자 일격',
+          summary: '출혈을 유발하는 암살 검으로 적을 지속적으로 괴롭힙니다.',
+          detail: '피해를 주고 3턴 동안 매턴 공격력의 50%에 해당하는 출혈 피해를 부여합니다.'
+        },
+        goddess: {
+          title: '여신의 심판',
+          summary: '신성한 심판으로 피해와 함께 회복·보호막을 동시에 제공합니다.',
+          detail: '공격력과 방어력에 비례한 피해를 준 뒤, 최대 체력의 28%를 회복하고 방어력의 200%만큼 보호막을 생성합니다.'
+        }
+      });
+
+      function ensureCharacterState(){
+        if(!state.characters || typeof state.characters !== 'object'){
+          state.characters = createDefaultCharacterState();
+        }
+        if(!state.characters.owned || typeof state.characters.owned !== 'object'){
+          state.characters.owned = createDefaultCharacterState().owned;
+        }
+        CHARACTER_IDS.forEach((id) => {
+          if(typeof state.characters.owned[id] !== 'number' || !isFinite(state.characters.owned[id])){
+            state.characters.owned[id] = 0;
+          }
+        });
+        if(DEFAULT_CHARACTER_ID && (state.characters.owned[DEFAULT_CHARACTER_ID] || 0) <= 0){
+          state.characters.owned[DEFAULT_CHARACTER_ID] = 1;
+        }
+        if(!state.characters.active || !CHARACTER_IDS.includes(state.characters.active) || (state.characters.owned[state.characters.active] || 0) <= 0){
+          state.characters.active = DEFAULT_CHARACTER_ID || CHARACTER_IDS[0];
+        }
+        return state.characters;
+      }
+
+      function getActiveCharacterId(){
+        const chars = ensureCharacterState();
+        return chars.active || DEFAULT_CHARACTER_ID;
+      }
+
+      function getActiveCharacterDefinition(){
+        const id = getActiveCharacterId();
+        return id ? getCharacterDefinition(id) : null;
+      }
+
+      function getActiveCharacterBaseStats(){
+        const def = getActiveCharacterDefinition();
+        if(def && def.stats){
+          return { ...def.stats };
+        }
+        return { atk: 0, def: 0, hp: 5000, critRate: 5, critDmg: 150, dodge: 5, speed: 100 };
+      }
+
+      function randomCharacterIdForTier(tier, rng){
+        const pool = (CHARACTER_IDS_BY_TIER[tier] || []).slice();
+        if(pool.length === 0){
+          return DEFAULT_CHARACTER_ID || CHARACTER_IDS[0];
+        }
+        const index = Math.floor(rng() * pool.length);
+        return pool[Math.max(0, Math.min(pool.length - 1, index))];
+      }
+
+      function getCharacterSkillInfo(def){ if(!def) return null; return CHARACTER_SKILL_INFO[def.classId] || null; }
+      function getCharacterSkillDescription(def){ const info = getCharacterSkillInfo(def); return info ? `${info.title}: ${info.summary}` : ''; }
+      function updateCharacterSkillDetail(def){ if(!els.characterSkillDetail) return; const info = getCharacterSkillInfo(def); if(!info){ els.characterSkillDetail.innerHTML = '캐릭터를 선택하면 직업별 스킬 정보를 확인할 수 있습니다.'; return; } const parts = [
+          `<span class="skill-title">${info.title}</span>`,
+          `<span class="skill-summary">${info.summary}</span>`
+        ];
+        if(info.detail){ parts.push(`<span class="skill-detail">${info.detail}</span>`); }
+        els.characterSkillDetail.innerHTML = parts.join(''); }
 
       // Points (wallet)
       function loadWallet(){
@@ -1373,14 +1593,19 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(!opts || !opts.silent) updatePointsView();
       }
       function updatePointsView(){ els.points.textContent = isAdmin()? '∞' : formatNum(state.wallet); updateDrawButtons(); updateReviveButton(); }
-      function updateDrawButtons(){ const running = !!state.inRun; const mode = state.ui.gachaMode || 'gear'; const isGear = mode === 'gear'; const isPet = !isGear; const enough = isAdmin() || state.wallet >= 100; const petTickets = state.items.petTicket || 0;
-        if(els.draw1) els.draw1.disabled = !isGear || running || !enough;
-        if(els.draw10) els.draw10.disabled = !isGear || running || !enough;
-        if(els.draw100) els.draw100.disabled = !isGear || running || !enough;
-        if(els.draw1k) els.draw1k.disabled = !isGear || running || !enough;
-        if(els.draw10k) els.draw10k.disabled = !isGear || running || !enough;
-        if(els.drawPet1) els.drawPet1.disabled = !isPet || running || (!isAdmin() && petTickets < 1);
-        if(els.drawPet10) els.drawPet10.disabled = !isPet || running || (!isAdmin() && petTickets < 10);
+      function updateDrawButtons(){ const running = !!state.inRun; const mode = state.ui.gachaMode || 'gear'; const wallet = isAdmin() ? Number.POSITIVE_INFINITY : (state.wallet || 0); const petTickets = state.items.petTicket || 0;
+        const enoughGear = isAdmin() || wallet >= 100;
+        const enoughChar1 = isAdmin() || wallet >= CHARACTER_DRAW_COST;
+        const enoughChar10 = isAdmin() || wallet >= CHARACTER_DRAW_COST * 10;
+        if(els.draw1) els.draw1.disabled = mode !== 'gear' || running || !enoughGear;
+        if(els.draw10) els.draw10.disabled = mode !== 'gear' || running || !enoughGear;
+        if(els.draw100) els.draw100.disabled = mode !== 'gear' || running || !enoughGear;
+        if(els.draw1k) els.draw1k.disabled = mode !== 'gear' || running || !enoughGear;
+        if(els.draw10k) els.draw10k.disabled = mode !== 'gear' || running || !enoughGear;
+        if(els.drawPet1) els.drawPet1.disabled = mode !== 'pet' || running || (!isAdmin() && petTickets < 1);
+        if(els.drawPet10) els.drawPet10.disabled = mode !== 'pet' || running || (!isAdmin() && petTickets < 10);
+        if(els.drawChar1) els.drawChar1.disabled = mode !== 'character' || running || !enoughChar1;
+        if(els.drawChar10) els.drawChar10.disabled = mode !== 'character' || running || !enoughChar10;
       }
       function canSpend(amt){ if(isAdmin()) return true; return state.wallet >= amt; }
       function spendPoints(amt){ if(isAdmin()) return true; if(state.wallet < amt) return false; state.wallet -= amt; saveWallet(); return true; }
@@ -1473,6 +1698,9 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         state.config.petWeights = { ...state.petGachaWeights };
         updatePetWeightInputs();
         renderPetStats();
+        state.config.characterWeights = sanitizeWeights(state.config.characterWeights);
+        state.config.characterProbs = normalize(state.config.characterWeights);
+        updateCharacterWeightsInputs();
         var dr = state.config.dropRates || DEFAULT_DROP_RATES;
         function setDropInputs(prefix, cfg, defaults){ if(!cfg) cfg = defaults; if(!defaults) defaults = {base:0, perLevel:0, max:1};
           if(els[prefix+'Base']) els[prefix+'Base'].value = (cfg.base ?? defaults.base);
@@ -1649,6 +1877,9 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         userProfile.items = state.items;
         state.pets = sanitizePetState(userProfile.pets);
         userProfile.pets = state.pets;
+        state.characters = sanitizeCharacterState(userProfile.characters);
+        userProfile.characters = state.characters;
+        ensureCharacterState();
 
         state.equip = sanitizeEquipMap(userProfile.equip);
         userProfile.equip = state.equip;
@@ -1720,12 +1951,14 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         reflectConfig();
         updateWeightsInputs();
         updateInventoryView();
+        updateCharacterList();
         buildForgeTargetOptions();
         updateForgeControlsView();
         updateForgeInfo();
         updateBattleResControls();
         syncStats();
         drawChart();
+        renderCharacterStats();
       }
 
       function buildProfilePayload(){
@@ -1742,6 +1975,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           spares: sanitizeEquipMap(state.spares),
           items: sanitizeItems(state.items),
           pets: sanitizePetState(state.pets),
+          characters: sanitizeCharacterState(state.characters),
           petGachaWeights: sanitizePetWeights(state.petGachaWeights),
           session: (()=>{
             const snapshot = sanitizeSession(state.session);
@@ -1811,6 +2045,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           userProfile.globalStats = state.global;
           userProfile.items = state.items;
           userProfile.pets = state.pets;
+          userProfile.characters = state.characters;
           userProfile.petGachaWeights = state.petGachaWeights;
           if('enhance' in userProfile){ delete userProfile.enhance; }
           userProfile.equip = state.equip;
@@ -1885,12 +2120,102 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         updateCombatView();
         buildForgeTargetOptions();
         updateReviveButton();
+        updateCharacterList();
         updatePetList();
         refreshInventoryCache();
       }
       function totalKept(){ return Object.values(state.equip).filter(Boolean).length + PART_KEYS.reduce(function(acc, part){ return acc + (state.spares[part]?1:0); }, 0); }
+
+      function updateCharacterList(){ if(!els.characterList) return; const container = els.characterList; const characters = ensureCharacterState(); const activeId = getActiveCharacterId(); container.innerHTML=''; const fragment = document.createDocumentFragment();
+        const entries = CHARACTER_IDS.map((id) => {
+          const def = getCharacterDefinition(id) || { name: id, className: '', image: '', stats: {}, tier: 'D' };
+          const count = characters.owned?.[id] || 0;
+          return {
+            id,
+            def,
+            count,
+            isActive: id === activeId,
+            tierIndex: TIER_INDEX[def.tier] ?? TIERS.length
+          };
+        }).filter((entry) => entry.count > 0 || entry.isActive);
+        entries.sort((a, b) => {
+          if(a.isActive && !b.isActive) return -1;
+          if(!a.isActive && b.isActive) return 1;
+          if(a.tierIndex !== b.tierIndex) return a.tierIndex - b.tierIndex;
+          if(a.count !== b.count) return b.count - a.count;
+          return a.id.localeCompare(b.id);
+        });
+        let appended = 0;
+        entries.forEach(({ id, def, count, isActive }) => {
+          const card = document.createElement('div');
+          card.className = 'pet-card character-card';
+          card.dataset.character = id;
+          card.dataset.tier = def.tier || 'NONE';
+          if(isActive) card.classList.add('active');
+          const infoWrap = document.createElement('div');
+          infoWrap.className = 'character-info';
+          const imageSources = getCharacterImageVariants(id);
+          if(def.image && !imageSources.includes(def.image)){ imageSources.unshift(def.image); }
+          const thumb = createCharacterImageElement(def.name || id, imageSources);
+          thumb.alt = def.name || id;
+          infoWrap.appendChild(thumb);
+          const textWrap = document.createElement('div');
+          textWrap.className = 'info';
+          const nameEl = document.createElement('div');
+          nameEl.className = 'name';
+          nameEl.textContent = def.name || id;
+          textWrap.appendChild(nameEl);
+          if(def.className){ const classEl = document.createElement('div'); classEl.className = 'class muted'; classEl.textContent = def.className; textWrap.appendChild(classEl); }
+          const countEl = document.createElement('div');
+          countEl.className = 'count';
+          countEl.textContent = `보유: ${formatNum(count)}`;
+          textWrap.appendChild(countEl);
+          const stats = def.stats || {};
+          const statsEl = document.createElement('div');
+          statsEl.className = 'stats muted small';
+          statsEl.textContent = `HP ${formatNum(stats.hp || 0)} · ATK ${formatNum(stats.atk || 0)} · DEF ${formatNum(stats.def || 0)}`;
+          textWrap.appendChild(statsEl);
+          const skillDesc = getCharacterSkillDescription(def);
+          if(skillDesc){
+            const skillEl = document.createElement('div');
+            skillEl.className = 'skill muted small';
+            skillEl.textContent = skillDesc;
+            textWrap.appendChild(skillEl);
+          }
+          infoWrap.appendChild(textWrap);
+          card.appendChild(infoWrap);
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.dataset.character = id;
+          btn.textContent = isActive ? '사용중' : '선택';
+          if(isActive){
+            btn.disabled = true;
+          } else {
+            btn.addEventListener('click', () => setActiveCharacter(id));
+          }
+          actions.appendChild(btn);
+          card.appendChild(actions);
+          fragment.appendChild(card);
+          appended += 1;
+        });
+        if(appended === 0){
+          const empty = document.createElement('div');
+          empty.className = 'muted small';
+          empty.textContent = '보유한 캐릭터가 없습니다.';
+          container.appendChild(empty);
+        } else {
+          container.appendChild(fragment);
+        }
+        updateCharacterSkillDetail(getActiveCharacterDefinition());
+        renderCharacterStats();
+      }
+
+      function setActiveCharacter(characterId){ if(!CHARACTER_IDS.includes(characterId)) return; const characters = ensureCharacterState(); if(!isAdmin() && (characters.owned?.[characterId] || 0) <= 0){ alert('해당 캐릭터를 보유하고 있지 않습니다.'); return; } if(characters.active === characterId) return; characters.active = characterId; state.characters = characters; if(userProfile) userProfile.characters = characters; updateCharacterSkillDetail(getCharacterDefinition(characterId)); updateInventoryView(); markProfileDirty(); }
       function getTotals(){
-        const derived = deriveCombatStats(state.equip, state.enhance, {}, state.pets?.active || null);
+        const baseStats = getActiveCharacterBaseStats();
+        const derived = deriveCombatStats(state.equip, state.enhance, baseStats, state.pets?.active || null);
         const stats = derived.stats || { atk: 0, def: 0 };
         return { atk: Math.round(stats.atk || 0), def: Math.round(stats.def || 0), raw: stats };
       }
@@ -2280,7 +2605,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       }
 
       // Bootstrap DOM
-      buildWeightsTable(); renderPetWeightTable(); bind(); readLink(); reflectConfig(); buildForgeTable(); buildForgeTargetOptions(); updateForgeInfo();
+      buildWeightsTable(); buildCharacterWeightsTable(); renderPetWeightTable(); bind(); readLink(); reflectConfig(); buildForgeTable(); buildForgeTargetOptions(); updateForgeInfo();
 
       onAuthStateChanged(auth, async (firebaseUser)=>{
         if(profileSaveTimer){ clearTimeout(profileSaveTimer); profileSaveTimer = null; }

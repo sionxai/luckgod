@@ -214,6 +214,7 @@
           <div class="row gacha-type-row">
             <button id="gachaModeGearConfig" class="mode-btn active" type="button">장비 설정</button>
             <button id="gachaModePetConfig" class="mode-btn" type="button">펫 설정</button>
+            <button id="gachaModeCharacterConfig" class="mode-btn" type="button">캐릭터 설정</button>
           </div>
           <div id="gearConfigWrap">
           <table class="weights" id="weightsTable" aria-label="등급별 가중치 테이블">
@@ -239,6 +240,15 @@
               <tbody id="petWeightTableBody"></tbody>
             </table>
           </div>
+        <div id="characterConfigWrap" style="display:none">
+            <p class="muted small">캐릭터 뽑기 확률을 등급별로 조정합니다. 장비 설정과는 독립적으로 저장됩니다.</p>
+            <table class="weights" id="characterWeightsTable" aria-label="캐릭터 가챠 가중치 테이블">
+              <thead>
+                <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
+              </thead>
+              <tbody id="characterWeightsBody"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="panel" id="drawPanel" data-section="gacha">
@@ -246,6 +256,7 @@
           <div class="row gacha-type-row">
             <button id="gachaModeGearDraw" class="mode-btn active" type="button">장비 뽑기</button>
             <button id="gachaModePetDraw" class="mode-btn" type="button">펫 뽑기</button>
+            <button id="gachaModeCharacterDraw" class="mode-btn" type="button">캐릭터 뽑기</button>
           </div>
           <div id="gearDrawControls">
           <div class="row">
@@ -262,6 +273,11 @@
             <button id="drawPet1" class="primary">펫 1회</button>
             <button id="drawPet10">펫 10회</button>
             <span class="muted small">보유 티켓: <b id="petTicketInline">0</b></span>
+          </div>
+          <div id="characterDrawControls" class="row character-draw-row" style="display:none">
+            <button id="drawChar1" class="primary">캐릭터 1회</button>
+            <button id="drawChar10">캐릭터 10회</button>
+            <span class="muted small">뽑기당 10,000 포인트 소모</span>
           </div>
           <div class="progress" aria-label="진행률"><div id="bar"></div></div>
           <div id="drawResults" class="draw-results" style="display:none">
@@ -280,6 +296,11 @@
           <div id="equipGrid" class="equipgrid" aria-label="장착 부위"></div>
           <div class="row"><div class="muted">예비</div></div>
           <div id="spareList"></div>
+          <div class="row"><div class="muted">캐릭터</div></div>
+          <div id="characterList" class="pet-list character-list"></div>
+          <div id="characterSkillDetail" class="character-skill-detail muted small" aria-live="polite">
+            캐릭터를 선택하면 직업별 스킬 정보를 확인할 수 있습니다.
+          </div>
           <div class="row"><div class="muted">펫 보유 현황</div></div>
           <div id="petList" class="pet-list"></div>
         </section>
@@ -414,7 +435,7 @@
             <summary>상세 통계 보기</summary>
           <div class="row">
             <label>보기<select id="scope"><option value="session">세션</option><option value="global">전체</option></select></label>
-            <label>타입<select id="statsMode"><option value="gear">장비</option><option value="pet">펫</option></select></label>
+            <label>타입<select id="statsMode"><option value="gear">장비</option><option value="pet">펫</option><option value="character">캐릭터</option></select></label>
             <div class="muted">표본 수: <span id="nDraws">0</span></div>
             <div class="muted">카이제곱 p-value: <span id="pval">-</span></div>
             <span class="sep"></span>
@@ -433,6 +454,12 @@
           <div id="petStatsWrap" style="display:none">
             <table class="stats" id="petStatsTable" aria-label="펫 뽑기 확률 테이블">
               <thead><tr><th>펫</th><th>확률</th><th>보유 수량</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="characterStatsWrap" style="display:none">
+            <table class="stats" id="characterStatsTable" aria-label="캐릭터 보유 현황 테이블">
+              <thead><tr><th>캐릭터</th><th>티어</th><th>클래스</th><th>보유 수량</th><th>기본 스탯(HP/ATK/DEF)</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>

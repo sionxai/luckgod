@@ -271,6 +271,152 @@ const PET_STAT_LABELS = {
   speed: '속도'
 };
 
+const CHARACTER_CLASS_INFO = Object.freeze({
+  warrior: { code: 'wa', name: '전사', assetDir: 'warrior', assetPrefix: 'wa' },
+  mage: { code: 'ma', name: '마법사', assetDir: 'wizard', assetPrefix: 'wi' },
+  archer: { code: 'ar', name: '궁수', assetDir: 'archer', assetPrefix: 'ar' },
+  rogue: { code: 'ro', name: '도적', assetDir: 'rogue', assetPrefix: 'ro' },
+  goddess: { code: 'go', name: '여신', assetDir: 'goddess', assetPrefix: 'god' }
+});
+
+const CHARACTER_TIER_POWER_BONUS = Object.freeze({
+  D: 0,
+  C: 40000,
+  B: 250000,
+  A: 1000000,
+  S: 3000000,
+  'S+': 8000000,
+  'SS+': 13000000,
+  'SSS+': 20000000
+});
+
+const CHARACTER_DEFS = {};
+const CHARACTER_IDS = [];
+const CHARACTER_IDS_BY_TIER = TIERS.reduce((acc, tier) => {
+  acc[tier] = [];
+  return acc;
+}, {});
+
+function characterImageCandidates(classInfo, tier) {
+  const dir = classInfo.assetDir || classInfo.code;
+  const prefix = classInfo.assetPrefix || classInfo.code;
+  const variants = [];
+  if (typeof tier === 'string' && tier.length) {
+    variants.push(tier);
+    const noPlus = tier.replace(/\+/g, '');
+    if (noPlus !== tier) {
+      variants.push(noPlus);
+    }
+    const lower = tier.toLowerCase();
+    if (lower !== tier && !variants.includes(lower)) {
+      variants.push(lower);
+    }
+    const upper = tier.toUpperCase();
+    if (upper !== tier && !variants.includes(upper)) {
+      variants.push(upper);
+    }
+  }
+  const filenames = [];
+  variants.forEach((variant) => {
+    if (!variant) return;
+    const base = `${prefix}${variant}`;
+    filenames.push(`${base}.png`);
+    const lowerName = base.toLowerCase();
+    if (!filenames.includes(`${lowerName}.png`)) {
+      filenames.push(`${lowerName}.png`);
+    }
+    const upperName = base.toUpperCase();
+    if (!filenames.includes(`${upperName}.png`)) {
+      filenames.push(`${upperName}.png`);
+    }
+  });
+  filenames.push(`${prefix}.png`);
+  const unique = Array.from(new Set(filenames.filter(Boolean)));
+  return unique.map((name) => `assets/me/${dir}/${name}`);
+}
+
+function registerCharacter(def) {
+  const { classId, tier } = def;
+  const classInfo = CHARACTER_CLASS_INFO[classId];
+  if (!classInfo || !TIERS.includes(tier)) return;
+  const id = `${classInfo.code}${tier}`;
+  const stats = { ...def.stats };
+  const bonusPower = CHARACTER_TIER_POWER_BONUS[tier] || 0;
+  if (bonusPower > 0) {
+    stats.atk = (stats.atk || 0) + Math.round(bonusPower * 0.65);
+    stats.def = (stats.def || 0) + Math.round(bonusPower * 0.15);
+    stats.hp = (stats.hp || 0) + Math.round(bonusPower * 0.5);
+  }
+  const imageVariants = characterImageCandidates(classInfo, tier);
+  CHARACTER_DEFS[id] = {
+    id,
+    tier,
+    classId,
+    className: classInfo.name,
+    name: `${tier} ${classInfo.name}`,
+    stats,
+    image: imageVariants[0] || '',
+    imageVariants
+  };
+  CHARACTER_IDS.push(id);
+  CHARACTER_IDS_BY_TIER[tier].push(id);
+}
+
+[
+  { tier: 'D', stats: { hp: 6500, atk: 100, def: 120, critRate: 4, critDmg: 160, dodge: 4, speed: 98 } },
+  { tier: 'C', stats: { hp: 7800, atk: 180, def: 144, critRate: 5, critDmg: 165, dodge: 5, speed: 99 } },
+  { tier: 'B', stats: { hp: 9750, atk: 300, def: 180, critRate: 6, critDmg: 175, dodge: 6, speed: 101 } },
+  { tier: 'A', stats: { hp: 13000, atk: 500, def: 240, critRate: 8, critDmg: 190, dodge: 7, speed: 103 } },
+  { tier: 'S', stats: { hp: 19500, atk: 800, def: 360, critRate: 10, critDmg: 210, dodge: 8, speed: 106 } },
+  { tier: 'S+', stats: { hp: 32500, atk: 1500, def: 600, critRate: 13, critDmg: 235, dodge: 10, speed: 110 } },
+  { tier: 'SS+', stats: { hp: 52000, atk: 3000, def: 960, critRate: 17, critDmg: 260, dodge: 12, speed: 114 } },
+  { tier: 'SSS+', stats: { hp: 78000, atk: 6000, def: 1440, critRate: 22, critDmg: 290, dodge: 15, speed: 120 } }
+].forEach((entry) => registerCharacter({ classId: 'warrior', ...entry }));
+
+[
+  { tier: 'D', stats: { hp: 4500, atk: 150, def: 20, critRate: 7, critDmg: 170, dodge: 5, speed: 102 } },
+  { tier: 'C', stats: { hp: 5400, atk: 270, def: 24, critRate: 8, critDmg: 180, dodge: 6, speed: 103 } },
+  { tier: 'B', stats: { hp: 6750, atk: 450, def: 30, critRate: 10, critDmg: 195, dodge: 7, speed: 105 } },
+  { tier: 'A', stats: { hp: 9000, atk: 750, def: 40, critRate: 13, critDmg: 215, dodge: 8, speed: 108 } },
+  { tier: 'S', stats: { hp: 13500, atk: 1200, def: 60, critRate: 17, critDmg: 240, dodge: 10, speed: 111 } },
+  { tier: 'S+', stats: { hp: 22500, atk: 2250, def: 100, critRate: 22, critDmg: 270, dodge: 12, speed: 115 } },
+  { tier: 'SS+', stats: { hp: 36000, atk: 4500, def: 160, critRate: 28, critDmg: 300, dodge: 15, speed: 119 } },
+  { tier: 'SSS+', stats: { hp: 54000, atk: 9000, def: 240, critRate: 35, critDmg: 340, dodge: 18, speed: 124 } }
+].forEach((entry) => registerCharacter({ classId: 'mage', ...entry }));
+
+[
+  { tier: 'D', stats: { hp: 5200, atk: 130, def: 40, critRate: 8, critDmg: 165, dodge: 6, speed: 105 } },
+  { tier: 'C', stats: { hp: 6240, atk: 234, def: 48, critRate: 10, critDmg: 175, dodge: 7, speed: 106 } },
+  { tier: 'B', stats: { hp: 7800, atk: 390, def: 60, critRate: 13, critDmg: 190, dodge: 9, speed: 108 } },
+  { tier: 'A', stats: { hp: 10400, atk: 650, def: 80, critRate: 17, critDmg: 210, dodge: 11, speed: 111 } },
+  { tier: 'S', stats: { hp: 15600, atk: 1040, def: 120, critRate: 22, critDmg: 235, dodge: 14, speed: 114 } },
+  { tier: 'S+', stats: { hp: 26000, atk: 1950, def: 200, critRate: 28, critDmg: 265, dodge: 18, speed: 118 } },
+  { tier: 'SS+', stats: { hp: 41600, atk: 3900, def: 320, critRate: 35, critDmg: 295, dodge: 22, speed: 122 } },
+  { tier: 'SSS+', stats: { hp: 62400, atk: 7800, def: 480, critRate: 43, critDmg: 330, dodge: 27, speed: 127 } }
+].forEach((entry) => registerCharacter({ classId: 'archer', ...entry }));
+
+[
+  { tier: 'D', stats: { hp: 4800, atk: 120, def: 30, critRate: 10, critDmg: 160, dodge: 8, speed: 108 } },
+  { tier: 'C', stats: { hp: 5760, atk: 216, def: 36, critRate: 13, critDmg: 170, dodge: 10, speed: 110 } },
+  { tier: 'B', stats: { hp: 7200, atk: 360, def: 45, critRate: 17, critDmg: 185, dodge: 13, speed: 113 } },
+  { tier: 'A', stats: { hp: 9600, atk: 600, def: 60, critRate: 22, critDmg: 205, dodge: 16, speed: 116 } },
+  { tier: 'S', stats: { hp: 14400, atk: 960, def: 90, critRate: 28, critDmg: 230, dodge: 20, speed: 120 } },
+  { tier: 'S+', stats: { hp: 24000, atk: 1800, def: 150, critRate: 36, critDmg: 260, dodge: 25, speed: 125 } },
+  { tier: 'SS+', stats: { hp: 38400, atk: 3600, def: 240, critRate: 45, critDmg: 295, dodge: 31, speed: 130 } },
+  { tier: 'SSS+', stats: { hp: 57600, atk: 7200, def: 360, critRate: 55, critDmg: 335, dodge: 38, speed: 136 } }
+].forEach((entry) => registerCharacter({ classId: 'rogue', ...entry }));
+
+[
+  { tier: 'S+', stats: { hp: 35000, atk: 2700, def: 500, critRate: 15, critDmg: 190, dodge: 10, speed: 110 } },
+  { tier: 'SS+', stats: { hp: 56000, atk: 5400, def: 800, critRate: 22, critDmg: 220, dodge: 14, speed: 116 } },
+  { tier: 'SSS+', stats: { hp: 84000, atk: 10800, def: 1200, critRate: 30, critDmg: 260, dodge: 20, speed: 123 } }
+].forEach((entry) => registerCharacter({ classId: 'goddess', ...entry }));
+
+CHARACTER_IDS.sort((a, b) => a.localeCompare(b));
+TIERS.forEach((tier) => {
+  CHARACTER_IDS_BY_TIER[tier] = CHARACTER_IDS_BY_TIER[tier] || [];
+});
+
 export function sanitizeItems(raw) {
   const template = { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, petTicket: 0 };
   const result = { ...template };
@@ -280,6 +426,66 @@ export function sanitizeItems(raw) {
     });
   }
   return result;
+}
+
+export function createDefaultCharacterState() {
+  const owned = {};
+  CHARACTER_IDS.forEach((id) => {
+    owned[id] = 0;
+  });
+  if (owned.waD !== undefined) {
+    owned.waD = Math.max(1, owned.waD);
+  }
+  const active = CHARACTER_IDS.includes('waD') ? 'waD' : CHARACTER_IDS[0];
+  return { owned, active };
+}
+
+export function sanitizeCharacterState(raw) {
+  const defaults = createDefaultCharacterState();
+  if (!raw || typeof raw !== 'object') {
+    return defaults;
+  }
+  const owned = { ...defaults.owned };
+  if (raw.owned && typeof raw.owned === 'object') {
+    CHARACTER_IDS.forEach((id) => {
+      const value = raw.owned[id];
+      owned[id] = clampNumber(value, 0, Number.MAX_SAFE_INTEGER, owned[id]);
+    });
+  }
+  if (owned.waD === 0 && owned.waD !== undefined) {
+    owned.waD = 1;
+  }
+  let active = typeof raw.active === 'string' && CHARACTER_IDS.includes(raw.active) ? raw.active : defaults.active;
+  if (!owned[active] || owned[active] <= 0) {
+    active = defaults.active;
+  }
+  return { owned, active };
+}
+
+export function getCharacterDefinition(id) {
+  return CHARACTER_DEFS[id] || null;
+}
+
+export function getCharacterImageVariants(id) {
+  const def = getCharacterDefinition(id);
+  if (!def) return [];
+  if (Array.isArray(def.imageVariants)) {
+    return [...def.imageVariants];
+  }
+  if (def.image) {
+    return [def.image];
+  }
+  return [];
+}
+
+export function characterIdsByTier(tier) {
+  return CHARACTER_IDS_BY_TIER[tier] ? [...CHARACTER_IDS_BY_TIER[tier]] : [];
+}
+
+export function characterBaseStats(id) {
+  const def = getCharacterDefinition(id);
+  if (!def) return null;
+  return { ...def.stats };
 }
 
 export function sanitizeEnhanceConfig(raw) {
@@ -614,6 +820,13 @@ export function calculateDamage(attacker, defender, isSkill = false, rng = Math.
   }
   return { damage: Math.floor(finalDamage), type: isCritical ? 'CRITICAL' : 'NORMAL' };
 }
+
+export {
+  CHARACTER_CLASS_INFO,
+  CHARACTER_DEFS,
+  CHARACTER_IDS,
+  CHARACTER_IDS_BY_TIER
+};
 
 function createCombatant(config) {
   const name = config.displayName || config.name || 'Unknown';
