@@ -95,7 +95,7 @@ export function sanitizeEquipMap(raw) {
   return result;
 }
 
-export const PET_IDS = ['pet_ant', 'pet_deer', 'pet_goat', 'pet_tiger'];
+export const PET_IDS = ['pet_ant', 'pet_deer', 'pet_goat', 'pet_tiger', 'pet_horang'];
 
 export const PET_DEFS = {
   pet_ant: {
@@ -157,6 +157,22 @@ export const PET_DEFS = {
       ratio: 0.28,
       minDamage: 150,
       message: '그림자 일격으로 선제 피해를 가합니다.'
+    }
+  },
+  pet_horang: {
+    id: 'pet_horang',
+    name: '호랭찡',
+    icon: '🐯',
+    passive: {
+      flat: { atk: 420, def: 320, hp: 2400 },
+      pct: { atk: 0.08, def: 0.08 }
+    },
+    active: {
+      type: 'tigerLegend',
+      killChance: 0.1,
+      blockChance: 0.15,
+      reflectChance: 0.05,
+      message: '10% 즉사, 15% 전방위 방어, 5% 피해 반사'
     }
   }
 };

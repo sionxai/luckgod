@@ -98,6 +98,104 @@
       .monster-sprite { animation: monsterIdle calc(3s / var(--speed-scale)) ease-in-out infinite; }
       .monster-sprite.attacking { animation: monsterAttack calc(0.6s / var(--speed-scale)) ease-out; }
       .monster-sprite.hurt { animation: monsterHurt calc(0.4s / var(--speed-scale)) ease-out; }
+      .monster-sprite.boss-mode { animation: bossMonarchIdle calc(2.8s / var(--speed-scale)) ease-in-out infinite; }
+      .monster-sprite.boss-mode.attacking { animation: monsterAttack calc(0.6s / var(--speed-scale)) ease-out; }
+      .monster-sprite.boss-mode.hurt { animation: monsterHurt calc(0.4s / var(--speed-scale)) ease-out; }
+      #monsterSvg { width: 100%; height: 100%; }
+      #monsterSvg.boss-active { position: relative; overflow: visible; }
+      #monsterSvg.boss-active.boss-enter { animation: bossEntrance 0.85s ease-out; }
+      .boss-image { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.55)); animation: bossAura 3.2s ease-in-out infinite; }
+      .pet-companion {
+        position: absolute;
+        left: -24px;
+        bottom: -12px;
+        width: 64px;
+        height: 64px;
+        opacity: 0;
+        pointer-events: none;
+        transform: scale(0.8);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+        will-change: transform, filter;
+        z-index: 2;
+      }
+      .pet-companion::after {
+        content: '';
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .pet-companion img { width: 100%; height: 100%; object-fit: contain; display: block; }
+      .pet-companion.show { opacity: 1; transform: scale(1); }
+      .pet-companion.show img { animation: petCompanionBounce 1.8s ease-in-out infinite; }
+      .pet-companion.effect-kill { animation: petKillPulse 0.85s ease-out; }
+      .pet-companion.effect-kill::after {
+        background: radial-gradient(circle, rgba(255, 210, 140, 0.85) 0%, rgba(255, 140, 60, 0.0) 70%);
+        animation: petKillFlash 0.85s ease-out;
+        opacity: 1;
+      }
+      .pet-companion.effect-guard { animation: petGuardGlow 1.05s ease-out; }
+      .pet-companion.effect-guard::after {
+        border: 2px solid rgba(120, 200, 255, 0.9);
+        box-shadow: 0 0 14px rgba(120, 200, 255, 0.8);
+        animation: petGuardShield 1.05s ease-out;
+        opacity: 1;
+      }
+      .pet-companion.effect-reflect { animation: petReflectSpin 0.95s ease-in-out; }
+      .pet-companion.effect-reflect::after {
+        background: radial-gradient(circle, rgba(200, 230, 255, 0.6) 0%, rgba(120, 180, 255, 0.0) 70%);
+        animation: petReflectAura 0.95s ease-in-out;
+        opacity: 1;
+      }
+      @keyframes petCompanionBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+      @keyframes petKillPulse {
+        0% { transform: scale(1); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+        45% { transform: scale(1.4) rotate(-4deg); filter: drop-shadow(0 0 18px rgba(255,120,0,0.8)); }
+        100% { transform: scale(1); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+      }
+      @keyframes petKillFlash {
+        0% { opacity: 0.95; transform: scale(0.7); }
+        55% { opacity: 0.25; transform: scale(1.6); }
+        100% { opacity: 0; transform: scale(1.9); }
+      }
+      @keyframes petGuardGlow {
+        0% { transform: scale(1); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+        40% { transform: scale(1.1); filter: drop-shadow(0 0 14px rgba(110,190,255,0.85)); }
+        100% { transform: scale(1); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+      }
+      @keyframes petGuardShield {
+        0% { opacity: 0; transform: scale(0.7); }
+        45% { opacity: 0.9; transform: scale(1.15); }
+        100% { opacity: 0; transform: scale(1.35); }
+      }
+      @keyframes petReflectSpin {
+        0% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+        50% { transform: scale(1.05) rotate(180deg); filter: drop-shadow(0 0 14px rgba(160,210,255,0.8)); }
+        100% { transform: scale(1) rotate(360deg); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+      }
+      @keyframes petReflectAura {
+        0% { opacity: 0.2; transform: scale(0.8); }
+        50% { opacity: 0.8; transform: scale(1.25); }
+        100% { opacity: 0; transform: scale(1.6); }
+      }
+      @keyframes bossMonarchIdle {
+        0%, 100% { transform: translateY(0) scale(1); }
+        45% { transform: translateY(-4px) scale(1.03); }
+      }
+      @keyframes bossEntrance {
+        0% { opacity: 0; transform: scale(0.75) rotate(-6deg); filter: drop-shadow(0 0 0 rgba(255,180,80,0)); }
+        55% { opacity: 1; transform: scale(1.08) rotate(2deg); filter: drop-shadow(0 0 22px rgba(255,180,80,0.85)); }
+        100% { opacity: 1; transform: scale(1) rotate(0deg); filter: drop-shadow(0 4px 12px rgba(0,0,0,0.55)); }
+      }
+      @keyframes bossAura {
+        0%, 100% { filter: drop-shadow(0 4px 12px rgba(0,0,0,0.55)); }
+        50% { filter: drop-shadow(0 0 20px rgba(255,180,80,0.75)); }
+      }
 
       @keyframes idle {
         0%, 100% { transform: translateY(0); }
@@ -310,6 +408,9 @@
               <div class="fighter-card">
                 <h3>플레이어</h3>
                 <div class="character-container">
+                  <div class="pet-companion" id="petCompanion">
+                    <img id="petCompanionImg" src="assets/pet/ho1.png" alt="펫" />
+                  </div>
                   <div class="character-sprite player-sprite" id="playerSprite">
                     <svg class="character-svg" viewBox="0 0 120 120">
                       <rect x="45" y="20" width="30" height="25" fill="#fdbcb4" stroke="#000" />

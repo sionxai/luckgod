@@ -100,7 +100,9 @@ const els = {
   bossList: qs('#bossList'),
   startBossBtn: qs('#startBossBtn'),
   resetBossSelection: qs('#resetBossSelection'),
-  bossInfo: qs('#bossInfo')
+  bossInfo: qs('#bossInfo'),
+  petCompanion: qs('#petCompanion'),
+  petCompanionImg: qs('#petCompanionImg')
 };
 
 const MAX_LEVEL = 999;
@@ -128,6 +130,8 @@ const BOSS_UNLOCK_LEVELS = {
   boss550: 800,
   boss800: 900
 };
+
+const PET_EFFECT_CLASSES = ['effect-kill', 'effect-guard', 'effect-reflect'];
 
 const BOSS_CONFIG = {
   boss150: {
@@ -175,6 +179,14 @@ const BOSS_CONFIG = {
     drop: { firstTicket: 1, chance: 0.55 },
     summary: '무적과 반격 스택을 관리해야 합니다'
   }
+};
+
+const BOSS_IMAGE_MAP = {
+  boss150: 'assets/boss/boss1.png',
+  boss300: 'assets/boss/boss2.png',
+  boss450: 'assets/boss/boss3.png',
+  boss550: 'assets/boss/boss4.png',
+  boss800: 'assets/boss/boss5.png'
 };
 
 const BOSS_BEHAVIORS = {
@@ -329,7 +341,10 @@ const state = {
   battleProgress: sanitizeBattleProgress(null),
   pets: createDefaultPetState(),
   selectedBossId: null,
-  lastNormalLevel: 1
+  lastNormalLevel: 1,
+  petEffectTimers: [],
+  petEffectTimer: null,
+  bossImageTimer: null
 };
 
 const gameState = {
@@ -344,7 +359,9 @@ const gameState = {
     petShield: 0,
     petAttackBonus: 0,
     petAttackMultiplier: 1,
-    petCritBonus: 0
+    petCritBonus: 0,
+    petTigerGuard: false,
+    petTigerReflect: false
   },
   enemy: {
     level: 1,
@@ -895,6 +912,7 @@ function startBossBattle() {
   applyBossScaling(boss);
   gameState.battle.bossFight = { id: boss.id, level: boss.level, config: boss };
   ensureBossState(gameState.battle.bossFight);
+  updateMonsterImage(boss.level);
   updateBossUi();
   gameState.battle.ongoing = true;
   gameState.battle.actionLock = false;
@@ -926,6 +944,69 @@ function resetPetCombatState() {
   gameState.player.petAttackBonus = 0;
   gameState.player.petAttackMultiplier = 1;
   gameState.player.petCritBonus = 0;
+  gameState.player.petTigerGuard = false;
+  gameState.player.petTigerReflect = false;
+  clearPetEffectAnimations();
+  updatePetCompanion();
+}
+
+function clearPetEffectAnimations() {
+  if (!state.petEffectTimers) state.petEffectTimers = [];
+  state.petEffectTimers.forEach((timer) => clearTimeout(timer));
+  state.petEffectTimers.length = 0;
+  if (state.petEffectTimer) {
+    clearTimeout(state.petEffectTimer);
+    state.petEffectTimer = null;
+  }
+  if (els.petCompanion) {
+    els.petCompanion.classList.remove(...PET_EFFECT_CLASSES);
+  }
+}
+
+function triggerPetAnimation(effect) {
+  const el = els.petCompanion;
+  if (!el || !el.classList.contains('show')) return;
+  const className = `effect-${effect}`;
+  if (!PET_EFFECT_CLASSES.includes(className)) return;
+  el.classList.remove(...PET_EFFECT_CLASSES);
+  void el.offsetWidth; // restart animation
+  el.classList.add(className);
+  if (state.petEffectTimer) {
+    clearTimeout(state.petEffectTimer);
+  }
+  state.petEffectTimer = setTimeout(() => {
+    el.classList.remove(className);
+    state.petEffectTimer = null;
+  }, effect === 'guard' ? 1100 : 900);
+}
+
+function schedulePetEffect(effect, delay = 0) {
+  if (!state.petEffectTimers) state.petEffectTimers = [];
+  if (delay <= 0) {
+    triggerPetAnimation(effect);
+    return;
+  }
+  const timer = setTimeout(() => {
+    triggerPetAnimation(effect);
+    state.petEffectTimers = state.petEffectTimers.filter((id) => id !== timer);
+  }, delay);
+  state.petEffectTimers.push(timer);
+}
+
+function updatePetCompanion() {
+  if (!els.petCompanion) return;
+  const activePet = gameState.player.activePet;
+  const isHorang = activePet?.id === 'pet_horang';
+  if (!isHorang) {
+    els.petCompanion.classList.remove('show');
+    clearPetEffectAnimations();
+    return;
+  }
+  if (els.petCompanionImg) {
+    els.petCompanionImg.src = 'assets/pet/ho1.png';
+    els.petCompanionImg.alt = activePet?.name || '호랭찡';
+  }
+  els.petCompanion.classList.add('show');
 }
 
 function getPlayerOffensiveStats() {
@@ -953,8 +1034,20 @@ function applyDamageToPlayer(amount, options = {}) {
       addBattleLog(`[펫] 보호막이 ${formatNum(absorbed)} 피해를 흡수했습니다.`, 'heal');
     }
   }
+  if (remaining > 0 && gameState.player.petTigerGuard) {
+    gameState.player.petTigerGuard = false;
+    gameState.player.petTigerReflect = false;
+    addBattleLog('[펫] 호랭찡이 공격을 완전히 막아냈습니다!', 'heal');
+    triggerPetAnimation('guard');
+    return 0;
+  }
   if (remaining <= 0) return 0;
   gameState.player.hp -= remaining;
+  if (gameState.player.petTigerReflect && remaining > 0) {
+    gameState.player.petTigerReflect = false;
+    triggerPetAnimation('reflect');
+    applyDamageToEnemy(remaining, '[펫] 호랭찡의 복수! {dmg} 반사 피해');
+  }
   return remaining;
 }
 
@@ -1011,11 +1104,17 @@ function handlePetTurnStart() {
   gameState.player.petAttackMultiplier = 1;
   gameState.player.petAttackBonus = 0;
   gameState.player.petCritBonus = 0;
+  // 호랭찡 효과는 한 턴 지속 후 소멸
+  gameState.player.petTigerGuard = false;
+  gameState.player.petTigerReflect = false;
   if (!pet || !pet.active) return;
   const { active } = pet;
-  const chance = typeof active.chance === 'number' ? active.chance : 0;
-  if (!(chance > 0) || Math.random() > chance) return;
-  switch (active.type) {
+  const type = active.type;
+  if (type !== 'tigerLegend') {
+    const chance = typeof active.chance === 'number' ? active.chance : 0;
+    if (!(chance > 0) || Math.random() > chance) return;
+  }
+  switch (type) {
     case 'shield': {
       const maxHp = Math.max(1, gameState.player.maxHp || 1);
       const amountPct = Math.max(0, active.amountPct || 0);
@@ -1060,6 +1159,30 @@ function handlePetTurnStart() {
       }
       break;
     }
+    case 'tigerLegend': {
+      const killChance = Math.max(0, Math.min(1, active.killChance ?? 0.1));
+      const blockChance = Math.max(0, Math.min(1, active.blockChance ?? 0.15));
+      const reflectChance = Math.max(0, Math.min(1, active.reflectChance ?? 0.05));
+      const effects = [];
+      if (gameState.enemy.hp > 0 && Math.random() < killChance) {
+        gameState.enemy.hp = 0;
+        triggerAnimation('monsterSprite', 'hurt');
+        addBattleLog('[펫] 호랭찡의 포효! 적이 즉시 쓰러졌습니다.', 'critical');
+        effects.push('kill');
+      }
+      if (Math.random() < blockChance) {
+        gameState.player.petTigerGuard = true;
+        addBattleLog('[펫] 호랭찡이 모든 공격을 막을 태세를 갖추었습니다! (1턴)', 'heal');
+        effects.push('guard');
+      }
+      if (Math.random() < reflectChance) {
+        gameState.player.petTigerReflect = true;
+        addBattleLog('[펫] 호랭찡이 반격 태세에 돌입했습니다. (다음 피해 반사)', 'warn');
+        effects.push('reflect');
+      }
+      effects.forEach((effect, index) => schedulePetEffect(effect, index * 240));
+      break;
+    }
     default:
       break;
   }
@@ -1077,6 +1200,7 @@ function computePlayerStats() {
   }
   gameState.player.activePet = petDef || null;
   gameState.player.maxHp = stats.hp;
+  updatePetCompanion();
   if (!previousHp) {
     gameState.player.hp = stats.hp;
   } else {
@@ -1790,6 +1914,35 @@ function damageEquipmentAfterDefeat() {
 
 function updateMonsterImage(level) {
   if (!els.monsterSvg) return;
+  const bossContext = gameState.battle.bossFight;
+  if (bossContext) {
+    const bossImage = BOSS_IMAGE_MAP[bossContext.id] || BOSS_IMAGE_MAP[bossContext.config?.id] || BOSS_IMAGE_MAP.boss150;
+    if (els.monsterSprite) {
+      els.monsterSprite.classList.add('boss-mode');
+    }
+    els.monsterSvg.classList.add('boss-active');
+    els.monsterSvg.innerHTML = `
+      <image href="${bossImage}" x="0" y="0" width="120" height="120" preserveAspectRatio="xMidYMid meet" class="boss-image" />
+    `;
+    if (state.bossImageTimer) {
+      clearTimeout(state.bossImageTimer);
+      state.bossImageTimer = null;
+    }
+    els.monsterSvg.classList.add('boss-enter');
+    state.bossImageTimer = setTimeout(() => {
+      els.monsterSvg?.classList.remove('boss-enter');
+      state.bossImageTimer = null;
+    }, 900);
+    return;
+  }
+  if (state.bossImageTimer) {
+    clearTimeout(state.bossImageTimer);
+    state.bossImageTimer = null;
+  }
+  if (els.monsterSprite) {
+    els.monsterSprite.classList.remove('boss-mode');
+  }
+  els.monsterSvg.classList.remove('boss-active', 'boss-enter');
   let content = '';
   if (level < 100) {
     content = `

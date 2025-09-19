@@ -108,7 +108,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         petList: $('#petList'),
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
-        adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantSubmit: $('#adminGrantSubmit'),
+        adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantPetTickets: $('#adminGrantPetTickets'), adminGrantSubmit: $('#adminGrantSubmit'),
         globalPresetSelect: $('#globalPresetSelect'), personalPresetSelect: $('#personalPresetSelect'), applyGlobalPreset: $('#applyGlobalPreset'), applyPersonalPreset: $('#applyPersonalPreset'), personalPresetName: $('#personalPresetName'), savePersonalPreset: $('#savePersonalPreset'), presetMsg: $('#presetMsg'), toggleUserEdit: $('#toggleUserEdit'),
         petTicketInline: $('#petTicketInline')
       };
@@ -520,7 +520,17 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           const list = [];
           if(snapshot.exists()){
             const raw = snapshot.val();
-            Object.keys(raw).forEach(function(uid){ const info = raw[uid] || {}; const role = info.role || 'user'; const wallet = typeof info.wallet === 'number' ? info.wallet : null; const gold = typeof info.gold === 'number' ? info.gold : null; const diamonds = clampNumber(info.diamonds, 0, Number.MAX_SAFE_INTEGER, 0); const username = sanitizeUsername(info.username, uid); list.push({ uid, username, role, wallet, gold, diamonds }); });
+            Object.keys(raw).forEach(function(uid){
+              const info = raw[uid] || {};
+              const role = info.role || 'user';
+              const wallet = typeof info.wallet === 'number' ? info.wallet : null;
+              const gold = typeof info.gold === 'number' ? info.gold : null;
+              const diamonds = clampNumber(info.diamonds, 0, Number.MAX_SAFE_INTEGER, 0);
+              const username = sanitizeUsername(info.username, uid);
+              const items = sanitizeItems(info.items);
+              const petTickets = items.petTicket || 0;
+              list.push({ uid, username, role, wallet, gold, diamonds, petTickets });
+            });
           }
           list.sort(function(a,b){ return a.username.localeCompare(b.username, 'ko-KR', { sensitivity:'base', numeric:true }); });
           state.adminUsers = list;
@@ -533,15 +543,28 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
 
       function populateAdminUserSelect(){ const select = els.adminUserSelect; if(!select) return; const prev = select.value; select.innerHTML=''; const placeholder = document.createElement('option'); placeholder.value=''; placeholder.textContent = state.adminUsers.length ? '사용자를 선택하세요' : '사용자 없음'; select.appendChild(placeholder); state.adminUsers.forEach(function(user){ const opt = document.createElement('option'); opt.value = user.uid; opt.textContent = `${user.username}${user.role==='admin'?' (관리자)':''}`; select.appendChild(opt); }); if(state.adminUsers.some(function(u){ return u.uid === prev; })){ select.value = prev; } updateAdminUserStats(); }
 
-      function updateAdminUserStats(){ const select = els.adminUserSelect; const statsEl = els.adminUserStats; if(!select || !statsEl) return; const uid = select.value; if(!uid){ statsEl.textContent = ''; return; } const info = state.adminUsers.find(function(u){ return u.uid === uid; }); if(!info){ statsEl.textContent = ''; return; } const walletText = info.wallet === null ? '∞' : formatNum(info.wallet||0); const goldText = info.gold === null ? '∞' : formatNum(info.gold||0); statsEl.textContent = `포인트 ${walletText} / 골드 ${goldText} / 다이아 ${formatNum(info.diamonds||0)}`; }
+      function updateAdminUserStats(){
+        const select = els.adminUserSelect;
+        const statsEl = els.adminUserStats;
+        if(!select || !statsEl) return;
+        const uid = select.value;
+        if(!uid){ statsEl.textContent = ''; return; }
+        const info = state.adminUsers.find(function(u){ return u.uid === uid; });
+        if(!info){ statsEl.textContent = ''; return; }
+        const walletText = info.wallet === null ? '∞' : formatNum(info.wallet||0);
+        const goldText = info.gold === null ? '∞' : formatNum(info.gold||0);
+        const petTicketText = info.role === 'admin' ? '∞' : formatNum(info.petTickets || 0);
+        statsEl.textContent = `포인트 ${walletText} / 골드 ${goldText} / 다이아 ${formatNum(info.diamonds||0)} / 펫 뽑기권 ${petTicketText}`;
+      }
 
-      async function handleAdminGrantResources(){ if(!isAdmin()) return; const uid = els.adminUserSelect?.value || ''; if(!uid){ setAdminMsg('지급할 사용자를 선택하세요.', 'warn'); return; } const points = parseInt(els.adminGrantPoints?.value||'0', 10) || 0; const gold = parseInt(els.adminGrantGold?.value||'0', 10) || 0; const diamonds = parseInt(els.adminGrantDiamonds?.value||'0', 10) || 0; if(points===0 && gold===0 && diamonds===0){ setAdminMsg('지급할 수치를 입력하세요.', 'warn'); return; }
+      async function handleAdminGrantResources(){ if(!isAdmin()) return; const uid = els.adminUserSelect?.value || ''; if(!uid){ setAdminMsg('지급할 사용자를 선택하세요.', 'warn'); return; } const points = parseInt(els.adminGrantPoints?.value||'0', 10) || 0; const gold = parseInt(els.adminGrantGold?.value||'0', 10) || 0; const diamonds = parseInt(els.adminGrantDiamonds?.value||'0', 10) || 0; const petTickets = parseInt(els.adminGrantPetTickets?.value||'0', 10) || 0; if(points===0 && gold===0 && diamonds===0 && petTickets===0){ setAdminMsg('지급할 수치를 입력하세요.', 'warn'); return; }
         try {
-          const updated = await grantResourcesToUser(uid, { points, gold, diamonds });
+          const updated = await grantResourcesToUser(uid, { points, gold, diamonds, petTickets });
           if(!updated){ setAdminMsg('지급할 수치를 적용할 수 없습니다.', 'warn'); return; }
           if(els.adminGrantPoints) els.adminGrantPoints.value = '0';
           if(els.adminGrantGold) els.adminGrantGold.value = '0';
           if(els.adminGrantDiamonds) els.adminGrantDiamonds.value = '0';
+          if(els.adminGrantPetTickets) els.adminGrantPetTickets.value = '0';
           await loadAdminUsers();
           setAdminMsg('지급이 완료되었습니다.', 'ok');
         } catch (error) {
@@ -554,11 +577,18 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(typeof deltas.points === 'number' && deltas.points !== 0 && canModifyEconomy){ const baseWallet = typeof data.wallet === 'number' && isFinite(data.wallet) ? data.wallet : 0; updates.wallet = Math.max(0, baseWallet + deltas.points); }
         if(typeof deltas.gold === 'number' && deltas.gold !== 0 && canModifyEconomy){ const baseGold = typeof data.gold === 'number' && isFinite(data.gold) ? data.gold : 0; updates.gold = Math.max(0, baseGold + deltas.gold); }
         if(typeof deltas.diamonds === 'number' && deltas.diamonds !== 0){ const baseDiamonds = typeof data.diamonds === 'number' && isFinite(data.diamonds) ? data.diamonds : 0; updates.diamonds = Math.max(0, baseDiamonds + deltas.diamonds); }
+        if(typeof deltas.petTickets === 'number' && deltas.petTickets !== 0 && canModifyEconomy){ const items = sanitizeItems(data.items); const nextTickets = Math.max(0, (items.petTicket || 0) + deltas.petTickets); updates['items/petTicket'] = nextTickets; }
         if(Object.keys(updates).length === 0) return false;
         await update(userRef, updates);
         if(currentFirebaseUser && uid === currentFirebaseUser.uid){ if(Object.prototype.hasOwnProperty.call(updates, 'wallet')){ state.wallet = updates.wallet; if(userProfile) userProfile.wallet = updates.wallet; updatePointsView(); }
           if(Object.prototype.hasOwnProperty.call(updates, 'gold')){ state.gold = updates.gold; if(userProfile) userProfile.gold = updates.gold; updateGoldView(); }
           if(Object.prototype.hasOwnProperty.call(updates, 'diamonds')){ state.diamonds = updates.diamonds; if(userProfile) userProfile.diamonds = updates.diamonds; updateDiamondsView(); }
+          if(Object.prototype.hasOwnProperty.call(updates, 'items/petTicket')){
+            const nextTickets = updates['items/petTicket'];
+            state.items = state.items ? { ...state.items, petTicket: nextTickets } : sanitizeItems({ petTicket: nextTickets });
+            if(userProfile){ if(!userProfile.items || typeof userProfile.items !== 'object'){ userProfile.items = {}; } userProfile.items.petTicket = nextTickets; }
+            updateItemCountsView();
+          }
           markProfileDirty();
         }
         return true;
