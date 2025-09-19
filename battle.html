@@ -101,9 +101,34 @@
       .monster-sprite.boss-mode { animation: bossMonarchIdle calc(2.8s / var(--speed-scale)) ease-in-out infinite; }
       .monster-sprite.boss-mode.attacking { animation: monsterAttack calc(0.6s / var(--speed-scale)) ease-out; }
       .monster-sprite.boss-mode.hurt { animation: monsterHurt calc(0.4s / var(--speed-scale)) ease-out; }
+      .monster-sprite:not(.boss-mode) .monster-image {
+        width: 100%;
+        height: 100%;
+        transform-origin: 50% 85%;
+        image-rendering: auto;
+        animation: xpMonsterIdle calc(3s / var(--speed-scale)) ease-in-out infinite;
+        filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+      }
+      .monster-sprite:not(.boss-mode).attacking .monster-image {
+        animation: xpMonsterAttack calc(0.6s / var(--speed-scale)) ease-out;
+      }
+      .monster-sprite:not(.boss-mode).hurt .monster-image {
+        animation: xpMonsterHurt calc(0.4s / var(--speed-scale)) ease-out;
+      }
+      .monster-sprite:not(.boss-mode).defending .monster-image {
+        animation: xpMonsterGuard calc(0.5s / var(--speed-scale)) ease-out;
+      }
+      .monster-sprite:not(.boss-mode).entering .monster-image {
+        animation: xpMonsterEnter 0.7s ease-out;
+      }
+      .monster-sprite:not(.boss-mode).death-animation .monster-image {
+        animation: xpMonsterDeath 0.6s ease-in forwards;
+      }
+      .monster-sprite:not(.boss-mode) .monster-image { pointer-events: none; }
       #monsterSvg { width: 100%; height: 100%; }
       #monsterSvg.boss-active { position: relative; overflow: visible; }
       #monsterSvg.boss-active.boss-enter { animation: bossEntrance 0.85s ease-out; }
+      #monsterSvg .monster-image { width: 100%; height: 100%; }
       .boss-image { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.55)); animation: bossAura 3.2s ease-in-out infinite; }
       .pet-companion {
         position: absolute;
@@ -186,6 +211,34 @@
       @keyframes bossMonarchIdle {
         0%, 100% { transform: translateY(0) scale(1); }
         45% { transform: translateY(-4px) scale(1.03); }
+      }
+      @keyframes xpMonsterIdle {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-6px) scale(1.05); }
+      }
+      @keyframes xpMonsterAttack {
+        0% { transform: translate(0, 0) scale(1); }
+        35% { transform: translate(-18px, -2px) scale(1.12); }
+        100% { transform: translate(0, 0) scale(1); }
+      }
+      @keyframes xpMonsterHurt {
+        0% { transform: translate(0, 0) scale(1); }
+        45% { transform: translate(14px, 2px) scale(0.92); }
+        100% { transform: translate(0, 0) scale(1); }
+      }
+      @keyframes xpMonsterGuard {
+        0% { transform: translateY(0) scale(1); }
+        40% { transform: translateY(-10px) scale(1.04); }
+        100% { transform: translateY(0) scale(1); }
+      }
+      @keyframes xpMonsterEnter {
+        0% { opacity: 0; transform: translateY(24px) scale(0.65); }
+        60% { opacity: 1; transform: translateY(-8px) scale(1.08); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes xpMonsterDeath {
+        0% { opacity: 1; transform: translateY(0) scale(1); filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45)); }
+        100% { opacity: 0; transform: translateY(18px) scale(0.6); filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0)); }
       }
       @keyframes bossEntrance {
         0% { opacity: 0; transform: scale(0.75) rotate(-6deg); filter: drop-shadow(0 0 0 rgba(255,180,80,0)); }
@@ -296,6 +349,7 @@
       .control-footer span { display: inline-flex; align-items: center; gap: 4px; }
       .auto-stats-panel { display: none; margin-top: 14px; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(142, 238, 255, 0.2); border-radius: 10px; padding: 12px; }
       .auto-stats-panel h3 { margin: 0 0 8px; font-size: 14px; color: var(--accent); }
+      .auto-stats-duration { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
       .auto-stats-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
       .auto-stats-grid span { background: rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px; }
       .auto-stats-grid span b { color: var(--text); }
@@ -504,6 +558,7 @@
           </div>
           <div class="auto-stats-panel" id="autoStatsPanel">
             <h3>자동 전투 누적</h3>
+            <div class="auto-stats-duration" id="autoStatsDuration">경과 시간: 00:00:00</div>
             <div class="auto-stats-grid">
               <span>전투 수 <b id="autoStatsBattles">0</b></span>
               <span>포인트 <b id="autoStatsPoints">0</b></span>

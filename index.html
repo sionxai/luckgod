@@ -290,6 +290,8 @@
             <label>강화 대상<select id="forgeTarget"></select></label>
             <span class="muted">현재 Lv.<b id="forgeLv">0</b></span>
             <span class="muted">배율 <b id="forgeMul">1.00×</b></span>
+            <span class="muted">단계 배율 <b id="forgeStageMul">1.00×</b></span>
+            <span class="muted">다음 누적 배율 <b id="forgeNextMul">-</b></span>
             <span class="muted">다음 성공률 <b id="forgeP">-</b></span>
             <span class="muted">강화 후 미리보기 <b id="forgePreview">-</b></span>
             <button id="forgeOnce">+1 강화</button>
@@ -299,7 +301,9 @@
             <label><input id="forgeProtectUse" type="checkbox" /> 보호권 사용</label>
             <span class="muted">보호권: <b id="protectCount">0</b></span>
             <span class="muted">강화권: <b id="enhanceCount">0</b></span>
-            <span class="muted">부활권: <b id="reviveCount">0</b></span>
+            <span class="muted">필요 강화권 <b id="forgeCostEnh">0</b></span>
+            <span class="muted">필요 보호권 <b id="forgeCostProtect">0</b></span>
+            <span class="muted">기대 골드 소모 <b id="forgeCostGold">0</b> G</span>
           </div>
           <div id="forgeEffect" class="forge-effect" aria-hidden="true"></div>
           <div id="forgeMsg" class="forge-msg muted" aria-live="polite"></div>

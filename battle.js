@@ -89,6 +89,7 @@ const els = {
   battleResInline: qs('#battleResInline'),
   speedStatus: qs('#speedStatus'),
   autoStatsPanel: qs('#autoStatsPanel'),
+  autoStatsDuration: qs('#autoStatsDuration'),
   autoStatsBattles: qs('#autoStatsBattles'),
   autoStatsPoints: qs('#autoStatsPoints'),
   autoStatsGold: qs('#autoStatsGold'),
@@ -188,6 +189,9 @@ const BOSS_IMAGE_MAP = {
   boss550: 'assets/boss/boss4.png',
   boss800: 'assets/boss/boss5.png'
 };
+
+const MONSTER_IMAGE_DIR = 'assets/xp';
+const MONSTER_IMAGE_MAX_INDEX = 10;
 
 const BOSS_BEHAVIORS = {
   boss150: {
@@ -413,11 +417,35 @@ function sanitizeBossProgress(raw) {
 }
 
 function sanitizeBattleProgress(raw) {
-  const progress = { highestLevel: 1 };
+  const progress = { highestLevel: 1, lastLevel: 1 };
   if (raw && typeof raw === 'object') {
     progress.highestLevel = clampNumber(raw.highestLevel, 1, MAX_LEVEL, 1);
+    const fallback = progress.highestLevel || 1;
+    progress.lastLevel = clampNumber(raw.lastLevel, 1, MAX_LEVEL, fallback);
+  }
+  if (progress.lastLevel < 1 || !Number.isFinite(progress.lastLevel)) {
+    progress.lastLevel = 1;
   }
   return progress;
+}
+
+function setLastNormalLevel(level, options = {}) {
+  const lvl = clampMonsterLevel(level);
+  if (!state.battleProgress) {
+    state.battleProgress = sanitizeBattleProgress(null);
+  }
+  const prev = state.battleProgress.lastLevel || state.lastNormalLevel;
+  state.lastNormalLevel = lvl;
+  if (state.battleProgress.lastLevel !== lvl) {
+    state.battleProgress.lastLevel = lvl;
+  }
+  if (state.profile) {
+    state.profile.battleProgress = { ...state.battleProgress };
+  }
+  if (options.persist === false || prev === lvl) {
+    return;
+  }
+  queueProfileUpdate({ battleProgress: { ...state.battleProgress } });
 }
 
 function getHighestClearedLevel() {
@@ -901,7 +929,7 @@ function startBossBattle() {
     forceEndCurrentBattle('boss');
   }
   const currentLevel = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || state.lastNormalLevel || 1);
-  state.lastNormalLevel = currentLevel;
+  setLastNormalLevel(currentLevel);
   clearAutoSchedules();
   if (els.battleLog) els.battleLog.innerHTML = '';
   setBossControlsDisabled(true);
@@ -1261,6 +1289,7 @@ function updateResourceSummary() {
   updateBattleResUi();
   updateAutoConsumableUi();
   updateSpeedStatus();
+  updateAutoStatsDuration();
 }
 
 function updateBattleResUi() {
@@ -1457,8 +1486,12 @@ function updateSpeedStatus() {
 
 function startBuffTicker() {
   if (state.buffTicker) clearInterval(state.buffTicker);
-  updateSpeedStatus();
-  state.buffTicker = setInterval(updateSpeedStatus, 500);
+  const tick = () => {
+    updateSpeedStatus();
+    updateAutoStatsDuration();
+  };
+  tick();
+  state.buffTicker = setInterval(tick, 500);
 }
 
 function clearAutoPlayerTimer() {
@@ -1538,6 +1571,26 @@ function updateAutoStatsUi() {
     const el = dropElements[key];
     if (el) el.textContent = formatNum(stats.drops?.[key] || 0);
   });
+  updateAutoStatsDuration();
+}
+
+function formatAutoDuration(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value) => value.toString().padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+function updateAutoStatsDuration() {
+  if (!els.autoStatsDuration) return;
+  if (!state.autoStats.active || !state.autoStats.startTime) {
+    els.autoStatsDuration.textContent = '경과 시간: 00:00:00';
+    return;
+  }
+  const elapsed = Date.now() - state.autoStats.startTime;
+  els.autoStatsDuration.textContent = `경과 시간: ${formatAutoDuration(elapsed)}`;
 }
 
 function startAutoStatsSession() {
@@ -1545,6 +1598,7 @@ function startAutoStatsSession() {
   resetAutoStatsValues();
   state.autoStats.active = true;
   state.autoStats.startTime = Date.now();
+  updateAutoStatsDuration();
   updateAutoStatsUi();
 }
 
@@ -1912,13 +1966,29 @@ function damageEquipmentAfterDefeat() {
   }
 }
 
+function monsterImageForLevel(level) {
+  const lvl = clampMonsterLevel(level || 1);
+  let index;
+  if (lvl < 100) {
+    index = 1;
+  } else {
+    index = Math.floor((lvl - 100) / 100) + 2;
+  }
+  index = Math.min(MONSTER_IMAGE_MAX_INDEX, Math.max(1, index));
+  return `${MONSTER_IMAGE_DIR}/lv${index}.png`;
+}
+
 function updateMonsterImage(level) {
   if (!els.monsterSvg) return;
+  if (els.monsterSprite) {
+    els.monsterSprite.classList.remove('death-animation', 'hurt', 'attacking', 'defending');
+  }
   const bossContext = gameState.battle.bossFight;
   if (bossContext) {
     const bossImage = BOSS_IMAGE_MAP[bossContext.id] || BOSS_IMAGE_MAP[bossContext.config?.id] || BOSS_IMAGE_MAP.boss150;
     if (els.monsterSprite) {
       els.monsterSprite.classList.add('boss-mode');
+      els.monsterSprite.classList.remove('entering');
     }
     els.monsterSvg.classList.add('boss-active');
     els.monsterSvg.innerHTML = `
@@ -1943,35 +2013,18 @@ function updateMonsterImage(level) {
     els.monsterSprite.classList.remove('boss-mode');
   }
   els.monsterSvg.classList.remove('boss-active', 'boss-enter');
-  let content = '';
-  if (level < 100) {
-    content = `
-      <ellipse cx="60" cy="60" rx="25" ry="30" fill="#7cb342" stroke="#000" />
-      <circle cx="60" cy="35" r="20" fill="#8bc34a" stroke="#000" />
-      <circle cx="50" cy="35" r="5" fill="#ff0000" />
-      <circle cx="70" cy="35" r="5" fill="#ff0000" />
-      <path d="M45 45 Q 60 50 75 45" stroke="#000" stroke-width="2" fill="none" />
-      <rect x="30" y="50" width="8" height="20" fill="#7cb342" stroke="#000" />
-      <rect x="82" y="50" width="8" height="20" fill="#7cb342" stroke="#000" />
-    `;
-  } else if (level < 300) {
-    content = `
-      <ellipse cx="60" cy="65" rx="30" ry="35" fill="#4a5d23" stroke="#000" stroke-width="2" />
-      <ellipse cx="60" cy="35" rx="25" ry="22" fill="#5d7c2f" stroke="#000" stroke-width="2" />
-      <polygon points="40,25 38,15 43,22" fill="#f5f5dc" stroke="#000" />
-      <polygon points="80,25 82,15 77,22" fill="#f5f5dc" stroke="#000" />
-      <ellipse cx="48" cy="35" rx="6" ry="4" fill="#ff6b6b" />
-      <ellipse cx="72" cy="35" rx="6" ry="4" fill="#ff6b6b" />
-    `;
-  } else {
-    content = `
-      <ellipse cx="60" cy="70" rx="40" ry="30" fill="#8b0000" stroke="#000" stroke-width="2" />
-      <polygon points="40,30 60,20 80,30 75,45 45,45" fill="#a52a2a" stroke="#000" stroke-width="2" />
-      <path d="M25 60 L5 40 L10 65 L15 50 L20 70 L25 60" fill="#4b0000" stroke="#000" stroke-width="2" />
-      <path d="M95 60 L115 40 L110 65 L105 50 L100 70 L95 60" fill="#4b0000" stroke="#000" stroke-width="2" />
-    `;
+  const imagePath = monsterImageForLevel(level);
+  els.monsterSvg.innerHTML = `
+    <image href="${imagePath}" x="0" y="0" width="120" height="120" preserveAspectRatio="xMidYMid meet" class="monster-image" />
+  `;
+  if (els.monsterSprite) {
+    els.monsterSprite.classList.remove('entering');
+    void els.monsterSprite.offsetWidth;
+    els.monsterSprite.classList.add('entering');
+    setTimeout(() => {
+      els.monsterSprite?.classList.remove('entering');
+    }, 700);
   }
-  els.monsterSvg.innerHTML = content;
 }
 
 function ensurePlayerReady() {
@@ -1998,7 +2051,7 @@ function startNewBattle() {
   }
   resetPetCombatState();
   const level = clampMonsterLevel(els.monsterLevel?.value || gameState.battle.lastLevel || 1);
-  state.lastNormalLevel = level;
+  setLastNormalLevel(level);
   updateMonsterLevelUI(level);
   if (gameState.battle.ongoing) return;
   gameState.battle.ongoing = true;
@@ -2366,6 +2419,7 @@ function enemyAction() {
   } else {
     gameState.enemy.defending = true;
     addBattleLog('몬스터가 방어 자세를 취했습니다.');
+    triggerAnimation('monsterSprite', 'defending');
     setTimeout(postEnemyAction, delay(220));
   }
 }
@@ -2432,32 +2486,32 @@ function initEventListeners() {
   els.monsterLevel?.addEventListener('input', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
-    state.lastNormalLevel = level;
+    setLastNormalLevel(level);
     updateEnemyStats(level);
   });
   els.monsterLevelInput?.addEventListener('change', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
-    state.lastNormalLevel = level;
+    setLastNormalLevel(level);
     updateEnemyStats(level);
   });
   els.monsterLevelInput?.addEventListener('input', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
-    state.lastNormalLevel = level;
+    setLastNormalLevel(level);
   });
   els.monsterLevelMinus?.addEventListener('click', () => {
     const current = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || 1);
     const next = clampMonsterLevel(current - 1);
     updateMonsterLevelUI(next);
-    state.lastNormalLevel = next;
+    setLastNormalLevel(next);
     updateEnemyStats(next);
   });
   els.monsterLevelPlus?.addEventListener('click', () => {
     const current = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || 1);
     const next = clampMonsterLevel(current + 1);
     updateMonsterLevelUI(next);
-    state.lastNormalLevel = next;
+    setLastNormalLevel(next);
     updateEnemyStats(next);
   });
   els.toGacha?.addEventListener('click', () => {
@@ -2572,8 +2626,10 @@ async function hydrateProfile(firebaseUser) {
   state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
   state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
   ensurePlayerReady();
-  updateEnemyStats(parseInt(els.monsterLevel?.value || '1', 10) || 1);
-  state.lastNormalLevel = clampMonsterLevel(els.monsterLevel?.value || 1);
+  const savedLevel = clampMonsterLevel(state.battleProgress?.lastLevel || 1);
+  updateMonsterLevelUI(savedLevel);
+  setLastNormalLevel(savedLevel, { persist: false });
+  updateEnemyStats(savedLevel);
   updateResourceSummary();
   updateBattleResUi();
   updateAutoPlayUi();

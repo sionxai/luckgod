@@ -57,15 +57,52 @@ export function clampNumber(value, min, max, fallback) {
 }
 
 export function defaultEnhance() {
-  const multipliers = Array(21).fill(1);
-  for (let lv = 1; lv <= 20; lv++) {
-    multipliers[lv] = lv < 20 ? 1 + 0.1 * lv : 21;
-  }
-  const probs = Array(21).fill(0);
-  for (let lv = 1; lv <= 20; lv++) {
-    probs[lv] = 0.99 - ((lv - 1) * (0.99 - 0.001)) / 19;
-    if (probs[lv] < 0) probs[lv] = 0;
-  }
+  const multipliers = [
+    1,
+    1.1,
+    1.1990,
+    1.2949,
+    1.3856,
+    1.4687,
+    1.5421,
+    1.6192,
+    1.6840,
+    1.7514,
+    1.8039,
+    1.8580,
+    1.9138,
+    1.9616,
+    2.0107,
+    2.0609,
+    2.1021,
+    2.1442,
+    3.0,
+    5.0,
+    12.0
+  ];
+  const probs = [
+    0,
+    0.99,
+    0.97,
+    0.95,
+    0.92,
+    0.9,
+    0.8,
+    0.7,
+    0.6,
+    0.5,
+    0.45,
+    0.35,
+    0.3,
+    0.25,
+    0.2,
+    0.15,
+    0.05,
+    0.04,
+    0.03,
+    0.02,
+    0.01
+  ];
   return { multipliers, probs };
 }
 
@@ -247,23 +284,27 @@ export function sanitizeItems(raw) {
 
 export function sanitizeEnhanceConfig(raw) {
   const base = defaultEnhance();
-  if (raw && typeof raw === 'object') {
-    if (Array.isArray(raw.multipliers)) {
-      base.multipliers = base.multipliers.map((def, idx) => {
-        const val = raw.multipliers[idx];
-        return typeof val === 'number' && isFinite(val) && val > 0 ? val : def;
-      });
-    }
-    if (Array.isArray(raw.probs)) {
-      base.probs = base.probs.map((def, idx) => {
-        const val = raw.probs[idx];
-        if (typeof val === 'number' && isFinite(val) && val >= 0) {
-          return Math.max(0, Math.min(1, val));
-        }
-        return def;
-      });
-    }
+  if (!raw || typeof raw !== 'object') return base;
+
+  const validMultipliers = Array.isArray(raw.multipliers) && raw.multipliers.length >= 21 && typeof raw.multipliers[20] === 'number' && raw.multipliers[20] <= 12.0001;
+  if (validMultipliers) {
+    base.multipliers = base.multipliers.map((def, idx) => {
+      const val = raw.multipliers[idx];
+      return typeof val === 'number' && isFinite(val) && val > 0 ? val : def;
+    });
   }
+
+  const validProbs = Array.isArray(raw.probs) && raw.probs.length >= 21;
+  if (validProbs) {
+    base.probs = base.probs.map((def, idx) => {
+      const val = raw.probs[idx];
+      if (typeof val === 'number' && isFinite(val) && val >= 0 && val <= 1) {
+        return val;
+      }
+      return def;
+    });
+  }
+
   return base;
 }
 

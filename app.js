@@ -41,11 +41,11 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, starterPack: 5000 };
       const DEFAULT_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 1000, autoCdMs: 2000, speedMultiplier: 2 };
       const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
-      const DEFAULT_MONSTER_SCALING = {
-        basePower: 500,
-        maxPower: 50000000,
-        curve: 1.6,
-        difficultyMultiplier: 1,
+const DEFAULT_MONSTER_SCALING = {
+  basePower: 500,
+  maxPower: 50000000,
+  curve: 1.6,
+  difficultyMultiplier: 1,
         attackShare: 0.32,
         defenseShare: 0.22,
         hpMultiplier: 6.5,
@@ -57,17 +57,73 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         critDmgMax: 420,
         dodgeBase: 3,
         dodgeMax: 40
-      };
-      const GLOBAL_CONFIG_PATH = 'config/global';
-      const PART_DEFS = [
-        {key:'head', name:'투구', type:'def'},
-        {key:'body', name:'갑옷', type:'def'},
-        {key:'main', name:'주무기', type:'atk'},
-        {key:'off',  name:'보조무기', type:'atk'},
-        {key:'boots', name:'신발', type:'def'},
-      ];
-      const PART_KEYS = PART_DEFS.map(function(p){ return p.key; });
-      const PART_ICONS = { head:'🪖', body:'🛡️', main:'⚔️', off:'🗡️', boots:'🥾' };
+};
+const GLOBAL_CONFIG_PATH = 'config/global';
+const PART_DEFS = [
+  {key:'head', name:'투구', type:'def'},
+  {key:'body', name:'갑옷', type:'def'},
+  {key:'main', name:'주무기', type:'atk'},
+  {key:'off',  name:'보조무기', type:'atk'},
+  {key:'boots', name:'신발', type:'def'},
+];
+const PART_KEYS = PART_DEFS.map(function(p){ return p.key; });
+const PART_ICONS = { head:'🪖', body:'🛡️', main:'⚔️', off:'🗡️', boots:'🥾' };
+
+const ENHANCE_STAGE_MULTIPLIER = Object.freeze([
+  1,
+  1.10,
+  1.09,
+  1.08,
+  1.07,
+  1.06,
+  1.05,
+  1.05,
+  1.04,
+  1.04,
+  1.03,
+  1.03,
+  1.03,
+  1.025,
+  1.025,
+  1.025,
+  1.02,
+  1.02,
+  1.399,
+  1.667,
+  2.4
+]);
+
+const ENHANCE_TICKET_COST = Object.freeze([
+  0, 1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7, 20, 20, 29, 60, 118
+]);
+
+const ENHANCE_PROTECT_COST = Object.freeze([
+  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 4, 4
+]);
+
+const ENHANCE_EXPECTED_GOLD = Object.freeze([
+  0,
+  2828,
+  2887,
+  2947,
+  3043,
+  3111,
+  3500,
+  5143,
+  6000,
+  8800,
+  9778,
+  14857,
+  17333,
+  24000,
+  34000,
+  50667,
+  400000,
+  500000,
+  906667,
+  2800000,
+  10240000
+]);
 
       const $ = (q)=>document.querySelector(q);
       const $$ = (q)=>Array.from(document.querySelectorAll(q));
@@ -102,7 +158,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         chart: $('#chart'), log: $('#log'),
         atkTotal: $('#atkTotal'), defTotal: $('#defTotal'), nextMonster: $('#nextMonster'), monLevel: $('#monLevel'), monLevelVal: $('#monLevelVal'), winProb: $('#winProb'), fightBtn: $('#fightBtn'), fightResult: $('#fightResult'), autoHuntBtn: $('#autoHuntBtn'), manualCd: $('#manualCd'), autoCd: $('#autoCd'), lvlDec: $('#lvlDec'), lvlInc: $('#lvlInc'), potionCount: $('#potionCount'), usePotion: $('#usePotion'), hyperPotionCount: $('#hyperPotionCount'), useHyperPotion: $('#useHyperPotion'), buffInfo: $('#buffInfo'), claimRevive: $('#claimRevive'), battleResUse: $('#battleResUse'), battleResRemain: $('#battleResRemain'), battleWinProb: $('#battleWinProb'), playerHealthBar: $('#playerHealthBar'), enemyHealthBar: $('#enemyHealthBar'), playerAtkStat: $('#playerAtkStat'), playerDefStat: $('#playerDefStat'), battleEnemyLevel: $('#battleEnemyLevel'), battleEnemyReward: $('#battleEnemyReward'),
         invCount: $('#invCount'), equipGrid: $('#equipGrid'), spareList: $('#spareList'),
-        forgeTarget: $('#forgeTarget'), forgeLv: $('#forgeLv'), forgeMul: $('#forgeMul'), forgeP: $('#forgeP'), forgePreview: $('#forgePreview'), forgeOnce: $('#forgeOnce'), forgeAuto: $('#forgeAuto'), forgeTableBody: $('#forgeTableBody'), forgeReset: $('#forgeReset'), forgeMsg: $('#forgeMsg'), forgeEffect: $('#forgeEffect'), forgeProtectUse: $('#forgeProtectUse'), protectCount: $('#protectCount'), enhanceCount: $('#enhanceCount'), reviveCount: $('#reviveCount'),
+        forgeTarget: $('#forgeTarget'), forgeLv: $('#forgeLv'), forgeMul: $('#forgeMul'), forgeStageMul: $('#forgeStageMul'), forgeP: $('#forgeP'), forgePreview: $('#forgePreview'), forgeCostEnh: $('#forgeCostEnh'), forgeCostProtect: $('#forgeCostProtect'), forgeCostGold: $('#forgeCostGold'), forgeOnce: $('#forgeOnce'), forgeAuto: $('#forgeAuto'), forgeTableBody: $('#forgeTableBody'), forgeReset: $('#forgeReset'), forgeMsg: $('#forgeMsg'), forgeEffect: $('#forgeEffect'), forgeProtectUse: $('#forgeProtectUse'), protectCount: $('#protectCount'), enhanceCount: $('#enhanceCount'), reviveCount: $('#reviveCount'),
         pricePotion: $('#pricePotion'), priceHyper: $('#priceHyper'), priceProtect: $('#priceProtect'), priceEnhance: $('#priceEnhance'), priceBattleRes: $('#priceBattleRes'), priceStarter: $('#priceStarter'),
         invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), shopPanel: $('#shop'),
         petList: $('#petList'),
@@ -303,25 +359,48 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         return result;
       }
 
+      function isLegacyMultipliers(arr){
+        if(!Array.isArray(arr) || arr.length !== 21) return false;
+        for(let lv=1; lv<=19; lv++){
+          const expected = 1 + 0.1 * lv;
+          if(Math.abs((arr[lv] || 0) - expected) > 1e-4) return false;
+        }
+        return Math.abs((arr[20] || 0) - 21) <= 1e-3;
+      }
+
+      function isLegacyProbs(arr){
+        if(!Array.isArray(arr) || arr.length !== 21) return false;
+        for(let lv=1; lv<=20; lv++){
+          const expected = 0.99 - ((lv - 1) * (0.99 - 0.001)) / 19;
+          if(Math.abs((arr[lv] || 0) - expected) > 1e-4) return false;
+        }
+        return true;
+      }
+
       function sanitizeEnhanceConfig(raw){
         const base = defaultEnhance();
-        if(raw && typeof raw === 'object'){
-          if(Array.isArray(raw.multipliers)){
-            base.multipliers = base.multipliers.map(function(def, idx){
-              const val = raw.multipliers[idx];
-              return (typeof val === 'number' && isFinite(val) && val > 0) ? val : def;
-            });
-          }
-          if(Array.isArray(raw.probs)){
-            base.probs = base.probs.map(function(def, idx){
-              const val = raw.probs[idx];
-              if(typeof val === 'number' && isFinite(val) && val >= 0){
-                return Math.max(0, Math.min(1, val));
-              }
-              return def;
-            });
-          }
+        if(!raw || typeof raw !== 'object') return base;
+
+        const useLegacyMultipliers = isLegacyMultipliers(raw.multipliers);
+        const useLegacyProbs = isLegacyProbs(raw.probs);
+
+        if(!useLegacyMultipliers && Array.isArray(raw.multipliers) && raw.multipliers.length === base.multipliers.length){
+          base.multipliers = base.multipliers.map(function(def, idx){
+            const val = raw.multipliers[idx];
+            return (typeof val === 'number' && isFinite(val) && val > 0) ? val : def;
+          });
         }
+
+        if(!useLegacyProbs && Array.isArray(raw.probs) && raw.probs.length === base.probs.length){
+          base.probs = base.probs.map(function(def, idx){
+            const val = raw.probs[idx];
+            if(typeof val === 'number' && isFinite(val) && val >= 0 && val <= 1){
+              return val;
+            }
+            return def;
+          });
+        }
+
         return base;
       }
 
@@ -601,12 +680,14 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
             if(raw && typeof raw === 'object' && raw.config){
               return {
                 config: sanitizeConfig(raw.config),
+                enhance: sanitizeEnhanceConfig(raw.enhance),
                 activePresetId: typeof raw.activePresetId === 'string' ? raw.activePresetId : null,
                 activePresetName: typeof raw.activePresetName === 'string' ? raw.activePresetName : null
               };
             }
             return {
               config: sanitizeConfig(raw),
+              enhance: sanitizeEnhanceConfig(raw.enhance),
               activePresetId: null,
               activePresetName: null
             };
@@ -621,6 +702,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           const sanitized = sanitizeConfig(config);
           const payload = {
             config: sanitized,
+            enhance: sanitizeEnhanceConfig(state.enhance),
             updatedAt: Date.now()
           };
           if(meta && typeof meta.activePresetId === 'string'){
@@ -640,17 +722,53 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       }
 
       function defaultEnhance(){
-        const m = Array(21).fill(1); // m[0]=1
-        for(let lv=1; lv<=20; lv++){
-          m[lv] = (lv<20)? (1 + 0.1*lv) : (1 + 20); // 요청값 반영
-        }
-        const p = Array(21).fill(0);
-        for(let lv=1; lv<=20; lv++){
-          // 1레벨 0.99 → 20레벨 0.001 선형 보간 기본값
-          p[lv] = 0.99 - (lv-1) * (0.99 - 0.001) / 19;
-          if(p[lv] < 0) p[lv] = 0;
-        }
-        return { multipliers: m, probs: p };
+        const multipliers = [
+          1,
+          1.10,
+          1.1990,
+          1.2949,
+          1.3856,
+          1.4687,
+          1.5421,
+          1.6192,
+          1.6840,
+          1.7514,
+          1.8039,
+          1.8580,
+          1.9138,
+          1.9616,
+          2.0107,
+          2.0609,
+          2.1021,
+          2.1442,
+          3.0,
+          5.0,
+          12.0
+        ];
+        const probs = [
+          0,
+          0.99,
+          0.97,
+          0.95,
+          0.92,
+          0.90,
+          0.80,
+          0.70,
+          0.60,
+          0.50,
+          0.45,
+          0.35,
+          0.30,
+          0.25,
+          0.20,
+          0.15,
+          0.05,
+          0.04,
+          0.03,
+          0.02,
+          0.01
+        ];
+        return { multipliers, probs };
       }
 
       // RNG
@@ -830,7 +948,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(els.forgeAuto){ els.forgeAuto.addEventListener('click', toggleAutoForge); }
         els.forgeTableBody.addEventListener('input', onForgeTableInput);
         els.forgeReset.addEventListener('click', ()=>{ state.enhance = defaultEnhance(); buildForgeTable(); updateInventoryView(); markProfileDirty(); });
-        els.forgeProtectUse.addEventListener('change', ()=>{ state.forge.protectEnabled = els.forgeProtectUse.checked; markProfileDirty(); });
+        els.forgeProtectUse.addEventListener('change', ()=>{ state.forge.protectEnabled = els.forgeProtectUse.checked; updateForgeInfo(); markProfileDirty(); });
         els.logoutBtn.addEventListener('click', logout);
         els.toAdmin.addEventListener('click', ()=>{ if(!isAdmin()) { alert('관리자만 접근 가능합니다.'); return; } state.ui.adminView = true; updateViewMode(); });
         els.toUser.addEventListener('click', ()=>{ state.ui.adminView = false; updateViewMode(); });
@@ -1379,6 +1497,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         }
 
         const globalConfig = globalData ? sanitizeConfig(globalData.config) : null;
+        const globalEnhance = globalData && globalData.enhance ? sanitizeEnhanceConfig(globalData.enhance) : null;
 
         if(role === 'admin'){
           if(globalConfig){
@@ -1389,6 +1508,17 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           }
         } else {
           state.config = globalConfig ? globalConfig : configFromProfile;
+        }
+        if(globalEnhance){
+          state.enhance = globalEnhance;
+        } else {
+          state.enhance = defaultEnhance();
+          if(role === 'admin'){
+            await persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
+          }
+        }
+        if(userProfile.enhance){
+          delete userProfile.enhance;
         }
         const profilePetWeights = sanitizePetWeights(userProfile.petGachaWeights);
         const configPetWeights = sanitizePetWeights(state.config.petWeights);
@@ -1408,9 +1538,6 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         userProfile.items = state.items;
         state.pets = sanitizePetState(userProfile.pets);
         userProfile.pets = state.pets;
-
-        state.enhance = sanitizeEnhanceConfig(userProfile.enhance);
-        userProfile.enhance = state.enhance;
 
         state.equip = sanitizeEquipMap(userProfile.equip);
         userProfile.equip = state.equip;
@@ -1505,7 +1632,6 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           items: sanitizeItems(state.items),
           pets: sanitizePetState(state.pets),
           petGachaWeights: sanitizePetWeights(state.petGachaWeights),
-          enhance: sanitizeEnhanceConfig(state.enhance),
           session: (()=>{
             const snapshot = sanitizeSession(state.session);
             snapshot.history = Array.isArray(state.session?.history)
@@ -1521,6 +1647,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           forge: {
             protectEnabled: !!state.forge.protectEnabled
           },
+          enhance: null,
           createdAt: userProfile?.createdAt || Date.now(),
           updatedAt: Date.now()
         };
@@ -1577,7 +1704,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           userProfile.items = state.items;
           userProfile.pets = state.pets;
           userProfile.petGachaWeights = state.petGachaWeights;
-          userProfile.enhance = state.enhance;
+          if('enhance' in userProfile){ delete userProfile.enhance; }
           userProfile.equip = state.equip;
           userProfile.spares = state.spares;
           userProfile.session = state.session;
@@ -1719,27 +1846,113 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       }
       function onForgeTableInput(e){ const t = e.target; if(!(t instanceof HTMLInputElement)) return; if(!isAdmin()) return; const lv = parseInt(t.dataset.lv||'0',10); if(!lv) return; if(t.dataset.kind==='mul'){ let v = parseFloat(t.value); if(!(v>0)) v=1; state.enhance.multipliers[lv] = v; } else if(t.dataset.kind==='p'){ let v = parseFloat(t.value); if(!(v>=0)) v=0; if(v>1) v=1; state.enhance.probs[lv] = v; } updateInventoryView(); updateForgeInfo(); markProfileDirty(); }
 
-      function performForgeAttempt(opts){ const auto = !!(opts && opts.auto); const item = currentForgeItem(); if(!item){ if(!auto) setForgeMsg('강화할 장비를 선택하세요.', 'warn'); showForgeEffect('fail'); return {status:'no-item'}; }
-        const lv = item.lvl || 0; if(lv >= 20){ if(!auto) setForgeMsg('이미 최대 강화 레벨입니다.', 'warn'); showForgeEffect('fail'); return {status:'max'}; }
-        const admin = isAdmin(); if(!auto){ const willProtect = state.forge.protectEnabled && (admin || (state.items.protect||0) > 0); if(!willProtect){ const ok = confirm('강화 실패 시 장비가 파괴될 수 있습니다. 계속하시겠습니까?'); if(!ok){ setForgeMsg('강화를 취소했습니다.', 'warn'); return {status:'cancelled'}; } } }
-        if(!admin && !(state.items.enhance > 0)){ if(!auto) setForgeMsg('강화권이 부족합니다.', 'warn'); showForgeEffect('fail'); return {status:'no-enhance'}; }
-        if(!admin){ state.items.enhance = Math.max(0, (state.items.enhance||0) - 1); updateItemCountsView(); }
-        const nextLv = lv + 1; const successProb = state.enhance.probs[nextLv] || 0; const rng = getRng(); const success = rng() < successProb;
-        if(success){ item.lvl = nextLv; updateInventoryView(); updateForgeInfo(); setForgeMsg(`강화 성공! Lv.${lv} → Lv.${nextLv}`, 'ok'); showForgeEffect('success'); markProfileDirty(); return {status:'success', level: nextLv}; }
-        const canProtect = state.forge.protectEnabled && (admin || (state.items.protect||0) > 0);
-        if(canProtect){ if(!admin){ state.items.protect = Math.max(0, (state.items.protect||0) - 1); updateItemCountsView(); }
-          updateInventoryView(); updateForgeInfo(); setForgeMsg('강화 실패! 보호권이 소모되어 장비가 보호되었습니다.', 'warn'); showForgeEffect('protected'); markProfileDirty(); return {status:'protected'}; }
-        removeItem(item); updateInventoryView(); updateForgeInfo(); setForgeMsg('강화 실패! 장비가 파괴되었습니다.', 'danger'); showForgeEffect('destroyed'); return {status:'destroyed'}; }
+      function performForgeAttempt(opts){
+        const auto = !!(opts && opts.auto);
+        const item = currentForgeItem();
+        if(!item){
+          if(!auto) setForgeMsg('강화할 장비를 선택하세요.', 'warn');
+          showForgeEffect('fail');
+          return {status:'no-item'};
+        }
+        const lv = item.lvl || 0;
+        if(lv >= 20){
+          if(!auto) setForgeMsg('이미 최대 강화 레벨입니다.', 'warn');
+          showForgeEffect('fail');
+          return {status:'max'};
+        }
+        const admin = isAdmin();
+        const nextLv = lv + 1;
+        const enhanceCost = ENHANCE_TICKET_COST[nextLv] || 0;
+        const protectCost = ENHANCE_PROTECT_COST[nextLv] || 0;
+        const expectedGold = ENHANCE_EXPECTED_GOLD[nextLv] || 0;
+        const wantProtect = !!state.forge.protectEnabled;
+
+        if(!auto){
+          const willProtect = wantProtect && (admin || (state.items.protect || 0) >= protectCost);
+          if(!willProtect){
+            const ok = confirm('강화 실패 시 장비가 파괴될 수 있습니다. 계속하시겠습니까?');
+            if(!ok){
+              setForgeMsg('강화를 취소했습니다.', 'warn');
+              return {status:'cancelled'};
+            }
+          }
+        }
+
+        if(!admin && (state.items.enhance || 0) < enhanceCost){
+          if(!auto) setForgeMsg('강화권이 부족합니다.', 'warn');
+          showForgeEffect('fail');
+          return {status:'no-enhance'};
+        }
+
+        if(wantProtect && !admin && protectCost > 0 && (state.items.protect || 0) < protectCost){
+          if(!auto) setForgeMsg('보호권이 부족합니다.', 'warn');
+          showForgeEffect('fail');
+          return {status:'no-protect'};
+        }
+
+        if(!admin && (state.gold || 0) < expectedGold){
+          if(!auto) setForgeMsg('골드가 부족합니다.', 'warn');
+          showForgeEffect('fail');
+          return {status:'no-gold'};
+        }
+
+        if(!admin){
+          state.items.enhance = Math.max(0, (state.items.enhance || 0) - enhanceCost);
+          if(wantProtect && protectCost > 0){
+            state.items.protect = Math.max(0, (state.items.protect || 0) - protectCost);
+          }
+          state.gold = Math.max(0, (state.gold || 0) - expectedGold);
+          saveGold();
+          updateItemCountsView();
+        }
+
+        const successProb = state.enhance.probs[nextLv] || 0;
+        const rng = getRng();
+        const success = rng() < successProb;
+
+        if(success){
+          item.lvl = nextLv;
+          updateInventoryView();
+          updateForgeInfo();
+          setForgeMsg(`강화 성공! Lv.${lv} → Lv.${nextLv}`, 'ok');
+          showForgeEffect('success');
+          markProfileDirty();
+          return {status:'success', level: nextLv};
+        }
+
+        const protectActive = wantProtect && (admin || protectCost >= 0);
+        if(protectActive){
+          updateInventoryView();
+          updateForgeInfo();
+          setForgeMsg('강화 실패! 보호권이 소모되어 장비가 보호되었습니다.', 'warn');
+          showForgeEffect('protected');
+          markProfileDirty();
+          return {status:'protected'};
+        }
+
+        removeItem(item);
+        updateInventoryView();
+        updateForgeInfo();
+        setForgeMsg('강화 실패! 장비가 파괴되었습니다.', 'danger');
+        showForgeEffect('destroyed');
+        return {status:'destroyed'};
+      }
 
       async function runAutoForgeLoop(){ setAutoForgeRunning(true); setForgeMsg('자동 강화를 시작합니다.', 'ok'); try {
           while(state.forge.autoRunning){ const target = currentForgeItem(); if(!target){ setForgeMsg('강화할 장비가 없습니다. 자동 강화를 종료합니다.', 'warn'); break; }
-            if((target.lvl||0) >= 20){ setForgeMsg('이미 최대 강화 레벨입니다.', 'warn'); break; }
+            const lv = target.lvl || 0;
+            if(lv >= 20){ setForgeMsg('이미 최대 강화 레벨입니다.', 'warn'); break; }
+            const nextLv = lv + 1;
+            const enhanceCost = ENHANCE_TICKET_COST[nextLv] || 0;
+            const protectCost = ENHANCE_PROTECT_COST[nextLv] || 0;
+            const expectedGold = ENHANCE_EXPECTED_GOLD[nextLv] || 0;
             if(!isAdmin()){
-              if((state.items.enhance||0) <= 0){ setForgeMsg('강화권이 더 이상 없습니다. 자동 강화를 종료합니다.', 'warn'); break; }
-              if(state.forge.protectEnabled && (state.items.protect||0) <= 0){ setForgeMsg('보호권이 더 이상 없습니다. 자동 강화를 종료합니다.', 'warn'); break; }
+              if((state.items.enhance || 0) < enhanceCost){ setForgeMsg('강화권이 부족합니다. 자동 강화를 종료합니다.', 'warn'); break; }
+              if(state.forge.protectEnabled && protectCost > 0 && (state.items.protect || 0) < protectCost){ setForgeMsg('보호권이 부족합니다. 자동 강화를 종료합니다.', 'warn'); break; }
+              if((state.gold || 0) < expectedGold){ setForgeMsg('골드가 부족합니다. 자동 강화를 종료합니다.', 'warn'); break; }
             }
             const result = performForgeAttempt({auto:true});
-            if(result.status === 'no-item' || result.status === 'no-enhance' || result.status === 'max' || result.status === 'destroyed'){ break; }
+            if(result.status === 'no-item' || result.status === 'no-enhance' || result.status === 'no-protect' || result.status === 'no-gold' || result.status === 'max' || result.status === 'destroyed'){ break; }
             if(!state.forge.autoRunning) break;
             await maybeDelay(600);
           }
@@ -1888,7 +2101,45 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         markProfileDirty();
       }
       function currentForgeItem(){ const v = els.forgeTarget.value||''; if(!v) return null; const [kind, id] = v.split(':'); if(kind==='equip'){ return state.equip[id] || null; } if(kind==='spare'){ return state.spares[id] || null; } return null; }
-      function updateForgeInfo(){ const it = currentForgeItem(); if(!it){ els.forgeLv.textContent = '0'; els.forgeMul.textContent = '1.00×'; els.forgeP.textContent = '-'; els.forgePreview.textContent='-'; els.forgeOnce.disabled = true; return; } const lv = it.lvl||0; const next = Math.min(20, lv+1); const mul = state.enhance.multipliers[lv]||1; const p = state.enhance.probs[next]||0; els.forgeLv.textContent = String(lv); els.forgeMul.textContent = mul.toFixed(2)+'×'; els.forgeP.textContent = (p*100).toFixed(2)+'%'; const cur = effectiveStat(it); const nextMul = state.enhance.multipliers[next]||mul; const after = Math.floor((it.base||0) * nextMul); els.forgePreview.textContent = `${formatNum(cur)} → ${formatNum(after)} (Lv.${next})`; els.forgeOnce.disabled = (lv>=20);
+      function updateForgeInfo(){
+        const it = currentForgeItem();
+        if(!it){
+          els.forgeLv.textContent = '0';
+          els.forgeMul.textContent = '1.00×';
+          els.forgeP.textContent = '-';
+          els.forgePreview.textContent = '-';
+          if(els.forgeStageMul) els.forgeStageMul.textContent = '1.00×';
+          if(els.forgeNextMul) els.forgeNextMul.textContent = '-';
+          if(els.forgeCostEnh) els.forgeCostEnh.textContent = '0';
+          if(els.forgeCostProtect) els.forgeCostProtect.textContent = '0';
+          if(els.forgeCostGold) els.forgeCostGold.textContent = '0';
+          els.forgeOnce.disabled = true;
+          return;
+        }
+        const lv = it.lvl || 0;
+        const next = Math.min(20, lv + 1);
+        const currentMul = state.enhance.multipliers[lv] || 1;
+        const nextMul = (next <= 20 ? state.enhance.multipliers[next] : currentMul);
+        const successProb = lv >= 20 ? null : (state.enhance.probs[next] || 0);
+        const stageMul = lv >= 20 ? null : (ENHANCE_STAGE_MULTIPLIER[next] || (nextMul / (currentMul || 1)));
+        const nextTotalMul = lv >= 20 ? null : nextMul;
+        const enhanceCost = ENHANCE_TICKET_COST[next] || 0;
+        const protectCost = ENHANCE_PROTECT_COST[next] || 0;
+        const expectedGold = ENHANCE_EXPECTED_GOLD[next] || 0;
+
+        els.forgeLv.textContent = String(lv);
+        els.forgeMul.textContent = `${currentMul.toFixed(2)}×`;
+        els.forgeP.textContent = successProb === null ? '-' : `${(successProb * 100).toFixed(2)}%`;
+        if(els.forgeStageMul){ els.forgeStageMul.textContent = stageMul === null ? '-' : `${stageMul.toFixed(stageMul >= 10 ? 1 : 3)}×`; }
+        if(els.forgeNextMul){ els.forgeNextMul.textContent = nextTotalMul === null ? '-' : `${nextTotalMul.toFixed(nextTotalMul >= 10 ? 1 : 3)}×`; }
+        if(els.forgeCostEnh){ els.forgeCostEnh.textContent = lv >= 20 ? '-' : String(enhanceCost); }
+        if(els.forgeCostProtect){ els.forgeCostProtect.textContent = lv >= 20 ? '-' : String(protectCost); }
+        if(els.forgeCostGold){ els.forgeCostGold.textContent = lv >= 20 ? '-' : formatNum(expectedGold); }
+
+        const cur = effectiveStat(it);
+        const after = Math.floor((it.base || 0) * nextMul);
+        els.forgePreview.textContent = lv >= 20 ? '-' : `${formatNum(cur)} → ${formatNum(after)} (Lv.${next})`;
+        els.forgeOnce.disabled = lv >= 20;
       }
       function doForgeOnce(){ if(state.forge.autoRunning){ setForgeMsg('자동 강화 중에는 수동 강화를 사용할 수 없습니다.', 'warn'); return; }
         performForgeAttempt({auto:false});
