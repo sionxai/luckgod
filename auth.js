@@ -73,18 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const profileRef = ref(db, `users/${user.uid}`);
         const snapshot = await get(profileRef);
         if (!snapshot.exists()) {
-          await saveUserProfile(user.uid, {
-            username,
-            role: 'user',
-            wallet: 1000,
-            gold: 0,
-            config: null,
-            globalStats: null,
-            equip: null,
-            spares: null,
-            items: null,
-            enhance: null
-          });
+          console.error('Profile missing for user login', user.uid);
+          setAuthMessage('프로필 정보를 불러오지 못했습니다. 관리자에게 문의하세요.', 'error');
+          await signOut(auth);
+          return;
         }
         setAuthMessage('로그인 중...', 'ok');
         window.location.href = 'index.html';

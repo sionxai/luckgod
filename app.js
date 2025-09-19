@@ -550,9 +550,10 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         }
       }
 
-      async function grantResourcesToUser(uid, deltas){ const userRef = ref(db, `users/${uid}`); const snapshot = await get(userRef); if(!snapshot.exists()) throw new Error('사용자를 찾을 수 없습니다.'); const data = snapshot.val() || {}; const updates = {}; const walletFixed = typeof data.wallet === 'number'; const goldFixed = typeof data.gold === 'number'; const diamondsFixed = typeof data.diamonds === 'number'; if(typeof deltas.points === 'number' && deltas.points !== 0 && walletFixed){ updates.wallet = Math.max(0, data.wallet + deltas.points); }
-        if(typeof deltas.gold === 'number' && deltas.gold !== 0 && goldFixed){ updates.gold = Math.max(0, data.gold + deltas.gold); }
-        if(typeof deltas.diamonds === 'number' && deltas.diamonds !== 0 && (diamondsFixed || data.diamonds === undefined)){ const currentDiamonds = diamondsFixed ? data.diamonds : 0; updates.diamonds = Math.max(0, currentDiamonds + deltas.diamonds); }
+      async function grantResourcesToUser(uid, deltas){ const userRef = ref(db, `users/${uid}`); const snapshot = await get(userRef); if(!snapshot.exists()) throw new Error('사용자를 찾을 수 없습니다.'); const data = snapshot.val() || {}; const updates = {}; const role = data.role === 'admin' ? 'admin' : 'user'; const canModifyEconomy = role !== 'admin';
+        if(typeof deltas.points === 'number' && deltas.points !== 0 && canModifyEconomy){ const baseWallet = typeof data.wallet === 'number' && isFinite(data.wallet) ? data.wallet : 0; updates.wallet = Math.max(0, baseWallet + deltas.points); }
+        if(typeof deltas.gold === 'number' && deltas.gold !== 0 && canModifyEconomy){ const baseGold = typeof data.gold === 'number' && isFinite(data.gold) ? data.gold : 0; updates.gold = Math.max(0, baseGold + deltas.gold); }
+        if(typeof deltas.diamonds === 'number' && deltas.diamonds !== 0){ const baseDiamonds = typeof data.diamonds === 'number' && isFinite(data.diamonds) ? data.diamonds : 0; updates.diamonds = Math.max(0, baseDiamonds + deltas.diamonds); }
         if(Object.keys(updates).length === 0) return false;
         await update(userRef, updates);
         if(currentFirebaseUser && uid === currentFirebaseUser.uid){ if(Object.prototype.hasOwnProperty.call(updates, 'wallet')){ state.wallet = updates.wallet; if(userProfile) userProfile.wallet = updates.wallet; updatePointsView(); }
@@ -1282,41 +1283,13 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           console.error('프로필을 불러오지 못했습니다.', error);
           throw error;
         }
-        let data = snapshot.exists() ? (snapshot.val() || {}) : null;
-        if(!data){
-          const role = (fallbackName === 'admin') ? 'admin' : 'user';
-          data = {
-            username: fallbackName,
-            role,
-            wallet: role === 'admin' ? null : 1000,
-            gold: role === 'admin' ? null : 10000,
-            config: null,
-            globalStats: null,
-            equip: null,
-            spares: null,
-            items: null,
-            enhance: null,
-            pets: createDefaultPetState(),
-            session: null,
-            pitySince: 0,
-            combat: { useBattleRes: true, prefBattleRes: true },
-            forge: { protectEnabled: false },
-            presets: null,
-            selectedPreset: null,
-            diamonds: role === 'admin' ? null : 0,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-          };
-          try {
-            await set(profileRef, data);
-            if(fallbackName){
-              await set(ref(db, `usernameIndex/${fallbackName}`), uid);
-            }
-          } catch (error) {
-            console.error('프로필 초기화에 실패했습니다.', error);
-            throw error;
-          }
-        } else {
+        if(!snapshot.exists()){
+          const missingError = new Error('Profile not found');
+          missingError.code = 'PROFILE_NOT_FOUND';
+          throw missingError;
+        }
+        let data = snapshot.val() || {};
+        {
           const updates = {};
           if(!data.username){
             data.username = fallbackName;
@@ -1926,6 +1899,12 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           if(els.appWrap){ els.appWrap.style.display = ''; }
         } catch(err){
           console.error('프로필을 불러오지 못했습니다.', err);
+          if(err && err.code === 'PROFILE_NOT_FOUND'){
+            setShopMessage('프로필 정보를 찾을 수 없습니다. 다시 로그인하세요.', 'error');
+            await signOut(auth);
+            window.location.href = 'login.html';
+            return;
+          }
           setShopMessage('프로필을 불러오지 못했습니다.', 'error');
         }
       });

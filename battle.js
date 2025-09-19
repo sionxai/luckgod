@@ -5,7 +5,6 @@ import {
   signOut,
   ref,
   get,
-  set,
   update
 } from './firebase.js';
 import {
@@ -2359,40 +2358,13 @@ async function loadOrInitializeProfile(firebaseUser) {
     console.error('프로필 로드 실패', error);
     throw error;
   }
-  let data = snapshot.exists() ? snapshot.val() : null;
-  const fallbackName = sanitizeUsername(deriveUsernameFromUser(firebaseUser), `user-${uid.slice(0, 6)}`);
-  if (!data) {
-    const role = fallbackName === 'admin' ? 'admin' : 'user';
-    data = {
-      username: fallbackName,
-      role,
-      wallet: role === 'admin' ? null : 1000,
-      gold: role === 'admin' ? null : 10000,
-      diamonds: role === 'admin' ? null : 0,
-      config: null,
-      globalStats: null,
-      equip: null,
-      spares: null,
-      items: null,
-      enhance: null,
-      combat: { useBattleRes: true, prefBattleRes: true, autoPotion: false, autoHyper: false },
-      pets: null,
-      bossProgress: null,
-      battleProgress: null,
-      presets: null,
-      selectedPreset: null,
-      pitySince: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    try {
-      await set(profileRef, data);
-      await set(ref(db, `usernameIndex/${fallbackName}`), uid);
-    } catch (error) {
-      console.error('프로필 초기화 실패', error);
-      throw error;
-    }
+  if (!snapshot.exists()) {
+    const missingError = new Error('Profile not found');
+    missingError.code = 'PROFILE_NOT_FOUND';
+    throw missingError;
   }
+  let data = snapshot.val() || null;
+  const fallbackName = sanitizeUsername(deriveUsernameFromUser(firebaseUser), `user-${uid.slice(0, 6)}`);
   if (!data.username) {
     data.username = fallbackName;
     await update(profileRef, { username: fallbackName, updatedAt: Date.now() });
@@ -2469,6 +2441,12 @@ function attachAuthListener() {
       startNewBattle();
     } catch (error) {
       console.error('전투 페이지 초기화 실패', error);
+      if (error?.code === 'PROFILE_NOT_FOUND') {
+        addBattleLog('프로필 정보를 찾을 수 없습니다. 다시 로그인해주세요.', 'damage');
+        await signOut(auth);
+        window.location.href = 'login.html';
+        return;
+      }
       addBattleLog('프로필을 불러오는 중 오류가 발생했습니다.', 'damage');
     }
   });
