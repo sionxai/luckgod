@@ -16,6 +16,7 @@
         <span class="muted small">포인트: <b id="points">-</b></span>
         <span class="muted small">골드: <b id="gold">-</b></span>
         <span class="muted small">다이아: <b id="diamonds">-</b></span>
+        <span class="muted small">펫 뽑기권: <b id="petTicketCount">0</b></span>
         <button id="toUser">사용자 페이지</button>
         <button id="toAdmin">관리자 페이지</button>
         <button id="toBattle">전투 페이지</button>
@@ -209,6 +210,11 @@
             <label>시드<input id="seed" type="text" placeholder="예: lucky-777" /></label>
             <label><input id="lock" type="checkbox" /> 설정 잠금</label>
           </div>
+          <div class="row gacha-type-row">
+            <button id="gachaModeGearConfig" class="mode-btn active" type="button">장비 설정</button>
+            <button id="gachaModePetConfig" class="mode-btn" type="button">펫 설정</button>
+          </div>
+          <div id="gearConfigWrap">
           <table class="weights" id="weightsTable" aria-label="등급별 가중치 테이블">
             <thead>
               <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
@@ -224,10 +230,23 @@
             <label><input id="g10Enabled" type="checkbox" /> 10연 최소 보장</label>
             <label>최소<select id="g10Tier"><option value="A">A 이상</option><option value="S">S 이상</option></select></label>
           </div>
+          </div>
+          <div id="petConfigWrap" style="display:none">
+            <p class="muted small">펫 뽑기는 상대 가중치 비율로 계산되며, 관리자만 수정할 수 있습니다.</p>
+            <table class="stats" id="petWeightTable" aria-label="펫 가챠 가중치 설정">
+              <thead><tr><th>펫</th><th>가중치</th></tr></thead>
+              <tbody id="petWeightTableBody"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="panel" id="drawPanel" data-section="gacha">
           <h2>실행</h2>
+          <div class="row gacha-type-row">
+            <button id="gachaModeGearDraw" class="mode-btn active" type="button">장비 뽑기</button>
+            <button id="gachaModePetDraw" class="mode-btn" type="button">펫 뽑기</button>
+          </div>
+          <div id="gearDrawControls">
           <div class="row">
             <button id="draw1" class="primary">1회</button>
             <button id="draw10">10회</button>
@@ -236,6 +255,12 @@
             <button id="draw10k">10,000회</button>
             <label>속도<input id="speed" type="range" min="0" max="60" value="10" /></label>
             <button id="cancel" disabled>중단</button>
+          </div>
+          </div>
+          <div id="petDrawControls" class="row pet-draw-row" style="display:none">
+            <button id="drawPet1" class="primary">펫 1회</button>
+            <button id="drawPet10">펫 10회</button>
+            <span class="muted small">보유 티켓: <b id="petTicketInline">0</b></span>
           </div>
           <div class="progress" aria-label="진행률"><div id="bar"></div></div>
           <div id="drawResults" class="draw-results" style="display:none">
@@ -254,6 +279,8 @@
           <div id="equipGrid" class="equipgrid" aria-label="장착 부위"></div>
           <div class="row"><div class="muted">예비</div></div>
           <div id="spareList"></div>
+          <div class="row"><div class="muted">펫 보유 현황</div></div>
+          <div id="petList" class="pet-list"></div>
         </section>
 
         <section class="panel" data-section="equipment">
@@ -382,19 +409,28 @@
             <summary>상세 통계 보기</summary>
           <div class="row">
             <label>보기<select id="scope"><option value="session">세션</option><option value="global">전체</option></select></label>
+            <label>타입<select id="statsMode"><option value="gear">장비</option><option value="pet">펫</option></select></label>
             <div class="muted">표본 수: <span id="nDraws">0</span></div>
             <div class="muted">카이제곱 p-value: <span id="pval">-</span></div>
             <span class="sep"></span>
             <button id="resetSession">세션 초기화</button>
             <button id="resetGlobal">전체 초기화</button>
           </div>
-          <table class="stats" id="statsTable" aria-label="등급별 통계 테이블">
-            <thead>
-              <tr><th>등급</th><th>관측</th><th>비율</th><th>기대</th><th>Δ</th><th>상대오차</th></tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-          <div class="barwrap" style="margin-top:8px"><canvas id="chart" width="900" height="220"></canvas></div>
+          <div id="gearStatsWrap">
+            <table class="stats" id="statsTable" aria-label="등급별 통계 테이블">
+              <thead>
+                <tr><th>등급</th><th>관측</th><th>비율</th><th>기대</th><th>Δ</th><th>상대오차</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="barwrap" style="margin-top:8px"><canvas id="chart" width="900" height="220"></canvas></div>
+          </div>
+          <div id="petStatsWrap" style="display:none">
+            <table class="stats" id="petStatsTable" aria-label="펫 뽑기 확률 테이블">
+              <thead><tr><th>펫</th><th>확률</th><th>보유 수량</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
           </details>
         </section>
 

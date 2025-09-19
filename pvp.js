@@ -14,6 +14,7 @@ import {
   sanitizeItems,
   sanitizeEnhanceConfig,
   sanitizeConfig,
+  sanitizePetState,
   computePlayerStats as derivePlayerStats,
   combatPower,
   formatNum,
@@ -329,7 +330,8 @@ async function loadOpponents() {
     if (!profile || uid === state.user.uid) return;
     const equip = sanitizeEquipMap(profile.equip);
     const enhance = sanitizeEnhanceConfig(profile.enhance);
-    const derived = derivePlayerStats(equip, enhance);
+    const pets = sanitizePetState(profile.pets);
+    const derived = derivePlayerStats(equip, enhance, {}, pets.active);
     const displayName = profile.username || `user-${uid.slice(0, 4)}`;
     const pvpStats = profile.pvpStats || { wins: 0, losses: 0, draws: 0, history: [] };
     const combatPrefs = {
@@ -379,13 +381,14 @@ async function hydrateProfile(firebaseUser) {
   const equip = sanitizeEquipMap(profile.equip);
   const enhance = sanitizeEnhanceConfig(profile.enhance);
   const items = sanitizeItems(profile.items);
+  const pets = sanitizePetState(profile.pets);
   const config = sanitizeConfig(profile.config);
   const combatPrefs = {
     ...profile.combat,
     autoPotion: profile.combat?.autoPotion === true,
     autoHyper: profile.combat?.autoHyper === true
   };
-  const derived = derivePlayerStats(equip, enhance);
+  const derived = derivePlayerStats(equip, enhance, {}, pets.active);
   const displayName = profile.username || firebaseUser.email || firebaseUser.uid;
   state.user = {
     uid: firebaseUser.uid,
@@ -398,6 +401,7 @@ async function hydrateProfile(firebaseUser) {
     equip,
     enhance,
     items,
+    pets,
     combat: combatPrefs,
     pvpStats: profile.pvpStats || { wins: 0, losses: 0, draws: 0, history: [] }
   };

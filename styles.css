@@ -28,6 +28,7 @@
       .panel h2 { margin: 0 0 8px; font-size: 16px; }
       .row { display:flex; gap: 10px; align-items: center; flex-wrap: wrap; }
       .row > * { margin: 4px 0; }
+      .gacha-type-row { margin: 8px 0; }
       .preset-admin-row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
       .preset-admin-row label { gap:8px; }
       .preset-user-row { display:flex; gap:8px; flex-wrap: wrap; align-items:center; margin-bottom:8px; }
@@ -43,6 +44,11 @@
       button { background: var(--panel-2); color: var(--text); border: 1px solid var(--grid); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
       button.primary { background: var(--accent); color: #06122a; border-color: transparent; }
       button:disabled { opacity: .6; cursor: not-allowed; }
+      .mode-btn { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--grid); background: var(--panel-2); color: var(--text); font-weight: 600; }
+      .mode-btn.active { background: var(--accent); color: #06122a; border-color: transparent; }
+      #petConfigWrap { margin-top: 8px; }
+      .pet-draw-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+      .pet-draw-row .muted { margin-left:auto; }
       .weights { width: 100%; border-collapse: collapse; }
       .weights th, .weights td { border-bottom: 1px solid var(--grid); padding: 6px 4px; text-align: left; }
       .weights th { color: var(--muted); font-weight: 600; }
@@ -83,6 +89,14 @@
       .forge-effect.success { color: var(--ok); }
       .forge-effect.fail, .forge-effect.destroyed { color: var(--danger); }
       .forge-effect.protected { color: var(--warn); }
+      .pet-list { display:grid; gap:8px; margin-top:8px; }
+      .pet-card { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:8px; border:1px solid rgba(142,238,255,0.2); background: rgba(0,0,0,0.28); }
+      .pet-card.active { border-color: var(--accent); box-shadow:0 0 0 1px rgba(106,169,255,0.4); }
+      .pet-card .info { display:flex; flex-direction:column; gap:2px; }
+      .pet-card .name { font-weight:600; color: var(--accent); }
+      .pet-card .count { font-size:12px; color: var(--muted); }
+      .pet-card .actions { display:flex; align-items:center; }
+      .pet-card .desc { font-size:11px; color: var(--muted); line-height:1.4; margin-top:2px; }
       button.forge-auto-running { background: linear-gradient(90deg, rgba(106,169,255,0.5), rgba(142,238,255,0.65)); color: #06122a; border-color: rgba(142,238,255,0.4); box-shadow: 0 0 10px rgba(142,238,255,0.3); }
       .msg-ok { color: var(--ok); }
       .msg-warn { color: var(--warn); }
@@ -163,6 +177,8 @@
       .draw-card .tier-label { font-size:11px; font-weight:600; padding:2px 6px; border-radius:999px; background: rgba(142,238,255,0.12); border:1px solid rgba(142,238,255,0.25); }
       .draw-card .draw-icon { font-size:28px; }
       .draw-card .draw-part { color: var(--muted); font-size:11px; }
+      .draw-card.pet .draw-icon { font-size:34px; }
+      .draw-card.pet .draw-part { color: var(--text); font-weight:600; font-size:12px; }
       .shop-btns { display:flex; gap:6px; }
       .shop-btns button { flex:1 1 60px; padding:6px 0; font-size:11px; }
       .shop-msg { margin-top:8px; min-height:16px; font-size:12px; color: var(--muted); }

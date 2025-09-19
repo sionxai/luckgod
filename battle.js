@@ -26,7 +26,12 @@ import {
   formatMultiplier,
   computePlayerStats as derivePlayerStats,
   combatPower,
-  calculateDamage
+  calculateDamage,
+  PET_IDS,
+  createDefaultPetState,
+  sanitizePetState,
+  getPetDefinition,
+  describePetAbilities
 } from './combat-core.js';
 
 const qs = (selector) => document.querySelector(selector);
@@ -36,6 +41,7 @@ const els = {
   whoami: qs('#whoamiBattle'),
   points: qs('#pointsBattle'),
   gold: qs('#goldBattle'),
+  petTickets: qs('#petTicketBattle'),
   toGacha: qs('#toGacha'),
   toPvp: qs('#toPvp'),
   logout: qs('#logoutBtn'),
@@ -91,7 +97,11 @@ const els = {
   autoStatsPotion: qs('#autoStatsPotion'),
   autoStatsHyperPotion: qs('#autoStatsHyperPotion'),
   autoStatsProtect: qs('#autoStatsProtect'),
-  autoStatsBattleRes: qs('#autoStatsBattleRes')
+  autoStatsBattleRes: qs('#autoStatsBattleRes'),
+  bossList: qs('#bossList'),
+  startBossBtn: qs('#startBossBtn'),
+  resetBossSelection: qs('#resetBossSelection'),
+  bossInfo: qs('#bossInfo')
 };
 
 const MAX_LEVEL = 999;
@@ -107,7 +117,187 @@ const AUTO_DROP_LABELS = {
 const AUTO_STOP_REASON_LABELS = {
   manual: '사용자 중지',
   defeat: '패배',
+  boss: '보스 도전',
   other: '중지'
+};
+const BOSS_IDS = ['boss150', 'boss300', 'boss450', 'boss550', 'boss800'];
+
+const BOSS_UNLOCK_LEVELS = {
+  boss150: 200,
+  boss300: 400,
+  boss450: 600,
+  boss550: 800,
+  boss800: 900
+};
+
+const BOSS_CONFIG = {
+  boss150: {
+    id: 'boss150',
+    level: 150,
+    title: 'Lv.150 — 「해무의 도깨비 장수」',
+    name: '해무의 도깨비 장수',
+    stats: { hpScale: 6.5, atkScale: 1.2, defScale: 1.1 },
+    drop: { firstTicket: 1, chance: 0.2 },
+    summary: '연속 회피와 긴급 회복 패턴 대응'
+  },
+  boss300: {
+    id: 'boss300',
+    level: 300,
+    title: 'Lv.300 — 「녹우 수호자」',
+    name: '녹우 수호자',
+    stats: { hpScale: 8, atkScale: 1.25, defScale: 1.2 },
+    drop: { firstTicket: 1, chance: 0.28 },
+    summary: '청동피갑 반사와 우레각인을 주의'
+  },
+  boss450: {
+    id: 'boss450',
+    level: 450,
+    title: 'Lv.450 — 「염풍 산양왕」',
+    name: '염풍 산양왕',
+    stats: { hpScale: 9, atkScale: 1.35, defScale: 1.25 },
+    drop: { firstTicket: 1, chance: 0.35 },
+    summary: '모래눈보라와 갑옷파쇄에 대비'
+  },
+  boss550: {
+    id: 'boss550',
+    level: 550,
+    title: 'Lv.550 — 「사막의 여왕 개미」',
+    name: '사막의 여왕 개미',
+    stats: { hpScale: 10, atkScale: 1.4, defScale: 1.3 },
+    drop: { firstTicket: 1, chance: 0.42 },
+    summary: '병정 소환과 왕실 코쿤으로 장기전 양상'
+  },
+  boss800: {
+    id: 'boss800',
+    level: 800,
+    title: 'Lv.800 — 「호랑의 그림자」',
+    name: '호랑의 그림자',
+    stats: { hpScale: 12, atkScale: 1.55, defScale: 1.35 },
+    drop: { firstTicket: 1, chance: 0.55 },
+    summary: '무적과 반격 스택을 관리해야 합니다'
+  }
+};
+
+const BOSS_BEHAVIORS = {
+  boss150: {
+    name: '해무 회복',
+    chance: 0.35,
+    cooldown: 2,
+    execute: ({ state }) => {
+      const healAmount = Math.max(1, Math.round(gameState.enemy.maxHp * 0.12));
+      return {
+        animation: 'attacking',
+        delay: 320,
+        pre() {
+          addBattleLog('[보스] 해무의 장수가 안개를 두르고 기력을 회복합니다.', 'warn');
+        },
+        post() {
+          const before = gameState.enemy.hp;
+          gameState.enemy.hp = Math.min(gameState.enemy.maxHp, gameState.enemy.hp + healAmount);
+          const healed = Math.max(0, gameState.enemy.hp - before);
+          if (healed > 0) {
+            addBattleLog(`[보스 스킬] 해무 회복! ${formatNum(healed)} 체력 회복`, 'heal');
+          }
+          applyBossDodgeBuff(state, 18, 2);
+        }
+      };
+    }
+  },
+  boss300: {
+    name: '우레각인',
+    chance: 0.3,
+    cooldown: 3,
+    execute: ({ state }) => {
+      return {
+        animation: 'attacking',
+        delay: 360,
+        pre() {
+          addBattleLog('[보스] 청동피갑이 번쩍이며 우레각인이 발동됩니다!', 'warn');
+        },
+        post() {
+          const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, true);
+          let damage = result.damage;
+          if (!damage || result.type === 'MISS') {
+            damage = Math.max(1, Math.round(gameState.enemy.stats.atk * 1.6));
+          }
+          triggerAnimation('playerSprite', 'hurt');
+          const dealt = applyDamageToPlayer(damage, { source: 'bossSkill', critical: true });
+          addBattleLog(`[보스 스킬] 우레각인! ${formatNum(dealt)} 피해`, 'critical');
+          state.reflectHits = Math.max(state.reflectHits || 0, 2);
+          state.reflectRatio = Math.max(state.reflectRatio || 0.25, 0.25);
+          addBattleLog('[보스] 청동피갑 반격이 활성화됐습니다. (2회)', 'warn');
+        }
+      };
+    }
+  },
+  boss450: {
+    name: '모래눈보라',
+    chance: 0.28,
+    cooldown: 3,
+    execute: ({ state }) => {
+      return {
+        animation: 'attacking',
+        delay: 360,
+        pre() {
+          addBattleLog('[보스] 모래눈보라가 몰아치며 갑옷 파쇄를 준비합니다!', 'warn');
+        },
+        post() {
+          const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, true);
+          let damage = result.damage;
+          const crit = result.type === 'CRITICAL';
+          if (!damage || result.type === 'MISS') {
+            damage = Math.max(1, Math.round(gameState.enemy.stats.atk * 1.45));
+          }
+          triggerAnimation('playerSprite', 'hurt');
+          const dealt = applyDamageToPlayer(damage, { source: 'bossSkill', critical: crit });
+          addBattleLog(`[보스 스킬] 모래눈보라! ${formatNum(dealt)} 피해`, 'critical');
+          applyPlayerArmorBreak(state, 0.2, 2);
+        }
+      };
+    }
+  },
+  boss550: {
+    name: '왕실 코쿤',
+    chance: 0.26,
+    cooldown: 4,
+    execute: ({ state }) => {
+      return {
+        animation: 'attacking',
+        delay: 300,
+        pre() {
+          addBattleLog('[보스] 여왕 개미가 왕실 코쿤을 전개합니다!', 'warn');
+        },
+        post() {
+          const shieldValue = Math.max(1, Math.round(gameState.enemy.maxHp * 0.18));
+          applyBossShield(state, shieldValue, 3);
+        }
+      };
+    }
+  },
+  boss800: {
+    name: '그림자 포효',
+    chance: 0.24,
+    cooldown: 4,
+    execute: ({ state }) => {
+      return {
+        animation: 'attacking',
+        delay: 380,
+        pre() {
+          addBattleLog('[보스] 호랑의 그림자가 응축되어 폭발합니다!', 'warn');
+        },
+        post() {
+          const baseDamage = Math.max(1, Math.round(gameState.enemy.stats.atk * 2.2));
+          triggerAnimation('playerSprite', 'hurt');
+          const dealt = applyDamageToPlayer(baseDamage, { source: 'bossSkill', critical: true });
+          addBattleLog(`[보스 스킬] 그림자 포효! ${formatNum(dealt)} 피해`, 'critical');
+          applyBossEnrage(state, { atkBonusPct: 0.3, speedBonus: 12, turns: 2 });
+          state.reflectHits = Math.max(state.reflectHits || 0, 1);
+          state.reflectRatio = Math.max(state.reflectRatio || 0.35, 0.35);
+          addBattleLog('[보스] 반격 자세! 다음 공격 시 강력한 반격이 가해집니다.', 'warn');
+        }
+      };
+    }
+  }
 };
 
 const USERNAME_NAMESPACE = '@gacha.local';
@@ -135,7 +325,12 @@ const state = {
     gold: 0,
     drops: { enhance: 0, potion: 0, hyperPotion: 0, protect: 0, battleRes: 0 },
     startTime: 0
-  }
+  },
+  bossProgress: sanitizeBossProgress(null),
+  battleProgress: sanitizeBattleProgress(null),
+  pets: createDefaultPetState(),
+  selectedBossId: null,
+  lastNormalLevel: 1
 };
 
 const gameState = {
@@ -145,7 +340,12 @@ const gameState = {
     equipment: [],
     totalStats: {},
     defending: false,
-    skillCooldown: 0
+    skillCooldown: 0,
+    activePet: null,
+    petShield: 0,
+    petAttackBonus: 0,
+    petAttackMultiplier: 1,
+    petCritBonus: 0
   },
   enemy: {
     level: 1,
@@ -160,7 +360,8 @@ const gameState = {
     ongoing: false,
     autoPlay: false,
     lastLevel: 1,
-    actionLock: false
+    actionLock: false,
+    bossFight: null
   }
 };
 function sanitizeUsername(raw, fallback) {
@@ -182,11 +383,700 @@ function deriveUsernameFromUser(firebaseUser) {
   }
   return email || firebaseUser.displayName || '';
 }
+
+function sanitizeBossProgress(raw) {
+  const progress = {};
+  BOSS_IDS.forEach((id) => {
+    const entry = raw && typeof raw === 'object' ? raw[id] : null;
+    progress[id] = {
+      clears: clampNumber(entry?.clears, 0, Number.MAX_SAFE_INTEGER, 0),
+      firstRewardClaimed: !!(entry && entry.firstRewardClaimed)
+    };
+  });
+  return progress;
+}
+
+function sanitizeBattleProgress(raw) {
+  const progress = { highestLevel: 1 };
+  if (raw && typeof raw === 'object') {
+    progress.highestLevel = clampNumber(raw.highestLevel, 1, MAX_LEVEL, 1);
+  }
+  return progress;
+}
+
+function getHighestClearedLevel() {
+  if (state.user?.role === 'admin') return MAX_LEVEL;
+  return clampNumber(state.battleProgress?.highestLevel, 1, MAX_LEVEL, 1);
+}
+
+function registerLevelClear(level) {
+  const lvl = clampMonsterLevel(level);
+  if (!state.battleProgress) state.battleProgress = sanitizeBattleProgress(null);
+  if (lvl <= (state.battleProgress.highestLevel || 1)) return;
+  state.battleProgress.highestLevel = lvl;
+  if (state.profile) {
+    state.profile.battleProgress = { ...state.battleProgress };
+  }
+  queueProfileUpdate({ battleProgress: { ...state.battleProgress } });
+  updateBossUi();
+}
+
+function bossUnlockRequirement(bossId) {
+  if (!bossId) return null;
+  return typeof BOSS_UNLOCK_LEVELS[bossId] === 'number' ? BOSS_UNLOCK_LEVELS[bossId] : null;
+}
+
+function isBossUnlocked(bossId) {
+  if (!bossId || !BOSS_IDS.includes(bossId)) return false;
+  if (state.user?.role === 'admin') return true;
+  const required = bossUnlockRequirement(bossId);
+  if (!required) return true;
+  return getHighestClearedLevel() >= required;
+}
+
+function getBossConfig(bossId) {
+  if (!bossId) return null;
+  return BOSS_CONFIG[bossId] || null;
+}
+
+function getBossProgress(bossId) {
+  if (!bossId) return null;
+  const entry = state.bossProgress?.[bossId];
+  if (entry) return entry;
+  state.bossProgress[bossId] = { clears: 0, firstRewardClaimed: false };
+  return state.bossProgress[bossId];
+}
+
+function ensureBossState(bossContext) {
+  if (!bossContext) return null;
+  if (!bossContext.state) {
+    bossContext.state = {
+      skillCooldown: 0,
+      dodgeBuffTurns: 0,
+      dodgeBonusApplied: 0,
+      armorBreakTurns: 0,
+      armorBreakPenalty: 0,
+      shieldHp: 0,
+      shieldTurns: 0,
+      reflectHits: 0,
+      reflectRatio: 0,
+      enrageTurns: 0,
+      enrageAtkBonus: 0,
+      enrageSpeedBonus: 0
+    };
+  }
+  return bossContext.state;
+}
+
+function applyBossDodgeBuff(state, bonus, turns) {
+  if (!state) return;
+  removeBossDodgeBuff(state, true);
+  const amount = Math.max(0, Math.round(bonus || 0));
+  const duration = Math.max(0, Math.floor(turns || 0));
+  if (amount <= 0 || duration <= 0) return;
+  state.dodgeBuffTurns = duration;
+  state.dodgeBonusApplied = amount;
+  gameState.enemy.stats.dodge = Math.max(0, (gameState.enemy.stats.dodge || 0) + amount);
+  addBattleLog(`[보스] 회피율이 ${formatNum(amount)}% 상승했습니다. (${duration}턴)`, 'warn');
+  updateCombatPowerUI();
+}
+
+function removeBossDodgeBuff(state, silent = false) {
+  if (!state) return;
+  if (state.dodgeBonusApplied) {
+    gameState.enemy.stats.dodge = Math.max(0, (gameState.enemy.stats.dodge || 0) - state.dodgeBonusApplied);
+    state.dodgeBonusApplied = 0;
+    if (!silent) addBattleLog('[보스] 회피 버프가 사라졌습니다.', 'warn');
+    updateCombatPowerUI();
+  }
+  state.dodgeBuffTurns = 0;
+}
+
+function applyPlayerArmorBreak(state, percent, turns) {
+  if (!state) return;
+  removePlayerArmorBreak(state, true);
+  const baseDef = gameState.player.totalStats.def || 0;
+  const ratio = Math.max(0, Math.min(1, percent || 0));
+  const penalty = Math.max(0, Math.round(baseDef * ratio));
+  const duration = Math.max(0, Math.floor(turns || 0));
+  if (penalty <= 0 || duration <= 0) return;
+  state.armorBreakTurns = duration;
+  state.armorBreakPenalty = penalty;
+  gameState.player.totalStats.def = Math.max(0, baseDef - penalty);
+  addBattleLog(`[보스] 방어력이 ${formatNum(penalty)} 감소했습니다. (${duration}턴)`, 'damage');
+  renderTotalStats();
+  updateCombatPowerUI();
+}
+
+function removePlayerArmorBreak(state, silent = false) {
+  if (!state) return;
+  if (state.armorBreakPenalty) {
+    gameState.player.totalStats.def = Math.max(0, gameState.player.totalStats.def + state.armorBreakPenalty);
+    state.armorBreakPenalty = 0;
+    renderTotalStats();
+    updateCombatPowerUI();
+    if (!silent) addBattleLog('플레이어의 방어력 저하 효과가 해제되었습니다.', 'heal');
+  }
+  state.armorBreakTurns = 0;
+}
+
+function applyBossShield(state, shieldValue, turns) {
+  if (!state) return;
+  const amount = Math.max(0, Math.round(shieldValue || 0));
+  const duration = Math.max(0, Math.floor(turns || 0));
+  if (amount <= 0 || duration <= 0) return;
+  state.shieldHp = Math.min(gameState.enemy.maxHp, (state.shieldHp || 0) + amount);
+  state.shieldTurns = duration;
+  addBattleLog(`[보스] 보호막 ${formatNum(amount)} 생성! (총 ${formatNum(state.shieldHp)} 유지)`, 'warn');
+}
+
+function applyBossEnrage(state, { atkBonusPct = 0, speedBonus = 0, turns = 0 } = {}) {
+  if (!state) return;
+  removeBossEnrage(state, true);
+  const baseAtk = gameState.enemy.stats.atk || 0;
+  const atkBonus = Math.max(0, Math.round(baseAtk * Math.max(0, atkBonusPct)));
+  const speedAdd = Math.max(0, Math.round(speedBonus || 0));
+  const duration = Math.max(0, Math.floor(turns || 0));
+  if ((atkBonus <= 0 && speedAdd <= 0) || duration <= 0) return;
+  state.enrageTurns = duration;
+  state.enrageAtkBonus = atkBonus;
+  state.enrageSpeedBonus = speedAdd;
+  if (atkBonus > 0) gameState.enemy.stats.atk += atkBonus;
+  if (speedAdd > 0) gameState.enemy.stats.speed = (gameState.enemy.stats.speed || 0) + speedAdd;
+  addBattleLog(`[보스] 공격력 +${formatNum(atkBonus)} / 속도 +${formatNum(speedAdd)} 증가! (${duration}턴)`, 'warn');
+  updateCombatPowerUI();
+}
+
+function removeBossEnrage(state, silent = false) {
+  if (!state) return;
+  let changed = false;
+  if (state.enrageAtkBonus) {
+    gameState.enemy.stats.atk = Math.max(1, gameState.enemy.stats.atk - state.enrageAtkBonus);
+    state.enrageAtkBonus = 0;
+    changed = true;
+  }
+  if (state.enrageSpeedBonus) {
+    gameState.enemy.stats.speed = Math.max(1, (gameState.enemy.stats.speed || 0) - state.enrageSpeedBonus);
+    state.enrageSpeedBonus = 0;
+    changed = true;
+  }
+  state.enrageTurns = 0;
+  if (changed) {
+    if (!silent) addBattleLog('[보스] 분노 효과가 사라졌습니다.', 'warn');
+    updateCombatPowerUI();
+  }
+}
+
+function tickBossStateBeforeAction(bossContext) {
+  if (!bossContext) return null;
+  const state = ensureBossState(bossContext);
+  if (state.skillCooldown > 0) {
+    state.skillCooldown -= 1;
+    if (state.skillCooldown < 0) state.skillCooldown = 0;
+  }
+  if (state.dodgeBuffTurns > 0) {
+    state.dodgeBuffTurns -= 1;
+    if (state.dodgeBuffTurns <= 0 && state.dodgeBonusApplied) {
+      removeBossDodgeBuff(state);
+    }
+  }
+  if (state.armorBreakTurns > 0) {
+    state.armorBreakTurns -= 1;
+    if (state.armorBreakTurns <= 0) {
+      removePlayerArmorBreak(state);
+    }
+  }
+  if (state.enrageTurns > 0) {
+    state.enrageTurns -= 1;
+    if (state.enrageTurns <= 0) {
+      removeBossEnrage(state);
+    }
+  }
+  if (state.shieldTurns > 0) {
+    state.shieldTurns -= 1;
+    if (state.shieldTurns <= 0 && state.shieldHp > 0) {
+      state.shieldHp = 0;
+      addBattleLog('[보스] 보호막이 사라졌습니다.', 'warn');
+    }
+  }
+  return state;
+}
+
+function maybeExecuteBossSkill(bossContext, delayFn, postAction) {
+  if (!bossContext) return false;
+  const behavior = BOSS_BEHAVIORS[bossContext.id];
+  if (!behavior) return false;
+  const state = ensureBossState(bossContext);
+  if (state.skillCooldown > 0) {
+    return false;
+  }
+  const chance = Math.max(0, Math.min(1, behavior.chance ?? 0));
+  if (Math.random() > chance) return false;
+  const action = behavior.execute({ state, boss: bossContext });
+  if (!action) return false;
+  state.skillCooldown = Math.max(1, behavior.cooldown || 1);
+  if (typeof action.pre === 'function') action.pre();
+  const animation = action.animation === null ? null : action.animation || 'attacking';
+  if (animation) {
+    triggerAnimation('monsterSprite', animation);
+  }
+  const delayMs = typeof action.delay === 'number' ? action.delay : 360;
+  setTimeout(() => {
+    if (typeof action.post === 'function') action.post();
+    updateHpBars();
+    updateCombatPowerUI();
+    postAction();
+  }, delayFn(delayMs));
+  return true;
+}
+
+function clearBossStateEffects(bossContext) {
+  if (!bossContext?.state) return;
+  const state = bossContext.state;
+  removeBossDodgeBuff(state, true);
+  removePlayerArmorBreak(state, true);
+  removeBossEnrage(state, true);
+  state.reflectHits = 0;
+  state.reflectRatio = 0;
+  state.shieldHp = 0;
+  state.shieldTurns = 0;
+  state.skillCooldown = 0;
+}
+
+function setBossControlsDisabled(disabled) {
+  const controls = [
+    els.monsterLevel,
+    els.monsterLevelInput,
+    els.monsterLevelMinus,
+    els.monsterLevelPlus,
+    els.newBattleBtn
+  ].filter(Boolean);
+  controls.forEach((control) => {
+    control.disabled = !!disabled;
+  });
+}
+
+function updateBossUi() {
+  if (state.selectedBossId && !isBossUnlocked(state.selectedBossId)) {
+    state.selectedBossId = null;
+  }
+
+  if (els.bossList) {
+    const buttons = Array.from(els.bossList.querySelectorAll('.boss-btn'));
+    buttons.forEach((btn) => {
+      const bossId = btn?.dataset?.boss;
+      if (!bossId) return;
+      const progress = getBossProgress(bossId);
+      const unlocked = isBossUnlocked(bossId);
+      const requirement = bossUnlockRequirement(bossId);
+      btn.classList.toggle('active', unlocked && bossId === state.selectedBossId);
+      btn.classList.toggle('locked', !unlocked);
+      btn.dataset.clears = String(progress?.clears || 0);
+      btn.dataset.first = progress?.firstRewardClaimed ? '1' : '0';
+      btn.dataset.locked = unlocked ? '0' : '1';
+      btn.setAttribute('aria-disabled', unlocked ? 'false' : 'true');
+      if (requirement) {
+        btn.setAttribute(
+          'title',
+          unlocked
+            ? `레벨 ${formatNum(requirement)} 몬스터 처치로 해금 완료`
+            : `레벨 ${formatNum(requirement)} 몬스터 처치 시 해금`
+        );
+      } else {
+        btn.removeAttribute('title');
+      }
+    });
+  }
+
+  const boss = getBossConfig(state.selectedBossId);
+  const bossInBattle = !!(gameState.battle.bossFight && gameState.battle.ongoing);
+  if (els.startBossBtn) {
+    if (!boss) {
+      els.startBossBtn.disabled = true;
+      els.startBossBtn.textContent = '보스 도전';
+      els.startBossBtn.removeAttribute('title');
+    } else if (!isBossUnlocked(boss.id) && state.user?.role !== 'admin') {
+      const requirement = bossUnlockRequirement(boss.id);
+      const requiredLabel = requirement ? `레벨 ${formatNum(requirement)} 클리어 필요` : '해금 필요';
+      els.startBossBtn.disabled = true;
+      els.startBossBtn.textContent = requiredLabel;
+      els.startBossBtn.title = requiredLabel;
+    } else if (bossInBattle) {
+      els.startBossBtn.disabled = true;
+      els.startBossBtn.textContent = '전투 진행중...';
+      els.startBossBtn.removeAttribute('title');
+    } else {
+      const firstRewardPending = !getBossProgress(boss.id)?.firstRewardClaimed;
+      els.startBossBtn.disabled = false;
+      els.startBossBtn.textContent = firstRewardPending ? '보스 도전 (첫 보상 보장)' : '보스 도전';
+      const requirement = bossUnlockRequirement(boss.id);
+      if (requirement) {
+        els.startBossBtn.title = `레벨 ${formatNum(requirement)} 몬스터 처치로 해금됨`;
+      } else {
+        els.startBossBtn.removeAttribute('title');
+      }
+    }
+  }
+  if (els.resetBossSelection) {
+    els.resetBossSelection.disabled = !boss || bossInBattle;
+  }
+  if (els.bossInfo) {
+    if (!boss) {
+      els.bossInfo.textContent = '도전할 보스를 선택하세요.';
+    } else {
+      const progress = getBossProgress(boss.id) || { clears: 0, firstRewardClaimed: false };
+      const drop = boss.drop || {};
+      const chance = Math.max(0, Math.min(1, drop.chance || 0));
+      const chancePercent = Math.round(chance * 1000) / 10;
+      const firstRewardCount = drop.firstTicket || 0;
+      const requirement = bossUnlockRequirement(boss.id);
+      const unlocked = isBossUnlocked(boss.id) || state.user?.role === 'admin';
+      const highest = getHighestClearedLevel();
+      const firstRewardLabel = progress.firstRewardClaimed
+        ? '첫 보상 수령 완료'
+        : `첫 처치 ${firstRewardCount}장 보장`;
+      const clearsLabel = progress.clears ? `${formatNum(progress.clears)}회 클리어` : '클리어 기록 없음';
+      const requirementLabel = requirement
+        ? state.user?.role === 'admin'
+          ? `해금 조건: 레벨 ${formatNum(requirement)} (관리자 해금)`
+          : unlocked
+            ? `해금 조건: 레벨 ${formatNum(requirement)} (달성)`
+            : `해금 조건: 레벨 ${formatNum(requirement)} (현재 ${formatNum(highest)})`
+        : '';
+      const parts = [boss.title, requirementLabel, firstRewardLabel, `일반 드랍 ${chancePercent}%`, clearsLabel];
+      els.bossInfo.textContent = parts.filter(Boolean).join(' · ');
+      if (!unlocked && requirement) {
+        const remaining = Math.max(0, requirement - highest);
+        if (remaining > 0) {
+          els.bossInfo.textContent += ` · ${formatNum(remaining)}레벨 더 필요`;
+        }
+      }
+    }
+  }
+}
+
+function setBossSelection(bossId) {
+  if (!bossId || !BOSS_IDS.includes(bossId)) {
+    state.selectedBossId = null;
+    updateBossUi();
+    return;
+  }
+  if (!isBossUnlocked(bossId) && state.user?.role !== 'admin') {
+    const requirement = bossUnlockRequirement(bossId);
+    const highest = getHighestClearedLevel();
+    const boss = getBossConfig(bossId);
+    if (els.bossInfo) {
+      const title = boss?.title || '보스';
+      const reqLabel = requirement
+        ? `해금 조건: 레벨 ${formatNum(requirement)} (현재 ${formatNum(highest)})`
+        : '해금 조건 미지정';
+      els.bossInfo.textContent = `${title} · ${reqLabel}`;
+    }
+    addBattleLog(
+      requirement
+        ? `[보스] 레벨 ${formatNum(requirement)} 몬스터를 처치해야 도전 가능합니다.`
+        : '[보스] 아직 도전할 수 없습니다.',
+      'warn'
+    );
+    updateBossUi();
+    return;
+  }
+  state.selectedBossId = bossId;
+  updateBossUi();
+}
+
+function resetBossSelection() {
+  if (gameState.battle.ongoing && gameState.battle.bossFight) return;
+  state.selectedBossId = null;
+  updateBossUi();
+}
+
+function applyBossScaling(boss) {
+  if (!boss) return;
+  const { stats } = boss;
+  if (stats?.hpScale && stats.hpScale !== 1) {
+    gameState.enemy.maxHp = Math.round(gameState.enemy.maxHp * stats.hpScale);
+    gameState.enemy.hp = gameState.enemy.maxHp;
+  }
+  if (stats?.atkScale && stats.atkScale !== 1) {
+    gameState.enemy.stats.atk = Math.round(gameState.enemy.stats.atk * stats.atkScale);
+  }
+  if (stats?.defScale && stats.defScale !== 1) {
+    gameState.enemy.stats.def = Math.round(gameState.enemy.stats.def * stats.defScale);
+  }
+  if (els.enemyAtk) els.enemyAtk.textContent = formatNum(gameState.enemy.stats.atk);
+  if (els.enemyDef) els.enemyDef.textContent = formatNum(gameState.enemy.stats.def);
+  updateCombatPowerUI();
+  updateHpBars();
+}
+
+function endBossEncounter(result = 'neutral') {
+  const bossContext = gameState.battle.bossFight;
+  if (!bossContext) {
+    updateBossUi();
+    return;
+  }
+  clearBossStateEffects(bossContext);
+  gameState.battle.bossFight = null;
+  setBossControlsDisabled(false);
+  updateBossUi();
+  const restoreLevel = clampMonsterLevel(state.lastNormalLevel || 1);
+  updateMonsterLevelUI(restoreLevel);
+  updateEnemyStats(restoreLevel);
+}
+
+function applyBossRewards(bossContext, rng = Math.random) {
+  if (!bossContext) return null;
+  const boss = bossContext.config || getBossConfig(bossContext.id);
+  if (!boss) return null;
+  const progress = getBossProgress(boss.id);
+  progress.clears += 1;
+  const isAdmin = state.user?.role === 'admin';
+  const drop = boss.drop || {};
+  const result = {
+    bossId: boss.id,
+    clears: progress.clears,
+    firstRewardGranted: false,
+    extraRewardGranted: false,
+    tickets: 0
+  };
+  if (!progress.firstRewardClaimed) {
+    progress.firstRewardClaimed = true;
+    if (!isAdmin && (drop.firstTicket || 0) > 0) {
+      result.firstRewardGranted = true;
+      result.tickets += drop.firstTicket;
+    }
+  }
+  const chance = Math.max(0, Math.min(1, drop.chance || 0));
+  if (!isAdmin && chance > 0 && rng() < chance) {
+    result.extraRewardGranted = true;
+    result.tickets += 1;
+  }
+  if (!isAdmin && result.tickets > 0) {
+    state.items.petTicket = (state.items.petTicket || 0) + result.tickets;
+    persistItems();
+    updateResourceSummary();
+  }
+  state.profile.bossProgress = JSON.parse(JSON.stringify(state.bossProgress));
+  queueProfileUpdate({ bossProgress: state.bossProgress });
+  updateBossUi();
+  return result;
+}
+
+function startBossBattle() {
+  const boss = getBossConfig(state.selectedBossId);
+  if (!boss) return;
+  if (!isBossUnlocked(boss.id) && state.user?.role !== 'admin') {
+    const requirement = bossUnlockRequirement(boss.id);
+    addBattleLog(
+      requirement
+        ? `[보스] 레벨 ${formatNum(requirement)} 몬스터를 처치해야 합니다.`
+        : '[보스] 아직 도전할 수 없습니다.',
+      'warn'
+    );
+    updateBossUi();
+    return;
+  }
+  if (gameState.battle.bossFight) {
+    addBattleLog('이미 보스 전투가 진행 중입니다.', 'warn');
+    return;
+  }
+  if (gameState.battle.ongoing) {
+    forceEndCurrentBattle('boss');
+  }
+  const currentLevel = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || state.lastNormalLevel || 1);
+  state.lastNormalLevel = currentLevel;
+  clearAutoSchedules();
+  if (els.battleLog) els.battleLog.innerHTML = '';
+  setBossControlsDisabled(true);
+  updateBossUi();
+  resetPetCombatState();
+  updateMonsterLevelUI(boss.level);
+  updateEnemyStats(boss.level);
+  applyBossScaling(boss);
+  gameState.battle.bossFight = { id: boss.id, level: boss.level, config: boss };
+  ensureBossState(gameState.battle.bossFight);
+  updateBossUi();
+  gameState.battle.ongoing = true;
+  gameState.battle.actionLock = false;
+  gameState.player.defending = false;
+  gameState.player.skillCooldown = 0;
+  gameState.player.hp = gameState.player.maxHp;
+  gameState.enemy.defending = false;
+  gameState.battle.turn = 0;
+  addBattleLog(`=== 보스 ${boss.name}과의 전투 시작! ===`, 'warn');
+  const drop = boss.drop || {};
+  if (drop.firstTicket) {
+    addBattleLog(`첫 처치 보상: 펫 뽑기권 ${formatNum(drop.firstTicket)}장 보장`, 'warn');
+  }
+  if (drop.chance) {
+    addBattleLog(`추가 드랍 확률: ${(Math.round(drop.chance * 1000) / 10).toFixed(1)}%`, 'warn');
+  }
+  updateHpBars();
+  updateCombatPowerUI();
+  beginPlayerTurn('battleStart');
+}
+
+function activePetDefinition() {
+  if (!state.pets || !state.pets.active) return null;
+  return getPetDefinition(state.pets.active);
+}
+
+function resetPetCombatState() {
+  gameState.player.petShield = 0;
+  gameState.player.petAttackBonus = 0;
+  gameState.player.petAttackMultiplier = 1;
+  gameState.player.petCritBonus = 0;
+}
+
+function getPlayerOffensiveStats() {
+  const base = { ...gameState.player.totalStats };
+  if (gameState.player.petAttackMultiplier && gameState.player.petAttackMultiplier !== 1) {
+    base.atk = Math.max(1, Math.round(base.atk * gameState.player.petAttackMultiplier));
+  }
+  if (gameState.player.petAttackBonus) {
+    base.atk = Math.max(1, base.atk + Math.round(gameState.player.petAttackBonus));
+  }
+  if (gameState.player.petCritBonus) {
+    base.critRate = Math.min(100, (base.critRate || 0) + gameState.player.petCritBonus);
+  }
+  return base;
+}
+
+function applyDamageToPlayer(amount, options = {}) {
+  let remaining = Math.max(0, Math.round(amount || 0));
+  if (remaining <= 0) return 0;
+  if (gameState.player.petShield > 0) {
+    const absorbed = Math.min(gameState.player.petShield, remaining);
+    gameState.player.petShield -= absorbed;
+    remaining -= absorbed;
+    if (absorbed > 0) {
+      addBattleLog(`[펫] 보호막이 ${formatNum(absorbed)} 피해를 흡수했습니다.`, 'heal');
+    }
+  }
+  if (remaining <= 0) return 0;
+  gameState.player.hp -= remaining;
+  return remaining;
+}
+
+function applyDamageToEnemy(amount, message = '') {
+  let incoming = Math.max(0, Math.round(amount || 0));
+  if (incoming <= 0) return 0;
+  const bossContext = gameState.battle.bossFight;
+  const state = bossContext ? ensureBossState(bossContext) : null;
+  if (state?.shieldHp > 0) {
+    const absorbed = Math.min(incoming, state.shieldHp);
+    if (absorbed > 0) {
+      state.shieldHp -= absorbed;
+      incoming -= absorbed;
+      addBattleLog(`[보스] 보호막이 ${formatNum(absorbed)} 피해를 흡수했습니다.`, 'warn');
+      if (state.shieldHp <= 0) {
+        state.shieldHp = 0;
+        addBattleLog('[보스] 보호막이 붕괴되었습니다!', 'damage');
+      }
+    }
+  }
+  const actual = Math.min(incoming, Math.max(0, Math.round(gameState.enemy.hp)));
+  gameState.enemy.hp = Math.max(0, gameState.enemy.hp - actual);
+  triggerAnimation('monsterSprite', 'hurt');
+  const damageLabel = actual > 0 ? formatNum(actual) : '0';
+  if (message !== null) {
+    if (message) {
+      addBattleLog(message.replace('{dmg}', damageLabel), actual > 0 ? 'damage' : 'warn');
+    } else if (actual > 0) {
+      addBattleLog(`펫의 공격이 ${formatNum(actual)} 피해를 입혔습니다.`, 'damage');
+    } else {
+      addBattleLog('펫의 공격이 보호막에 모두 흡수되었습니다.', 'warn');
+    }
+  }
+  if (state && state.reflectHits > 0 && actual > 0) {
+    const ratio = Math.max(0.05, Math.min(1, state.reflectRatio || 0));
+    const reflected = Math.max(1, Math.round(actual * ratio));
+    state.reflectHits -= 1;
+    if (state.reflectHits < 0) state.reflectHits = 0;
+    const tag = bossContext.id === 'boss800' ? '그림자 반격' : '청동피갑 반격';
+    addBattleLog(`[보스] ${tag}! ${formatNum(reflected)} 피해 반사`, 'damage');
+    applyDamageToPlayer(reflected, { source: 'reflect', critical: false });
+    if (state.reflectHits <= 0) {
+      addBattleLog('[보스] 반격 효과가 종료되었습니다.', 'warn');
+    } else {
+      addBattleLog(`[보스] 반격 ${formatNum(state.reflectHits)}회 남음`, 'warn');
+    }
+  }
+  updateHpBars();
+  return actual;
+}
+
+function handlePetTurnStart() {
+  const pet = activePetDefinition();
+  gameState.player.petAttackMultiplier = 1;
+  gameState.player.petAttackBonus = 0;
+  gameState.player.petCritBonus = 0;
+  if (!pet || !pet.active) return;
+  const { active } = pet;
+  const chance = typeof active.chance === 'number' ? active.chance : 0;
+  if (!(chance > 0) || Math.random() > chance) return;
+  switch (active.type) {
+    case 'shield': {
+      const maxHp = Math.max(1, gameState.player.maxHp || 1);
+      const amountPct = Math.max(0, active.amountPct || 0);
+      const gained = Math.round(maxHp * amountPct);
+      if (gained <= 0) break;
+      const capPct = Math.max(0.1, Math.min(1, active.maxPct || 0.4));
+      const maxShield = Math.round(maxHp * capPct);
+      gameState.player.petShield = Math.min(maxShield, gameState.player.petShield + gained);
+      const total = gameState.player.petShield;
+      addBattleLog(`[펫] ${pet.name} 보호막 발동! +${formatNum(gained)} (총 ${formatNum(total)})`, 'heal');
+      break;
+    }
+    case 'heal': {
+      const maxHp = Math.max(1, gameState.player.maxHp || 1);
+      const amountPct = Math.max(0, active.amountPct || 0);
+      const heal = Math.max(1, Math.round(maxHp * amountPct));
+      const before = gameState.player.hp;
+      gameState.player.hp = Math.min(gameState.player.maxHp, gameState.player.hp + heal);
+      const actual = Math.max(0, Math.round(gameState.player.hp - before));
+      if (actual > 0) {
+        addBattleLog(`[펫] ${pet.name}이(가) ${formatNum(actual)} 체력을 회복시켰습니다.`, 'heal');
+      }
+      break;
+    }
+    case 'attackBuff': {
+      const atkPct = Math.max(0, active.attackPct || 0);
+      const critBonus = Math.max(0, active.critRateBonus || 0);
+      const atkBonus = Math.max(0, active.attackFlat || 0);
+      gameState.player.petAttackMultiplier = 1 + atkPct;
+      gameState.player.petAttackBonus = atkBonus;
+      gameState.player.petCritBonus = critBonus;
+      addBattleLog(`[펫] ${pet.name}의 격노! 공격력이 상승했습니다.`, 'heal');
+      break;
+    }
+    case 'strike': {
+      const ratio = Math.max(0, active.ratio || 0);
+      const baseAtk = gameState.player.totalStats.atk || 0;
+      const minDamage = Math.max(0, active.minDamage || 0);
+      const damage = Math.max(minDamage, Math.round(baseAtk * ratio));
+      if (damage > 0) {
+        applyDamageToEnemy(damage, `[펫] ${pet.name}의 그림자 일격! {dmg} 피해`);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 function computePlayerStats() {
-  const { stats, equipment } = derivePlayerStats(state.equip || {}, state.enhance);
+  const petDef = activePetDefinition();
+  const { stats, equipment } = derivePlayerStats(state.equip || {}, state.enhance, {}, petDef);
   const previousHp = gameState.player.hp;
   gameState.player.equipment = equipment;
+  const prevPetId = gameState.player.activePet?.id || null;
   gameState.player.totalStats = stats;
+  if ((petDef?.id || null) !== prevPetId) {
+    resetPetCombatState();
+  }
+  gameState.player.activePet = petDef || null;
   gameState.player.maxHp = stats.hp;
   if (!previousHp) {
     gameState.player.hp = stats.hp;
@@ -242,6 +1132,7 @@ function queueProfileUpdate(partial) {
 function updateResourceSummary() {
   if (els.points) els.points.textContent = state.user?.role === 'admin' ? '∞' : formatNum(state.wallet);
   if (els.gold) els.gold.textContent = state.user?.role === 'admin' ? '∞' : formatNum(state.gold);
+  if (els.petTickets) els.petTickets.textContent = state.user?.role === 'admin' ? '∞' : formatNum(state.items?.petTicket || 0);
   if (els.potionStock) els.potionStock.textContent = formatNum(state.items?.potion || 0);
   if (els.hyperPotionStock) els.hyperPotionStock.textContent = formatNum(state.items?.hyperPotion || 0);
   updateBattleResUi();
@@ -286,7 +1177,8 @@ function snapshotItems() {
     protect: state.items?.protect || 0,
     enhance: state.items?.enhance || 0,
     revive: state.items?.revive || 0,
-    battleRes: state.items?.battleRes || 0
+    battleRes: state.items?.battleRes || 0,
+    petTicket: state.items?.petTicket || 0
   };
 }
 
@@ -310,6 +1202,24 @@ function persistCombatPreferences() {
 function buildEquipmentList() {
   if (!els.playerEquipment) return;
   els.playerEquipment.innerHTML = '';
+  const pet = gameState.player.activePet || activePetDefinition();
+  if (pet) {
+    const slot = document.createElement('div');
+    slot.className = 'equipment-slot pet-slot';
+    const header = document.createElement('div');
+    header.className = 'equipment-name';
+    header.innerHTML = `<span>${pet.icon || '🐾'} <span class="tier-S">펫</span></span><span>${pet.name}</span>`;
+    slot.appendChild(header);
+    const ability = describePetAbilities(pet);
+    const abilityText = [ability.passive, ability.active].filter(Boolean).join('<br />');
+    if (abilityText) {
+      const abilityEl = document.createElement('div');
+      abilityEl.className = 'equipment-stats pet-ability';
+      abilityEl.innerHTML = abilityText;
+      slot.appendChild(abilityEl);
+    }
+    els.playerEquipment.appendChild(slot);
+  }
   gameState.player.equipment.forEach((item) => {
     const slot = document.createElement('div');
     slot.className = 'equipment-slot';
@@ -445,6 +1355,34 @@ function clearAutoNextTimer() {
 function clearAutoSchedules() {
   clearAutoPlayerTimer();
   clearAutoNextTimer();
+}
+
+function forceEndCurrentBattle(reason = 'manual') {
+  if (!gameState.battle.ongoing) return;
+  gameState.battle.ongoing = false;
+  gameState.battle.actionLock = false;
+  clearAutoSchedules();
+  if (gameState.battle.autoPlay) {
+    gameState.battle.autoPlay = false;
+    updateAutoPlayUi();
+    if (state.autoStats.active) {
+      endAutoStatsSession(reason === 'boss' ? 'boss' : 'manual');
+    }
+  }
+  gameState.player.defending = false;
+  gameState.enemy.defending = false;
+  gameState.player.skillCooldown = 0;
+  if (gameState.battle.bossFight) {
+    clearBossStateEffects(gameState.battle.bossFight);
+    if (reason !== 'boss') {
+      gameState.battle.bossFight = null;
+      updateBossUi();
+    }
+  }
+  updateHpBars();
+  if (reason === 'boss') {
+    addBattleLog('보스 전에 기존 전투를 종료했습니다.', 'warn');
+  }
 }
 
 function resetAutoStatsValues() {
@@ -604,7 +1542,12 @@ function beginPlayerTurn(context = 'default') {
   gameState.battle.isPlayerTurn = true;
   gameState.battle.actionLock = false;
   gameState.player.defending = false;
+  handlePetTurnStart();
   updateHpBars();
+  updateCombatPowerUI();
+  if (gameState.player.hp <= 0 || gameState.enemy.hp <= 0) {
+    if (concludeTurn()) return;
+  }
   if (gameState.battle.autoPlay) {
     const initialDelay = context === 'battleStart' ? 500 : 350;
     queueAutoPlayerAction(initialDelay);
@@ -895,7 +1838,15 @@ function ensurePlayerReady() {
 function startNewBattle() {
   clearAutoNextTimer();
   clearAutoPlayerTimer();
+  if (gameState.battle.bossFight) {
+    clearBossStateEffects(gameState.battle.bossFight);
+    gameState.battle.bossFight = null;
+    setBossControlsDisabled(false);
+    updateBossUi();
+  }
+  resetPetCombatState();
   const level = clampMonsterLevel(els.monsterLevel?.value || gameState.battle.lastLevel || 1);
+  state.lastNormalLevel = level;
   updateMonsterLevelUI(level);
   if (gameState.battle.ongoing) return;
   gameState.battle.ongoing = true;
@@ -1022,7 +1973,11 @@ function useBattleResTicket(level, context) {
 }
 
 function handleVictory(level) {
-  const rewards = applyRewards(level, Math.random);
+  const bossContext = gameState.battle.bossFight;
+  const rng = Math.random;
+  const rewards = applyRewards(level, rng);
+  const bossRewards = bossContext ? applyBossRewards(bossContext, rng) : null;
+  registerLevelClear(level);
   triggerDeathAnimation('monster');
   addBattleLog('=== 승리! ===', 'heal');
   if (rewards) {
@@ -1031,19 +1986,36 @@ function handleVictory(level) {
       addBattleLog(rewards.drops.join(', '));
     }
   }
-  if (state.autoStats.active) {
+  if (bossRewards) {
+    const tags = [];
+    if (bossRewards.firstRewardGranted) tags.push('첫 보상');
+    if (bossRewards.extraRewardGranted) tags.push('추가 드랍');
+    if (bossRewards.tickets > 0) {
+      const label = tags.length ? ` (${tags.join(', ')})` : '';
+      addBattleLog(`[보스 보상] 펫 뽑기권 +${formatNum(bossRewards.tickets)}${label}`, 'heal');
+    } else {
+      addBattleLog('[보스 보상] 펫 뽑기권 획득 실패', 'warn');
+    }
+    addBattleLog(`[보스 현황] 누적 클리어 ${formatNum(bossRewards.clears)}회`, 'warn');
+  }
+  if (state.autoStats.active && !bossContext) {
     recordAutoStats(rewards);
   }
-  if (gameState.battle.autoPlay) {
+  if (bossContext) {
+    endBossEncounter('victory');
+  }
+  if (gameState.battle.autoPlay && !bossContext) {
     scheduleNextAutoBattle('victory');
   }
 }
 
 function handleDefeat(level, context) {
+  const bossContext = gameState.battle.bossFight;
   const resurrected = useBattleResTicket(level, context);
   triggerDeathAnimation('player');
   gameState.battle.actionLock = false;
   if (resurrected) {
+    if (bossContext) endBossEncounter('defeat');
     if (gameState.battle.autoPlay) scheduleNextAutoBattle('defeat');
     return;
   }
@@ -1058,6 +2030,9 @@ function handleDefeat(level, context) {
     }
     queueProfileUpdate({ wallet: state.wallet });
     updateResourceSummary();
+  }
+  if (bossContext) {
+    endBossEncounter('defeat');
   }
   if (gameState.battle.autoPlay) {
     gameState.battle.autoPlay = false;
@@ -1109,13 +2084,16 @@ function playerAction(action) {
       gameState.battle.turn += 1;
       triggerAnimation('playerSprite', 'attacking');
       setTimeout(() => {
-        const result = calculateDamage(gameState.player.totalStats, gameState.enemy, false);
+        const result = calculateDamage(getPlayerOffensiveStats(), gameState.enemy, false);
         if (result.type === 'MISS') {
           addBattleLog('플레이어의 공격이 빗나갔습니다!', 'miss');
         } else {
-          triggerAnimation('monsterSprite', 'hurt');
-          gameState.enemy.hp -= result.damage;
-          addBattleLog(`몬스터에게 ${formatNum(result.damage)} 피해!`, result.type === 'CRITICAL' ? 'critical' : 'damage');
+          const dealt = applyDamageToEnemy(result.damage, null);
+          if (dealt > 0) {
+            addBattleLog(`몬스터에게 ${formatNum(dealt)} 피해!`, result.type === 'CRITICAL' ? 'critical' : 'damage');
+          } else {
+            addBattleLog('몬스터가 피해를 받지 않았습니다.', 'warn');
+          }
         }
         postPlayerAction();
       }, delay(320));
@@ -1140,10 +2118,13 @@ function playerAction(action) {
       gameState.battle.turn += 1;
       triggerAnimation('playerSprite', 'attacking');
       setTimeout(() => {
-        const result = calculateDamage(gameState.player.totalStats, gameState.enemy, true);
-        triggerAnimation('monsterSprite', 'hurt');
-        gameState.enemy.hp -= result.damage;
-        addBattleLog(`필살기! ${formatNum(result.damage)} 피해!`, 'critical');
+        const result = calculateDamage(getPlayerOffensiveStats(), gameState.enemy, true);
+        const dealt = applyDamageToEnemy(result.damage, null);
+        if (dealt > 0) {
+          addBattleLog(`필살기! ${formatNum(dealt)} 피해!`, 'critical');
+        } else {
+          addBattleLog('필살기가 보호막에 막혔습니다.', 'warn');
+        }
         gameState.player.skillCooldown = 3;
         postPlayerAction();
       }, delay(320));
@@ -1182,10 +2163,22 @@ function playerAction(action) {
 
 function enemyAction() {
   if (!gameState.battle.ongoing) return;
+  const bossContext = gameState.battle.bossFight;
+  if (bossContext) {
+    tickBossStateBeforeAction(bossContext);
+  }
   const choice = Math.random();
   gameState.enemy.defending = false;
   const speedMul = currentSpeedMultiplier();
   const delay = (ms) => Math.max(120, Math.round(ms / speedMul));
+  const postEnemyAction = () => {
+    if (concludeTurn()) return;
+    beginPlayerTurn('afterEnemy');
+  };
+
+  if (bossContext && maybeExecuteBossSkill(bossContext, delay, postEnemyAction)) {
+    return;
+  }
   if (choice < 0.7) {
     triggerAnimation('monsterSprite', 'attacking');
     setTimeout(() => {
@@ -1194,9 +2187,14 @@ function enemyAction() {
         addBattleLog('몬스터의 공격이 빗나갔습니다!', 'miss');
       } else {
         triggerAnimation('playerSprite', 'hurt');
-        gameState.player.hp -= result.damage;
-        addBattleLog(`몬스터의 공격! ${formatNum(result.damage)} 피해!`, result.type === 'CRITICAL' ? 'critical' : 'damage');
+        const dealt = applyDamageToPlayer(result.damage, { source: 'attack', critical: result.type === 'CRITICAL' });
+        if (dealt > 0) {
+          addBattleLog(`몬스터의 공격! ${formatNum(dealt)} 피해!`, result.type === 'CRITICAL' ? 'critical' : 'damage');
+        } else {
+          addBattleLog('몬스터의 공격! 보호막이 피해를 모두 막았습니다.', 'heal');
+        }
       }
+      updateHpBars();
       postEnemyAction();
     }, delay(320));
   } else if (choice < 0.9) {
@@ -1204,8 +2202,13 @@ function enemyAction() {
     setTimeout(() => {
       const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, true);
       triggerAnimation('playerSprite', 'hurt');
-      gameState.player.hp -= result.damage;
-      addBattleLog(`몬스터의 강력한 일격! ${formatNum(result.damage)} 피해!`, 'critical');
+      const dealt = applyDamageToPlayer(result.damage, { source: 'skill', critical: true });
+      if (dealt > 0) {
+        addBattleLog(`몬스터의 강력한 일격! ${formatNum(dealt)} 피해!`, 'critical');
+      } else {
+        addBattleLog('몬스터의 강력한 일격! 보호막이 피해를 흡수했습니다.', 'heal');
+      }
+      updateHpBars();
       postEnemyAction();
     }, delay(360));
   } else {
@@ -1213,14 +2216,10 @@ function enemyAction() {
     addBattleLog('몬스터가 방어 자세를 취했습니다.');
     setTimeout(postEnemyAction, delay(220));
   }
-
-  function postEnemyAction() {
-    if (concludeTurn()) return;
-    beginPlayerTurn('afterEnemy');
-  }
 }
 
 function initEventListeners() {
+  updateBossUi();
   els.attackBtn?.addEventListener('click', () => playerAction('attack'));
   els.defendBtn?.addEventListener('click', () => playerAction('defend'));
   els.skillBtn?.addEventListener('click', () => playerAction('skill'));
@@ -1263,30 +2262,50 @@ function initEventListeners() {
     persistCombatPreferences();
     updateAutoConsumableUi();
   });
+  els.bossList?.addEventListener('click', (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest('.boss-btn') : null;
+    if (!target) return;
+    const bossId = target.dataset.boss;
+    if (!bossId) return;
+    if (gameState.battle.ongoing && gameState.battle.bossFight) return;
+    setBossSelection(bossId);
+  });
+  els.startBossBtn?.addEventListener('click', () => {
+    if (!state.selectedBossId) return;
+    startBossBattle();
+  });
+  els.resetBossSelection?.addEventListener('click', () => {
+    resetBossSelection();
+  });
   els.monsterLevel?.addEventListener('input', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
+    state.lastNormalLevel = level;
     updateEnemyStats(level);
   });
   els.monsterLevelInput?.addEventListener('change', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
+    state.lastNormalLevel = level;
     updateEnemyStats(level);
   });
   els.monsterLevelInput?.addEventListener('input', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
+    state.lastNormalLevel = level;
   });
   els.monsterLevelMinus?.addEventListener('click', () => {
     const current = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || 1);
     const next = clampMonsterLevel(current - 1);
     updateMonsterLevelUI(next);
+    state.lastNormalLevel = next;
     updateEnemyStats(next);
   });
   els.monsterLevelPlus?.addEventListener('click', () => {
     const current = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || 1);
     const next = clampMonsterLevel(current + 1);
     updateMonsterLevelUI(next);
+    state.lastNormalLevel = next;
     updateEnemyStats(next);
   });
   els.toGacha?.addEventListener('click', () => {
@@ -1357,6 +2376,9 @@ async function loadOrInitializeProfile(firebaseUser) {
       items: null,
       enhance: null,
       combat: { useBattleRes: true, prefBattleRes: true, autoPotion: false, autoHyper: false },
+      pets: null,
+      bossProgress: null,
+      battleProgress: null,
       presets: null,
       selectedPreset: null,
       pitySince: 0,
@@ -1392,6 +2414,9 @@ async function hydrateProfile(firebaseUser) {
   state.items = sanitizeItems(rawProfile.items);
   state.equip = sanitizeEquipMap(rawProfile.equip);
   state.enhance = sanitizeEnhanceConfig(rawProfile.enhance);
+  state.bossProgress = sanitizeBossProgress(rawProfile.bossProgress);
+  state.battleProgress = sanitizeBattleProgress(rawProfile.battleProgress);
+  state.pets = sanitizePetState(rawProfile.pets);
   state.wallet = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.wallet, 0, Number.MAX_SAFE_INTEGER, 1000);
   state.gold = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.gold, 0, Number.MAX_SAFE_INTEGER, 10000);
   state.combat = {
@@ -1413,18 +2438,23 @@ async function hydrateProfile(firebaseUser) {
     enhance: state.enhance,
     wallet: state.wallet,
     gold: state.gold,
-    combat: { ...state.combat }
+    combat: { ...state.combat },
+    pets: state.pets,
+    bossProgress: state.bossProgress,
+    battleProgress: state.battleProgress
   };
   const personalConfig = sanitizeConfig(rawProfile.config);
   state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
   state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
   ensurePlayerReady();
   updateEnemyStats(parseInt(els.monsterLevel?.value || '1', 10) || 1);
+  state.lastNormalLevel = clampMonsterLevel(els.monsterLevel?.value || 1);
   updateResourceSummary();
   updateBattleResUi();
   updateAutoPlayUi();
   startBuffTicker();
   if (els.whoami) els.whoami.textContent = `${fallbackName} (${role === 'admin' ? '관리자' : '회원'})`;
+  updateBossUi();
 }
 
 function attachAuthListener() {

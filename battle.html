@@ -183,6 +183,9 @@
       .level-controls input { width:80px; text-align:center; background: var(--panel-2); color: var(--text); border:1px solid rgba(142,238,255,0.2); border-radius:6px; padding:6px 8px; }
 
       .equipment-slot { background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 10px; margin: 8px 0; border: 1px solid rgba(142, 238, 255, 0.2); }
+      .equipment-slot.pet-slot { border-style: dashed; background: rgba(106, 169, 255, 0.12); }
+      .equipment-slot.pet-slot .equipment-name span:last-child { font-weight: 600; color: var(--text); }
+      .equipment-slot.pet-slot .pet-ability { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
       .equipment-name { font-weight: bold; color: var(--accent); font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
       .equipment-stats { font-size: 11px; color: var(--muted); margin-top: 6px; }
       .tier-SSS { color: #ffd166; }
@@ -198,6 +201,40 @@
       .auto-stats-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
       .auto-stats-grid span { background: rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px; }
       .auto-stats-grid span b { color: var(--text); }
+      button.ghost { background: transparent; border: 1px solid rgba(142, 238, 255, 0.3); }
+      button.ghost:hover { border-color: var(--accent); }
+      .boss-section { margin-top: 18px; }
+      .boss-section h3 { margin: 0 0 8px; font-size: 14px; color: var(--accent); }
+      .boss-section p { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+      .boss-list { display: grid; gap: 8px; }
+      .boss-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        padding: 10px 12px;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(142, 238, 255, 0.25);
+        border-radius: 10px;
+        color: var(--text);
+        cursor: pointer;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+      }
+      .boss-btn.locked {
+        opacity: 0.55;
+        border-style: dashed;
+        cursor: pointer;
+      }
+      .boss-btn.locked:hover {
+        transform: none;
+        border-color: rgba(142, 238, 255, 0.25);
+      }
+      .boss-btn:hover { transform: translateY(-1px); border-color: var(--accent); }
+      .boss-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(106, 169, 255, 0.4); }
+      .boss-btn .boss-name { font-weight: 600; }
+      .boss-btn .boss-meta { font-size: 12px; color: var(--muted); }
+      .boss-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      .boss-info { margin-top: 8px; font-size: 12px; color: var(--muted); }
       details.mobile-fold { border: none; padding: 0; background: transparent; }
       details.mobile-fold > summary { display: none; }
       @media (max-width: 900px) {
@@ -224,6 +261,7 @@
           <span class="muted">사용자: <b id="whoamiBattle">-</b></span>
           <span class="muted">포인트: <b id="pointsBattle">-</b></span>
           <span class="muted">골드: <b id="goldBattle">-</b></span>
+          <span class="muted">펫 뽑기권: <b id="petTicketBattle">0</b></span>
         </div>
         <span class="sep"></span>
         <button id="toGacha" class="primary">가챠 페이지</button>
@@ -375,6 +413,37 @@
               <span>보호권 <b id="autoStatsProtect">0</b></span>
               <span>전투부활권 <b id="autoStatsBattleRes">0</b></span>
             </div>
+          </div>
+          <div class="boss-section">
+            <h3>보스 전투</h3>
+            <p>보스를 선택하면 전용 패턴과 보상으로 진행되는 전투가 시작됩니다.</p>
+            <div class="boss-list" id="bossList">
+              <button class="boss-btn" type="button" data-boss="boss150">
+                <span class="boss-name">Lv.150 해무의 도깨비 장수</span>
+                <span class="boss-meta">기본 드랍률 20% · 회피 패턴</span>
+              </button>
+              <button class="boss-btn" type="button" data-boss="boss300">
+                <span class="boss-name">Lv.300 녹우 수호자</span>
+                <span class="boss-meta">기본 드랍률 28% · 반격/피해 감소</span>
+              </button>
+              <button class="boss-btn" type="button" data-boss="boss450">
+                <span class="boss-name">Lv.450 염풍 산양왕</span>
+                <span class="boss-meta">기본 드랍률 35% · 명중 저하/갑옷 파쇄</span>
+              </button>
+              <button class="boss-btn" type="button" data-boss="boss550">
+                <span class="boss-name">Lv.550 사막의 여왕 개미</span>
+                <span class="boss-meta">기본 드랍률 42% · 소환/코쿤</span>
+              </button>
+              <button class="boss-btn" type="button" data-boss="boss800">
+                <span class="boss-name">Lv.800 호랑의 그림자</span>
+                <span class="boss-meta">기본 드랍률 55% · 무적/반격</span>
+              </button>
+            </div>
+            <div class="boss-actions">
+              <button id="startBossBtn" class="primary" type="button" disabled>보스 도전</button>
+              <button id="resetBossSelection" type="button" class="ghost" disabled>선택 해제</button>
+            </div>
+            <div class="boss-info" id="bossInfo">도전할 보스를 선택하세요.</div>
           </div>
           </details>
         </div>

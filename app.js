@@ -11,6 +11,15 @@ import {
   reauthenticateWithCredential,
   updatePassword
 } from './firebase.js';
+import {
+  sanitizePetState,
+  createDefaultPetState,
+  PET_IDS,
+  PET_DEFS,
+  sanitizePetWeights,
+  describePetAbilities,
+  computePlayerStats as deriveCombatStats
+} from './combat-core.js';
 
 const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const TIER_INDEX = Object.fromEntries(TIERS.map((t,i)=>[t,i]));
@@ -76,22 +85,32 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         hyperDuration: $('#hyperDuration'), hyperManualCd: $('#hyperManualCd'), hyperAutoCd: $('#hyperAutoCd'), hyperSpeedMult: $('#hyperSpeedMult'),
         monsterBasePower: $('#monsterBasePower'), monsterMaxPower: $('#monsterMaxPower'), monsterCurve: $('#monsterCurve'), monsterDifficultyInput: $('#monsterDifficulty'), monsterDifficultyMinus: $('#monsterDifficultyMinus'), monsterDifficultyPlus: $('#monsterDifficultyPlus'),
         saveDrops: $('#saveDrops'),
-        mode: $('#mode'), seed: $('#seed'), lock: $('#lock'),
+        mode: $('#mode'), seed: $('#seed'), lock: $('#lock'), petTickets: $('#petTicketCount'),
         weightsTable: $('#weightsTable tbody'),
+        gearConfigWrap: $('#gearConfigWrap'),
+        petConfigWrap: $('#petConfigWrap'),
+        petWeightTableBody: $('#petWeightTableBody'),
+        gachaModeGearConfig: $('#gachaModeGearConfig'),
+        gachaModePetConfig: $('#gachaModePetConfig'),
         pityEnabled: $('#pityEnabled'), pityFloor: $('#pityFloor'), pitySpan: $('#pitySpan'),
         g10Enabled: $('#g10Enabled'), g10Tier: $('#g10Tier'),
-        draw1: $('#draw1'), draw10: $('#draw10'), draw100: $('#draw100'), draw1k: $('#draw1k'), draw10k: $('#draw10k'), cancel: $('#cancel'), speed: $('#speed'), bar: $('#bar'),
-        scope: $('#scope'), nDraws: $('#nDraws'), pval: $('#pval'), statsTable: $('#statsTable tbody'),
+        draw1: $('#draw1'), draw10: $('#draw10'), draw100: $('#draw100'), draw1k: $('#draw1k'), draw10k: $('#draw10k'), drawPet1: $('#drawPet1'), drawPet10: $('#drawPet10'), cancel: $('#cancel'), speed: $('#speed'), bar: $('#bar'),
+        gearDrawControls: $('#gearDrawControls'), petDrawControls: $('#petDrawControls'),
+        gachaModeGearDraw: $('#gachaModeGearDraw'), gachaModePetDraw: $('#gachaModePetDraw'),
+        scope: $('#scope'), statsMode: $('#statsMode'), nDraws: $('#nDraws'), pval: $('#pval'), statsTable: $('#statsTable tbody'), petStatsTable: $('#petStatsTable tbody'), resetSession: $('#resetSession'), resetGlobal: $('#resetGlobal'),
+        gearStatsWrap: $('#gearStatsWrap'), petStatsWrap: $('#petStatsWrap'),
         chart: $('#chart'), log: $('#log'),
         atkTotal: $('#atkTotal'), defTotal: $('#defTotal'), nextMonster: $('#nextMonster'), monLevel: $('#monLevel'), monLevelVal: $('#monLevelVal'), winProb: $('#winProb'), fightBtn: $('#fightBtn'), fightResult: $('#fightResult'), autoHuntBtn: $('#autoHuntBtn'), manualCd: $('#manualCd'), autoCd: $('#autoCd'), lvlDec: $('#lvlDec'), lvlInc: $('#lvlInc'), potionCount: $('#potionCount'), usePotion: $('#usePotion'), hyperPotionCount: $('#hyperPotionCount'), useHyperPotion: $('#useHyperPotion'), buffInfo: $('#buffInfo'), claimRevive: $('#claimRevive'), battleResUse: $('#battleResUse'), battleResRemain: $('#battleResRemain'), battleWinProb: $('#battleWinProb'), playerHealthBar: $('#playerHealthBar'), enemyHealthBar: $('#enemyHealthBar'), playerAtkStat: $('#playerAtkStat'), playerDefStat: $('#playerDefStat'), battleEnemyLevel: $('#battleEnemyLevel'), battleEnemyReward: $('#battleEnemyReward'),
         invCount: $('#invCount'), equipGrid: $('#equipGrid'), spareList: $('#spareList'),
         forgeTarget: $('#forgeTarget'), forgeLv: $('#forgeLv'), forgeMul: $('#forgeMul'), forgeP: $('#forgeP'), forgePreview: $('#forgePreview'), forgeOnce: $('#forgeOnce'), forgeAuto: $('#forgeAuto'), forgeTableBody: $('#forgeTableBody'), forgeReset: $('#forgeReset'), forgeMsg: $('#forgeMsg'), forgeEffect: $('#forgeEffect'), forgeProtectUse: $('#forgeProtectUse'), protectCount: $('#protectCount'), enhanceCount: $('#enhanceCount'), reviveCount: $('#reviveCount'),
         pricePotion: $('#pricePotion'), priceHyper: $('#priceHyper'), priceProtect: $('#priceProtect'), priceEnhance: $('#priceEnhance'), priceBattleRes: $('#priceBattleRes'), priceStarter: $('#priceStarter'),
         invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), shopPanel: $('#shop'),
+        petList: $('#petList'),
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantSubmit: $('#adminGrantSubmit'),
         globalPresetSelect: $('#globalPresetSelect'), personalPresetSelect: $('#personalPresetSelect'), applyGlobalPreset: $('#applyGlobalPreset'), applyPersonalPreset: $('#applyPersonalPreset'), personalPresetName: $('#personalPresetName'), savePersonalPreset: $('#savePersonalPreset'), presetMsg: $('#presetMsg'), toggleUserEdit: $('#toggleUserEdit'),
+        petTicketInline: $('#petTicketInline')
       };
 
       // Config and state
@@ -118,6 +137,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           potionSettings: { ...DEFAULT_POTION_SETTINGS },
           hyperPotionSettings: { ...DEFAULT_HYPER_POTION_SETTINGS },
           monsterScaling: { ...DEFAULT_MONSTER_SCALING },
+          petWeights: sanitizePetWeights(null)
         },
         session: { draws:0, counts: Object.fromEntries(TIERS.map(t=>[t,0])), history: [] },
         global: loadGlobal(),
@@ -131,7 +151,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         enhance: defaultEnhance(),
         forge: { protectEnabled: false, protectStock: 0, autoRunning: false },
         user: null,
-        ui: { adminView: false, userEditEnabled: false },
+        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear' },
         wallet: 0,
         gold: 0,
         diamonds: 0,
@@ -140,10 +160,14 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         adminUsers: [],
         timers: { manualLast: 0, autoLast: 0, uiTimer: null, autoTimer: null, autoOn: false },
         inRun: false,
-        items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0 },
+        items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, petTicket: 0 },
+        pets: createDefaultPetState(),
+        petGachaWeights: sanitizePetWeights(null),
         buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
         combat: { useBattleRes: true, prefBattleRes: true },
       };
+      state.config.petWeights = sanitizePetWeights(state.config.petWeights);
+      state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
       state.config.shopPrices = normalizeShopPrices(state.config.shopPrices);
       state.config.potionSettings = normalizePotionSettings(state.config.potionSettings, DEFAULT_POTION_SETTINGS);
       state.config.hyperPotionSettings = normalizePotionSettings(state.config.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS);
@@ -216,6 +240,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         const pityFloor = TIERS.includes(pityRaw.floorTier) ? pityRaw.floorTier : 'S';
         const min10Tier = TIERS.includes(min10Raw.tier) ? min10Raw.tier : 'A';
         const pitySpan = clampNumber(pityRaw.span, 1, 9999, 90);
+        const petWeights = sanitizePetWeights(raw && (raw.petWeights || raw.petGachaWeights));
         return {
           weights,
           probs: normalize(weights),
@@ -236,7 +261,8 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           shopPrices: normalizeShopPrices(raw && raw.shopPrices),
           potionSettings: normalizePotionSettings(raw && raw.potionSettings, DEFAULT_POTION_SETTINGS),
           hyperPotionSettings: normalizePotionSettings(raw && raw.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS),
-          monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling)
+          monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling),
+          petWeights
         };
       }
 
@@ -267,7 +293,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       }
 
       function sanitizeItems(raw){
-        const template = { potion:0, hyperPotion:0, protect:0, enhance:0, revive:0, battleRes:0 };
+        const template = { potion:0, hyperPotion:0, protect:0, enhance:0, revive:0, battleRes:0, petTicket:0 };
         const result = {...template};
         if(raw && typeof raw === 'object'){
           Object.keys(template).forEach(function(key){
@@ -712,6 +738,10 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         // On commit (change/blur), format inputs from config
         els.weightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; updateWeightsInputs(); });
         els.seed.addEventListener('input', ()=>{ state.config.seed = els.seed.value.trim(); markProfileDirty(); });
+        if(els.gachaModeGearConfig) els.gachaModeGearConfig.addEventListener('click', ()=> updateGachaModeView('gear'));
+        if(els.gachaModePetConfig) els.gachaModePetConfig.addEventListener('click', ()=> updateGachaModeView('pet'));
+        if(els.gachaModeGearDraw) els.gachaModeGearDraw.addEventListener('click', ()=> updateGachaModeView('gear'));
+        if(els.gachaModePetDraw) els.gachaModePetDraw.addEventListener('click', ()=> updateGachaModeView('pet'));
         els.lock.addEventListener('change', ()=>{ state.config.locked = els.lock.checked; updateWeightsInputs(); toggleConfigDisabled(); markProfileDirty(); });
         els.pityEnabled.addEventListener('change', ()=>{ state.config.pity.enabled = els.pityEnabled.checked; markProfileDirty(); });
         els.pityFloor.addEventListener('change', ()=>{ state.config.pity.floorTier = els.pityFloor.value; markProfileDirty(); });
@@ -723,15 +753,40 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         els.draw100.addEventListener('click', ()=> runDraws(100));
         els.draw1k.addEventListener('click', ()=> runDraws(1000));
         els.draw10k.addEventListener('click', ()=> runDraws(10000));
+        if (els.drawPet1) els.drawPet1.addEventListener('click', ()=> runPetDraws(1));
+        if (els.drawPet10) els.drawPet10.addEventListener('click', ()=> runPetDraws(10));
         els.cancel.addEventListener('click', ()=>{ state.cancelFlag = true; });
         els.scope.addEventListener('change', ()=>{ syncStats(); drawChart(); });
+        if (els.petWeightTableBody) {
+          els.petWeightTableBody.addEventListener('input', (e) => {
+            const target = e.target;
+            if (!(target instanceof HTMLInputElement)) return;
+            const petId = target.dataset.pet;
+            if (!petId || !PET_IDS.includes(petId)) return;
+            if (!isAdmin() || state.config.locked) {
+              updatePetWeightInputs();
+              return;
+            }
+            let value = parseFloat(target.value);
+            if (!Number.isFinite(value) || value < 0) value = 0;
+            state.petGachaWeights[petId] = value;
+            state.config.petWeights = { ...state.petGachaWeights };
+            markProfileDirty();
+            renderPetStats();
+            updatePetWeightInputs();
+          });
+        }
+        if (els.statsMode) els.statsMode.addEventListener('change', ()=>{
+          const val = els.statsMode.value === 'pet' ? 'pet' : 'gear';
+          updateGachaModeView(val);
+        });
         els.saveCfg.addEventListener('click', saveConfigFile);
         els.loadCfg.addEventListener('click', ()=> els.cfgFile.click());
         els.cfgFile.addEventListener('change', loadConfigFile);
         els.shareLink.addEventListener('click', shareLink);
         $('#exportCsv').addEventListener('click', exportCsv);
-        $('#resetSession').addEventListener('click', resetSession);
-        $('#resetGlobal').addEventListener('click', resetGlobal);
+        if (els.resetSession) els.resetSession.addEventListener('click', resetSession);
+        if (els.resetGlobal) els.resetGlobal.addEventListener('click', resetGlobal);
         // combat
         if(els.monLevel){ els.monLevel.addEventListener('input', ()=>{ setLevel(parseInt(els.monLevel.value||'1',10)); }); }
         if(els.nextMonster){ els.nextMonster.addEventListener('click', ()=>{ const rng = getRng(); const lvl = 1 + Math.floor(rng()*999); setLevel(lvl); }); }
@@ -861,14 +916,15 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(els.spareList){ els.spareList.addEventListener('click', onSpareListClick); }
       }
 
-      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficultyInput].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.monsterDifficultyMinus) els.monsterDifficultyMinus.disabled = disabled; if(els.monsterDifficultyPlus) els.monsterDifficultyPlus.disabled = disabled; if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; }
+      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficultyInput].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.monsterDifficultyMinus) els.monsterDifficultyMinus.disabled = disabled; if(els.monsterDifficultyPlus) els.monsterDifficultyPlus.disabled = disabled; if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; updatePetWeightInputs(); }
 
       // Draw engine with pity
       function drawOne(rng){ const cfg = state.config; const probs = cfg.probs; const t = chooseTier(probs, rng); applyPityCounter(t); return t; }
       function applyPityCounter(tier){ const floor = state.config.pity.floorTier; if(isAtLeast(tier, floor)){ state.pitySince = 0; } else { state.pitySince++; } }
       function drawOneWithPity(rng){ const {pity} = state.config; const probs = state.config.probs; const floor = pity.floorTier; if(pity.enabled && state.pitySince >= pity.span-1){ const allowed = TIERS.filter(t=> isAtLeast(t, floor)); const t = rescaledPick(allowed, probs, rng); state.pitySince = 0; return t; } const t = chooseTier(probs, rng); applyPityCounter(t); return t; }
 
-      async function runDraws(n){ const rng = getRng(); state.inRun = true; state.cancelFlag = false; els.cancel.disabled = false; els.draw1.disabled = els.draw10.disabled = els.draw100.disabled = els.draw1k.disabled = els.draw10k.disabled = true; const speed = parseInt(els.speed.value||'0'); let results = []; const cfgHash = await sha256Hex(JSON.stringify(compactConfig())); const runId = state.runId++;
+      async function runDraws(n){ if((state.ui.gachaMode || 'gear') !== 'gear'){ updateGachaModeView('gear'); }
+        const rng = getRng(); state.inRun = true; state.cancelFlag = false; els.cancel.disabled = false; els.draw1.disabled = els.draw10.disabled = els.draw100.disabled = els.draw1k.disabled = els.draw10k.disabled = true; const speed = parseInt(els.speed.value||'0'); let results = []; const cfgHash = await sha256Hex(JSON.stringify(compactConfig())); const runId = state.runId++;
         const shouldRender = (n===1 || n===10 || n===100);
         const collected = [];
         const collectFn = shouldRender ? function(payload){ if(!payload) return; const partName = getPartNameByKey(payload.part) || ''; collected.push({ tier: payload.tier, part: payload.part, icon: iconForPart(payload.part), partName }); } : null;
@@ -940,30 +996,190 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
 
       function renderDrawResults(items, count){ if(!els.drawResults) return; const wrap = els.drawResults; const grid = wrap.querySelector('.draw-result-grid'); const title = wrap.querySelector('h3'); if(!items || !items.length){ wrap.style.display = 'none'; if(grid) grid.innerHTML=''; return; }
         if(title){ title.textContent = `${count}회 뽑기 결과`; }
-        if(grid){ const frag = document.createDocumentFragment(); items.forEach(function(entry){ const card = document.createElement('div'); card.className = 'draw-card'; card.innerHTML = `
-              <div class="tier-label tier ${entry.tier}">${entry.tier}</div>
-              <div class="draw-icon">${entry.icon}</div>
-              <div class="draw-part">${entry.partName}</div>`; frag.appendChild(card); }); grid.innerHTML=''; grid.appendChild(frag); }
+        if(grid){ const frag = document.createDocumentFragment(); items.forEach(function(entry){ const card = document.createElement('div'); card.className = 'draw-card'; if(entry.type === 'pet'){ card.classList.add('pet'); const icon = entry.icon || '🐾'; const name = entry.name || entry.petId || '펫'; card.innerHTML = `
+                <div class="draw-icon">${icon}</div>
+                <div class="draw-part">${name}</div>`;
+          } else {
+            card.innerHTML = `
+                <div class="tier-label tier ${entry.tier}">${entry.tier}</div>
+                <div class="draw-icon">${entry.icon}</div>
+                <div class="draw-part">${entry.partName}</div>`;
+          }
+          frag.appendChild(card);
+        }); grid.innerHTML=''; grid.appendChild(frag); }
         wrap.style.display = '';
+      }
+
+      function petWeightEntries(){
+        const entries = PET_IDS.map((id) => {
+          const raw = state.petGachaWeights?.[id];
+          const weight = (typeof raw === 'number' && isFinite(raw) && raw >= 0) ? raw : 1;
+          return { id, weight };
+        });
+        const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
+        if (!(total > 0)) {
+          entries.forEach((entry) => { entry.weight = 1; });
+        }
+        return entries;
+      }
+
+      function renderPetStats(){ if(!els.petStatsTable) return; const tbody = els.petStatsTable; tbody.innerHTML=''; const pets = ensurePetState(); const entries = petWeightEntries(); const total = entries.reduce((sum, e)=> sum + e.weight, 0) || entries.length; entries.forEach((entry) => {
+          const def = PET_DEFS[entry.id] || { name: entry.id, icon: '🐾' };
+          const percent = total > 0 ? (entry.weight / total) * 100 : (100 / entries.length);
+          const owned = pets.owned?.[entry.id] || 0;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${def.icon || '🐾'} ${def.name}</td><td>${percent.toFixed(2)}%</td><td>${formatNum(owned)}</td>`;
+          tbody.appendChild(tr);
+        }); }
+
+      function renderPetWeightTable(){ if(!els.petWeightTableBody) return; const tbody = els.petWeightTableBody; tbody.innerHTML = ''; PET_IDS.forEach((id) => {
+          const def = PET_DEFS[id] || { name: id, icon: '🐾' };
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${def.icon || '🐾'} ${def.name}</td><td><input type="number" step="any" min="0" data-pet="${id}" class="pet-weight-input" style="width:100px" /></td>`;
+          tbody.appendChild(tr);
+        });
+        updatePetWeightInputs();
+      }
+
+      function updatePetWeightInputs(){ if(!els.petWeightTableBody) return; const canEdit = isAdmin() && !state.config.locked; const inputs = els.petWeightTableBody.querySelectorAll('input[data-pet]'); inputs.forEach((input) => {
+          const petId = input.dataset.pet;
+          const value = state.petGachaWeights?.[petId];
+          input.value = typeof value === 'number' && isFinite(value) ? String(value) : '1';
+          input.disabled = !canEdit;
+          input.title = canEdit ? '' : '관리자만 수정 가능하며, 잠겨 있지 않아야 합니다.';
+        });
+        renderPetStats();
+      }
+
+      function updateGachaModeView(mode){ if(mode){ state.ui.gachaMode = mode === 'pet' ? 'pet' : 'gear'; }
+        const current = state.ui.gachaMode || 'gear';
+        const isGear = current === 'gear';
+        const isPet = !isGear;
+        const togglePairs = [
+          [els.gachaModeGearConfig, els.gachaModePetConfig],
+          [els.gachaModeGearDraw, els.gachaModePetDraw]
+        ];
+        togglePairs.forEach(([gearBtn, petBtn]) => {
+          if (gearBtn) gearBtn.classList.toggle('active', isGear);
+          if (petBtn) petBtn.classList.toggle('active', isPet);
+        });
+        if(els.gearConfigWrap) els.gearConfigWrap.style.display = isGear ? '' : 'none';
+        if(els.petConfigWrap) els.petConfigWrap.style.display = isPet ? '' : 'none';
+        updatePetWeightInputs();
+        if(els.gearDrawControls) els.gearDrawControls.style.display = isGear ? '' : 'none';
+        if(els.petDrawControls) els.petDrawControls.style.display = isPet ? '' : 'none';
+        const desiredStats = isGear ? 'gear' : 'pet';
+        state.ui.statsMode = desiredStats;
+        if(els.statsMode && els.statsMode.value !== desiredStats){ els.statsMode.value = desiredStats; }
+        updateStatsModeView();
+        updateDrawButtons();
+      }
+
+      function updatePetList(){ if(!els.petList) return; const pets = ensurePetState(); const container = els.petList; container.innerHTML=''; PET_IDS.forEach((id) => {
+          const def = PET_DEFS[id] || { name: id, icon: '🐾' };
+          const owned = pets.owned?.[id] || 0;
+          const card = document.createElement('div');
+          card.className = 'pet-card';
+          if (pets.active === id) card.classList.add('active');
+          const info = document.createElement('div');
+          info.className = 'info';
+          const status = pets.active === id ? ' · 장착중' : '';
+          info.innerHTML = `<div class="name">${def.icon || '🐾'} ${def.name}</div><div class="count">보유: ${formatNum(owned)}${status}</div>`;
+          const ability = describePetAbilities(def);
+          const abilityText = [ability.passive, ability.active].filter(Boolean).join(' · ');
+          if (abilityText) {
+            const desc = document.createElement('div');
+            desc.className = 'desc';
+            desc.textContent = abilityText;
+            info.appendChild(desc);
+          }
+          const btnWrap = document.createElement('div');
+          btnWrap.className = 'actions';
+          const equipBtn = document.createElement('button');
+          equipBtn.type = 'button';
+          if (pets.active === id) {
+            equipBtn.textContent = '장착중';
+            equipBtn.disabled = true;
+          } else {
+            equipBtn.textContent = '장착';
+            equipBtn.disabled = !isAdmin() && owned <= 0;
+            equipBtn.addEventListener('click', () => setActivePet(id));
+          }
+          btnWrap.appendChild(equipBtn);
+          card.appendChild(info);
+          card.appendChild(btnWrap);
+          container.appendChild(card);
+        });
+        renderPetStats();
+      }
+
+      function setActivePet(petId){ if(!PET_IDS.includes(petId)) return; const pets = ensurePetState(); if(!isAdmin() && (pets.owned?.[petId] || 0) <= 0){ alert('해당 펫을 보유하고 있지 않습니다.'); return; } if(pets.active === petId) return; pets.active = petId; if(userProfile) userProfile.pets = pets; updateInventoryView(); updatePetList(); markProfileDirty(); }
+
+      function rollPet(randomValue){ const value = (typeof randomValue === 'number' && isFinite(randomValue) && randomValue >= 0) ? randomValue : Math.random(); const entries = petWeightEntries(); const total = entries.reduce((sum, entry) => sum + entry.weight, 0) || entries.length; let ticket = value * total; for(const entry of entries){ const weight = entry.weight > 0 ? entry.weight : 0; ticket -= weight; if(ticket <= 0){ return entry.id; } }
+        return entries.length ? entries[entries.length - 1].id : PET_IDS[0]; }
+
+      function runPetDraws(count){ if((state.ui.gachaMode || 'gear') !== 'pet'){ updateGachaModeView('pet'); }
+        const n = Math.max(1, parseInt(count, 10) || 1); const pets = ensurePetState(); const admin = isAdmin(); const available = admin ? Number.POSITIVE_INFINITY : (state.items.petTicket || 0); if(!admin && available < n){ alert('펫 뽑기권이 부족합니다.'); return; }
+        state.inRun = true; updateDrawButtons(); const rng = getRng(); const results = []; for(let i=0; i<n; i+=1){ const petId = rollPet(rng()); pets.owned[petId] = (pets.owned[petId] || 0) + 1; const def = PET_DEFS[petId] || { name: petId, icon: '🐾' }; results.push({ type:'pet', petId, name: def.name, icon: def.icon }); }
+        if(!admin){ state.items.petTicket = Math.max(0, (state.items.petTicket || 0) - n); }
+        if(userProfile){ userProfile.pets = pets; userProfile.items = state.items; }
+        state.inRun = false;
+        updateItemCountsView();
+        updateInventoryView();
+        updateDrawButtons();
+        renderDrawResults(results, n);
+        renderPetStats();
+        markProfileDirty();
+      }
+
+      function updateStatsModeView(){ let mode = state.ui.statsMode || 'gear'; if(els.statsMode){ mode = els.statsMode.value || mode; state.ui.statsMode = mode; } if(els.statsMode && els.statsMode.value !== mode){ els.statsMode.value = mode; }
+        if(els.gearStatsWrap) els.gearStatsWrap.style.display = mode === 'gear' ? '' : 'none';
+        if(els.petStatsWrap) els.petStatsWrap.style.display = mode === 'pet' ? '' : 'none';
+        if(els.resetSession) els.resetSession.style.display = mode === 'gear' ? '' : 'none';
+        if(els.resetGlobal) els.resetGlobal.style.display = mode === 'gear' ? '' : 'none';
+        if(mode === 'pet'){
+          renderPetStats();
+        } else {
+          syncStats();
+          drawChart();
+        }
       }
 
       function resetSession(){ if(!confirm('세션 통계와 로그를 초기화할까요?')) return; state.session = { draws:0, counts:Object.fromEntries(TIERS.map(t=>[t,0])), history: [] }; state.pitySince = 0; state.inventory = []; state.equip = {head:null, body:null, main:null, off:null, boots:null}; state.spares = { head:null, body:null, main:null, off:null, boots:null }; state.buffs = { accelUntil:0, accelMultiplier:1, hyperUntil:0, hyperMultiplier:1 }; els.log.innerHTML = ''; updateCombatView(); updateInventoryView(); buildForgeTargetOptions(); updateForgeInfo(); syncStats(); drawChart(); updateProgress(0, 100); markProfileDirty(); }
       function resetGlobal(){ if(!confirm('전체(전역) 통계를 초기화할까요? 이 작업은 취소할 수 없습니다.')) return; state.global = { draws:0, counts:Object.fromEntries(TIERS.map(t=>[t,0])) }; saveGlobal(); if(els.scope.value==='global'){ syncStats(); drawChart(); } }
 
       // Save/Load/Share
-      function compactConfig(){ const {weights, probs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling} = state.config; return {weights, probs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling}; }
+      function compactConfig(){ const {weights, probs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights} = state.config; return {weights, probs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights}; }
       function saveConfigFile(){ const data = JSON.stringify(compactConfig(), null, 2); const blob = new Blob([data], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gacha-config.json'; a.click(); URL.revokeObjectURL(a.href); }
       function loadConfigFile(e){ const f = e.target.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = ()=>{ try{ const cfg = JSON.parse(rd.result); applyLoadedConfig(cfg); } catch(err){ alert('불러오기 실패: '+err); } }; rd.readAsText(f); e.target.value=''; }
-      function applyLoadedConfig(cfg){ if(!cfg || !cfg.weights) { alert('형식이 올바르지 않습니다.'); return; } state.config.weights = {...defaultWeights, ...cfg.weights}; state.config.probs = normalize(state.config.weights); state.config.seed = cfg.seed||''; state.config.locked = !!cfg.locked; state.config.pity = cfg.pity||{enabled:false,floorTier:'S',span:90}; state.config.minGuarantee10 = cfg.minGuarantee10||{enabled:false,tier:'A'}; state.config.dropRates = migrateLegacyDropRates(cfg.dropRates); state.config.goldScaling = normalizeGoldScaling(cfg.goldScaling); state.config.shopPrices = normalizeShopPrices(cfg.shopPrices); state.config.potionSettings = normalizePotionSettings(cfg.potionSettings, DEFAULT_POTION_SETTINGS); state.config.hyperPotionSettings = normalizePotionSettings(cfg.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.monsterScaling = normalizeMonsterScaling(cfg.monsterScaling); reflectConfig(); if(isAdmin()) clearActivePreset(); else clearSelectedPreset(); markProfileDirty(); }
+      function applyLoadedConfig(cfg){ if(!cfg || !cfg.weights) { alert('형식이 올바르지 않습니다.'); return; } state.config.weights = {...defaultWeights, ...cfg.weights}; state.config.probs = normalize(state.config.weights); state.config.seed = cfg.seed||''; state.config.locked = !!cfg.locked; state.config.pity = cfg.pity||{enabled:false,floorTier:'S',span:90}; state.config.minGuarantee10 = cfg.minGuarantee10||{enabled:false,tier:'A'}; state.config.dropRates = migrateLegacyDropRates(cfg.dropRates); state.config.goldScaling = normalizeGoldScaling(cfg.goldScaling); state.config.shopPrices = normalizeShopPrices(cfg.shopPrices); state.config.potionSettings = normalizePotionSettings(cfg.potionSettings, DEFAULT_POTION_SETTINGS); state.config.hyperPotionSettings = normalizePotionSettings(cfg.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.monsterScaling = normalizeMonsterScaling(cfg.monsterScaling); state.config.petWeights = sanitizePetWeights(cfg.petWeights || cfg.petGachaWeights || state.config.petWeights); reflectConfig(); if(isAdmin()) clearActivePreset(); else clearSelectedPreset(); markProfileDirty(); }
       function shareLink(){ const cfg = compactConfig(); const json = JSON.stringify(cfg); const b = btoa(unescape(encodeURIComponent(json))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_'); const url = location.origin + location.pathname + '?cfg='+b; if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){ alert('링크가 클립보드에 복사되었습니다.'); }).catch(function(){ prompt('아래 링크를 복사하세요', url); }); } else { prompt('아래 링크를 복사하세요', url); } }
       function readLink(){ const m = location.search.match(/[?&]cfg=([^&]+)/); if(!m) return; try{ const b = m[1].replace(/-/g,'+').replace(/_/g,'/'); const json = decodeURIComponent(escape(atob(b))); const cfg = JSON.parse(json); applyLoadedConfig(cfg); } catch(e){ console.warn('링크 파싱 실패', e); }
+      }
+
+      function ensurePetState(){
+        if(!state.pets || typeof state.pets !== 'object'){
+          state.pets = createDefaultPetState();
+        }
+        if(!state.pets.owned || typeof state.pets.owned !== 'object'){
+          state.pets.owned = createDefaultPetState().owned;
+        }
+        return state.pets;
       }
 
       // Points (wallet)
       function loadWallet(){ if(isAdmin()){ state.wallet = Number.POSITIVE_INFINITY; } else { const stored = userProfile?.wallet; state.wallet = typeof stored === 'number' ? stored : 1000; } updatePointsView(); }
       function saveWallet(){ if(isAdmin()) return; if(!userProfile) return; userProfile.wallet = state.wallet; updatePointsView(); markProfileDirty(); }
       function updatePointsView(){ els.points.textContent = isAdmin()? '∞' : formatNum(state.wallet); updateDrawButtons(); updateReviveButton(); }
-      function updateDrawButtons(){ if(state.inRun){ return; } const enough = isAdmin() || state.wallet >= 100; els.draw1.disabled = !enough; els.draw10.disabled = !enough; els.draw100.disabled = !enough; els.draw1k.disabled = !enough; els.draw10k.disabled = !enough; }
+      function updateDrawButtons(){ const running = !!state.inRun; const mode = state.ui.gachaMode || 'gear'; const isGear = mode === 'gear'; const isPet = !isGear; const enough = isAdmin() || state.wallet >= 100; const petTickets = state.items.petTicket || 0;
+        if(els.draw1) els.draw1.disabled = !isGear || running || !enough;
+        if(els.draw10) els.draw10.disabled = !isGear || running || !enough;
+        if(els.draw100) els.draw100.disabled = !isGear || running || !enough;
+        if(els.draw1k) els.draw1k.disabled = !isGear || running || !enough;
+        if(els.draw10k) els.draw10k.disabled = !isGear || running || !enough;
+        if(els.drawPet1) els.drawPet1.disabled = !isPet || running || (!isAdmin() && petTickets < 1);
+        if(els.drawPet10) els.drawPet10.disabled = !isPet || running || (!isAdmin() && petTickets < 10);
+      }
       function canSpend(amt){ if(isAdmin()) return true; return state.wallet >= amt; }
       function spendPoints(amt){ if(isAdmin()) return true; if(state.wallet < amt) return false; state.wallet -= amt; saveWallet(); return true; }
       function addPoints(amt){ if(isAdmin()) return; state.wallet += amt; saveWallet(); }
@@ -995,6 +1211,10 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
 
       // Init
       function reflectConfig(){ els.seed.value = state.config.seed||''; els.lock.checked = state.config.locked; els.pityEnabled.checked = !!(state.config.pity && state.config.pity.enabled); els.pityFloor.value = (state.config.pity && state.config.pity.floorTier) || 'S'; els.pitySpan.value = (state.config.pity && state.config.pity.span) || 90; els.g10Enabled.checked = !!(state.config.minGuarantee10 && state.config.minGuarantee10.enabled); els.g10Tier.value = (state.config.minGuarantee10 && state.config.minGuarantee10.tier) || 'A';
+        state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
+        state.config.petWeights = { ...state.petGachaWeights };
+        updatePetWeightInputs();
+        renderPetStats();
         var dr = state.config.dropRates || DEFAULT_DROP_RATES;
         function setDropInputs(prefix, cfg, defaults){ if(!cfg) cfg = defaults; if(!defaults) defaults = {base:0, perLevel:0, max:1};
           if(els[prefix+'Base']) els[prefix+'Base'].value = (cfg.base ?? defaults.base);
@@ -1033,7 +1253,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         if(els.monsterMaxPower) els.monsterMaxPower.value = monsterCfg.maxPower;
         if(els.monsterCurve) els.monsterCurve.value = monsterCfg.curve;
         if(els.monsterDifficultyInput) els.monsterDifficultyInput.value = formatMultiplier(monsterCfg.difficultyMultiplier ?? 1);
-        updateWeightsInputs(); toggleConfigDisabled(); updateCombatView(); updateInventoryView(); updateShopButtons(); setShopMessage('', null); }
+        updateWeightsInputs(); toggleConfigDisabled(); updateCombatView(); updateInventoryView(); updateShopButtons(); setShopMessage('', null); updateGachaModeView(); }
       function updateViewMode(){ const admin = isAdmin(); if(els.whoami){ els.whoami.textContent = state.user? `${state.user.username} (${admin? '관리자':'회원'})` : ''; }
         if(els.adminPanel){ els.adminPanel.style.display = (admin && state.ui.adminView) ? '' : 'none'; if(!admin){ state.ui.adminView = false; } }
         const configPanel = document.querySelector('#configPanel'); if(configPanel){ configPanel.style.opacity = admin? '1' : '0.92'; }
@@ -1043,8 +1263,10 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         updateUserEditModeView();
         toggleConfigDisabled();
         updateShopButtons();
+        updatePetWeightInputs();
+        updateGachaModeView();
       }
-      function hydrateSession(){ loadWallet(); loadGold(); loadDiamonds(); startUiTimer(); updateItemCountsView(); updateBuffInfo(); updateReviveButton(); updateShopButtons(); setShopMessage('', null); updateViewMode(); }
+      function hydrateSession(){ loadWallet(); loadGold(); loadDiamonds(); startUiTimer(); updateItemCountsView(); updateBuffInfo(); updateReviveButton(); updateShopButtons(); setShopMessage('', null); updatePetList(); updateGachaModeView(); updateViewMode(); }
 
       async function loadOrInitializeProfile(firebaseUser){
         if(!firebaseUser) return null;
@@ -1074,6 +1296,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
             spares: null,
             items: null,
             enhance: null,
+            pets: createDefaultPetState(),
             session: null,
             pitySince: 0,
             combat: { useBattleRes: true, prefBattleRes: true },
@@ -1164,6 +1387,15 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         } else {
           state.config = globalConfig ? globalConfig : configFromProfile;
         }
+        const profilePetWeights = sanitizePetWeights(userProfile.petGachaWeights);
+        const configPetWeights = sanitizePetWeights(state.config.petWeights);
+        const configHasCustom = PET_IDS.some((id) => configPetWeights[id] !== 1);
+        const profileHasCustom = PET_IDS.some((id) => profilePetWeights[id] !== 1);
+        const finalPetWeights = configHasCustom ? configPetWeights : (profileHasCustom ? profilePetWeights : configPetWeights);
+
+        state.petGachaWeights = finalPetWeights;
+        state.config.petWeights = { ...finalPetWeights };
+        userProfile.petGachaWeights = finalPetWeights;
         userProfile.config = state.config;
 
         state.global = sanitizeGlobalStats(userProfile.globalStats);
@@ -1171,6 +1403,8 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
 
         state.items = sanitizeItems(userProfile.items);
         userProfile.items = state.items;
+        state.pets = sanitizePetState(userProfile.pets);
+        userProfile.pets = state.pets;
 
         state.enhance = sanitizeEnhanceConfig(userProfile.enhance);
         userProfile.enhance = state.enhance;
@@ -1266,6 +1500,8 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           equip: sanitizeEquipMap(state.equip),
           spares: sanitizeEquipMap(state.spares),
           items: sanitizeItems(state.items),
+          pets: sanitizePetState(state.pets),
+          petGachaWeights: sanitizePetWeights(state.petGachaWeights),
           enhance: sanitizeEnhanceConfig(state.enhance),
           session: (()=>{
             const snapshot = sanitizeSession(state.session);
@@ -1336,6 +1572,8 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
           userProfile.config = state.config;
           userProfile.globalStats = state.global;
           userProfile.items = state.items;
+          userProfile.pets = state.pets;
+          userProfile.petGachaWeights = state.petGachaWeights;
           userProfile.enhance = state.enhance;
           userProfile.equip = state.equip;
           userProfile.spares = state.spares;
@@ -1408,10 +1646,15 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         updateCombatView();
         buildForgeTargetOptions();
         updateReviveButton();
+        updatePetList();
         refreshInventoryCache();
       }
       function totalKept(){ return Object.values(state.equip).filter(Boolean).length + PART_KEYS.reduce(function(acc, part){ return acc + (state.spares[part]?1:0); }, 0); }
-      function getTotals(){ let atk=0, def=0; for(const k of ['head','body','main','off','boots']){ const it = state.equip[k]; if(!it) continue; const eff = effectiveStat(it); if(it.type==='atk') atk += eff; else def += eff; } return {atk, def}; }
+      function getTotals(){
+        const derived = deriveCombatStats(state.equip, state.enhance, {}, state.pets?.active || null);
+        const stats = derived.stats || { atk: 0, def: 0 };
+        return { atk: Math.round(stats.atk || 0), def: Math.round(stats.def || 0), raw: stats };
+      }
       function updateWinProbView(){ const lvl = els.monLevel ? parseInt(els.monLevel.value||'1',10) : (state.combat.lastLevel || 1); state.combat.lastLevel = lvl; const {atk, def} = getTotals(); const p = winProbability(atk, def, lvl); const percentText = (p*100).toFixed(2)+'%'; if(els.winProb) els.winProb.textContent = percentText; if(els.battleWinProb) els.battleWinProb.textContent = percentText; if(els.playerHealthBar){ const playerWidth = Math.max(8, Math.min(100, p*100)); els.playerHealthBar.style.width = playerWidth + '%'; }
         if(els.enemyHealthBar){ const enemyWidth = Math.max(8, Math.min(100, 100 - (p*100))); els.enemyHealthBar.style.width = enemyWidth + '%'; }
         if(els.battleEnemyLevel) els.battleEnemyLevel.textContent = String(lvl);
@@ -1513,19 +1756,35 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
         updateForgeInfo(); updateForgeControlsView(); updateItemCountsView();
       }
       function updateForgeControlsView(){ els.forgeProtectUse.checked = !!state.forge.protectEnabled; }
-      function updateItemCountsView(){ const potions = state.items.potion||0; const hyper = state.items.hyperPotion||0; const protects = state.items.protect||0; const enhances = state.items.enhance||0; const revive = state.items.revive||0; const br = state.items.battleRes||0;
-        if(els.potionCount) els.potionCount.textContent = String(potions); if(els.usePotion) els.usePotion.disabled = !isAdmin() && !(potions>0);
-        if(els.hyperPotionCount){ els.hyperPotionCount.textContent = String(hyper); }
-        if(els.useHyperPotion){ els.useHyperPotion.disabled = !isAdmin() && !(hyper>0); }
-        if(els.protectCount) els.protectCount.textContent = isAdmin()? '∞' : String(protects);
-        if(els.enhanceCount) els.enhanceCount.textContent = String(enhances);
-        if(els.reviveCount){ els.reviveCount.textContent = String(revive); }
-        if(els.invPotion) els.invPotion.textContent = String(potions);
-        if(els.invHyper) els.invHyper.textContent = String(hyper);
-        if(els.invProtect) els.invProtect.textContent = isAdmin()? '∞' : String(protects);
-        if(els.invEnhance) els.invEnhance.textContent = String(enhances);
-        if(els.invBattleRes) els.invBattleRes.textContent = String(br);
-        updateReviveButton(); updateShopButtons(); updateBattleResControls(); }
+      function updateItemCountsView(){
+        const potions = state.items.potion || 0;
+        const hyper = state.items.hyperPotion || 0;
+        const protects = state.items.protect || 0;
+        const enhances = state.items.enhance || 0;
+        const revive = state.items.revive || 0;
+        const br = state.items.battleRes || 0;
+        const petTickets = state.items.petTicket || 0;
+
+        if (els.potionCount) els.potionCount.textContent = String(potions);
+        if (els.usePotion) els.usePotion.disabled = !isAdmin() && !(potions > 0);
+        if (els.hyperPotionCount) els.hyperPotionCount.textContent = String(hyper);
+        if (els.useHyperPotion) els.useHyperPotion.disabled = !isAdmin() && !(hyper > 0);
+        if (els.protectCount) els.protectCount.textContent = isAdmin() ? '∞' : String(protects);
+        if (els.enhanceCount) els.enhanceCount.textContent = String(enhances);
+        if (els.reviveCount) els.reviveCount.textContent = String(revive);
+        if (els.petTickets) els.petTickets.textContent = isAdmin() ? '∞' : formatNum(petTickets);
+        if (els.petTicketInline) els.petTicketInline.textContent = isAdmin() ? '∞' : formatNum(petTickets);
+
+        if (els.invPotion) els.invPotion.textContent = String(potions);
+        if (els.invHyper) els.invHyper.textContent = String(hyper);
+        if (els.invProtect) els.invProtect.textContent = isAdmin() ? '∞' : String(protects);
+        if (els.invEnhance) els.invEnhance.textContent = String(enhances);
+        if (els.invBattleRes) els.invBattleRes.textContent = String(br);
+
+        updateReviveButton();
+        updateShopButtons();
+        updateBattleResControls();
+      }
       function usePotion(){ if(!(state.items.potion>0) && !isAdmin()) return; if(!isAdmin()) state.items.potion--; const cfg = getPotionSettings(); const now = Date.now(); const duration = (cfg.durationMs ?? DEFAULT_POTION_SETTINGS.durationMs); const mult = cfg.speedMultiplier ?? DEFAULT_POTION_SETTINGS.speedMultiplier ?? 2; state.buffs.accelUntil = now + duration; state.buffs.accelMultiplier = Math.max(1, mult); if(state.buffs.hyperUntil > state.buffs.accelUntil){ state.buffs.accelUntil = state.buffs.hyperUntil; } updateItemCountsView(); updateBuffInfo(); markProfileDirty(); }
       function useHyperPotion(){ if(!(state.items.hyperPotion>0) && !isAdmin()) return; if(!isAdmin()) state.items.hyperPotion--; const cfg = getHyperPotionSettings(); const now = Date.now(); const duration = (cfg.durationMs ?? DEFAULT_HYPER_POTION_SETTINGS.durationMs); const mult = cfg.speedMultiplier ?? DEFAULT_HYPER_POTION_SETTINGS.speedMultiplier ?? 4; state.buffs.hyperUntil = now + duration; state.buffs.hyperMultiplier = Math.max(1, mult); state.buffs.accelUntil = Math.max(state.buffs.accelUntil, state.buffs.hyperUntil); state.buffs.accelMultiplier = Math.max(state.buffs.accelMultiplier || 1, state.buffs.hyperMultiplier); updateItemCountsView(); updateBuffInfo(); markProfileDirty(); }
       function maybeDropPotion(rng, lvl){ if(rng() < dropRateForLevel('potion', lvl)){ state.items.potion++; updateItemCountsView(); markProfileDirty(); return true; } return false; }
@@ -1651,7 +1910,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       }
 
       // Bootstrap DOM
-      buildWeightsTable(); bind(); readLink(); reflectConfig(); buildForgeTable(); buildForgeTargetOptions(); updateForgeInfo();
+      buildWeightsTable(); renderPetWeightTable(); bind(); readLink(); reflectConfig(); buildForgeTable(); buildForgeTargetOptions(); updateForgeInfo();
 
       onAuthStateChanged(auth, async (firebaseUser)=>{
         if(profileSaveTimer){ clearTimeout(profileSaveTimer); profileSaveTimer = null; }

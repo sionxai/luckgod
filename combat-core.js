@@ -95,8 +95,131 @@ export function sanitizeEquipMap(raw) {
   return result;
 }
 
+export const PET_IDS = ['pet_ant', 'pet_deer', 'pet_goat', 'pet_tiger'];
+
+export const PET_DEFS = {
+  pet_ant: {
+    id: 'pet_ant',
+    name: '사막 개미 수호병',
+    icon: '🐜',
+    passive: {
+      flat: { def: 320, hp: 900 },
+      pct: { def: 0.08 }
+    },
+    active: {
+      type: 'shield',
+      chance: 0.32,
+      amountPct: 0.12,
+      maxPct: 0.3,
+      message: '보호막을 전개해 피해를 흡수합니다.'
+    }
+  },
+  pet_deer: {
+    id: 'pet_deer',
+    name: '서리 숲 순록',
+    icon: '🦌',
+    passive: {
+      flat: { hp: 700, dodge: 4 },
+      pct: { hp: 0.05 }
+    },
+    active: {
+      type: 'heal',
+      chance: 0.28,
+      amountPct: 0.09,
+      message: '자연의 힘으로 체력을 회복합니다.'
+    }
+  },
+  pet_goat: {
+    id: 'pet_goat',
+    name: '화염 산양왕',
+    icon: '🐐',
+    passive: {
+      flat: { atk: 220, critDmg: 12 }
+    },
+    active: {
+      type: 'attackBuff',
+      chance: 0.22,
+      attackPct: 0.18,
+      critRateBonus: 5,
+      message: '염화의 격노로 공격력이 상승합니다.'
+    }
+  },
+  pet_tiger: {
+    id: 'pet_tiger',
+    name: '호령의 그림자',
+    icon: '🐅',
+    passive: {
+      flat: { atk: 260, speed: 10, critRate: 4 }
+    },
+    active: {
+      type: 'strike',
+      chance: 0.18,
+      ratio: 0.28,
+      minDamage: 150,
+      message: '그림자 일격으로 선제 피해를 가합니다.'
+    }
+  }
+};
+
+export function getPetDefinition(petId) {
+  if (!petId) return null;
+  return PET_DEFS[petId] || null;
+}
+
+export function createDefaultPetState() {
+  const owned = {};
+  PET_IDS.forEach((id) => {
+    owned[id] = 0;
+  });
+  return { owned, active: null, pity: 0 };
+}
+
+export function sanitizePetState(raw) {
+  const state = createDefaultPetState();
+  if (raw && typeof raw === 'object') {
+    if (raw.owned && typeof raw.owned === 'object') {
+      PET_IDS.forEach((petId) => {
+        state.owned[petId] = clampNumber(raw.owned[petId], 0, Number.MAX_SAFE_INTEGER, 0);
+      });
+    }
+    if (typeof raw.active === 'string' && PET_IDS.includes(raw.active)) {
+      state.active = raw.active;
+    }
+    state.pity = clampNumber(raw.pity, 0, Number.MAX_SAFE_INTEGER, 0);
+  }
+  return state;
+}
+
+export function sanitizePetWeights(raw) {
+  const defaults = {};
+  PET_IDS.forEach((petId) => {
+    defaults[petId] = 1;
+  });
+  if (!raw || typeof raw !== 'object') {
+    return defaults;
+  }
+  const weights = { ...defaults };
+  PET_IDS.forEach((petId) => {
+    const value = raw[petId];
+    if (typeof value === 'number' && isFinite(value) && value >= 0) {
+      weights[petId] = value;
+    }
+  });
+  return weights;
+}
+
+const PET_STAT_LABELS = {
+  atk: '공격력',
+  def: '방어력',
+  hp: '체력',
+  critRate: '크리티컬 확률',
+  critDmg: '크리티컬 피해',
+  dodge: '회피',
+  speed: '속도'
+};
+
 export function sanitizeItems(raw) {
-  const template = { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0 };
+  const template = { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, petTicket: 0 };
   const result = { ...template };
   if (raw && typeof raw === 'object') {
     Object.keys(template).forEach((key) => {
@@ -247,7 +370,7 @@ export function sanitizeConfig(raw) {
     acc[tier] = typeof val === 'number' && isFinite(val) && val >= 0 ? val : 0;
     return acc;
   }, {});
-  return {
+  const config = {
     weights: cfgWeights,
     probs: normalizeWeights(cfgWeights),
     seed: raw && typeof raw.seed === 'string' ? raw.seed : '',
@@ -269,6 +392,8 @@ export function sanitizeConfig(raw) {
     hyperPotionSettings: normalizePotionSettings(raw && raw.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS),
     monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling)
   };
+  config.petWeights = sanitizePetWeights(raw && raw.petWeights);
+  return config;
 }
 
 export function formatNum(value, locale = 'ko-KR') {
@@ -278,6 +403,43 @@ export function formatNum(value, locale = 'ko-KR') {
 export function formatMultiplier(value) {
   const rounded = Math.round((value ?? 0) * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toString();
+}
+
+function formatPassiveSegments(passive = {}) {
+  const segments = [];
+  const flat = passive.flat || {};
+  Object.entries(flat).forEach(([key, value]) => {
+    if (!(typeof value === 'number' && isFinite(value) && value !== 0)) return;
+    const label = PET_STAT_LABELS[key] || key.toUpperCase();
+    segments.push(`${label} +${formatNum(value)}`);
+  });
+  const pct = passive.pct || {};
+  Object.entries(pct).forEach(([key, value]) => {
+    if (!(typeof value === 'number' && isFinite(value) && value !== 0)) return;
+    const label = PET_STAT_LABELS[key] || key.toUpperCase();
+    const percent = Math.round(value * 1000) / 10;
+    segments.push(`${label} +${percent.toFixed(percent % 1 === 0 ? 0 : 1)}%`);
+  });
+  return segments;
+}
+
+export function describePetAbilities(pet) {
+  if (!pet) return { passive: '', active: '' };
+  const passiveSegments = formatPassiveSegments(pet.passive);
+  const passive = passiveSegments.length ? `패시브: ${passiveSegments.join(', ')}` : '';
+  let active = '';
+  if (pet.active) {
+    const chance = typeof pet.active.chance === 'number' && pet.active.chance > 0 ? `${(Math.round(pet.active.chance * 1000) / 10).toFixed(pet.active.chance * 100 % 1 === 0 ? 0 : 1)}%` : '';
+    const message = pet.active.message || '';
+    if (message && chance) {
+      active = `발동(${chance}): ${message}`;
+    } else if (message) {
+      active = `발동: ${message}`;
+    } else if (chance) {
+      active = `발동 확률 ${chance}`;
+    }
+  }
+  return { passive, active };
 }
 
 export const TIER_VALUE = {
@@ -303,7 +465,23 @@ export function effectiveStat(item, enhance = defaultEnhance()) {
   return Math.floor((item.base || 0) * mul);
 }
 
-export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}) {
+function applyPetPassive(stats, passive) {
+  if (!passive) return;
+  const flat = passive.flat || {};
+  Object.entries(flat).forEach(([key, value]) => {
+    if (typeof value !== 'number' || !isFinite(value)) return;
+    if (typeof stats[key] !== 'number') stats[key] = 0;
+    stats[key] += value;
+  });
+  const pct = passive.pct || {};
+  Object.entries(pct).forEach(([key, value]) => {
+    if (typeof value !== 'number' || !isFinite(value)) return;
+    if (typeof stats[key] !== 'number') stats[key] = 0;
+    stats[key] += stats[key] * value;
+  });
+}
+
+export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}, activePet = null) {
   const stats = {
     atk: 0,
     def: 0,
@@ -336,6 +514,10 @@ export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}) {
       }
     }
   });
+  const petDef = typeof activePet === 'string' ? getPetDefinition(activePet) : activePet || null;
+  if (petDef?.passive) {
+    applyPetPassive(stats, petDef.passive);
+  }
   stats.critRate = Math.min(90, stats.critRate);
   stats.critDmg = Math.min(400, stats.critDmg);
   stats.dodge = Math.min(60, stats.dodge);
@@ -343,7 +525,7 @@ export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}) {
   stats.speed = Math.max(1, stats.speed);
   stats.atk = Math.max(1, stats.atk);
   stats.def = Math.max(0, stats.def);
-  return { stats, equipment };
+  return { stats, equipment, pet: petDef || null };
 }
 
 export function combatPower(stats) {
