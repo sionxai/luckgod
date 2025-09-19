@@ -206,10 +206,10 @@ export const PET_DEFS = {
     },
     active: {
       type: 'tigerLegend',
-      killChance: 0.1,
+      killChance: 0.05,
       blockChance: 0.15,
       reflectChance: 0.05,
-      message: '10% 즉사, 15% 전방위 방어, 5% 피해 반사'
+      message: '5% 즉사, 15% 전방위 방어, 5% 피해 반사'
     }
   }
 };

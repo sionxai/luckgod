@@ -9,9 +9,9 @@ import {
   update,
   EmailAuthProvider,
   reauthenticateWithCredential,
-  updatePassword,
-  onValue
+  updatePassword
 } from './firebase.js';
+import { onValue } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js';
 import {
   sanitizePetState,
   createDefaultPetState,
@@ -69,30 +69,6 @@ const PART_DEFS = [
 ];
 const PART_KEYS = PART_DEFS.map(function(p){ return p.key; });
 const PART_ICONS = { head:'🪖', body:'🛡️', main:'⚔️', off:'🗡️', boots:'🥾' };
-
-const ENHANCE_STAGE_MULTIPLIER = Object.freeze([
-  1,
-  1.10,
-  1.09,
-  1.08,
-  1.07,
-  1.06,
-  1.05,
-  1.05,
-  1.04,
-  1.04,
-  1.03,
-  1.03,
-  1.03,
-  1.025,
-  1.025,
-  1.025,
-  1.02,
-  1.02,
-  1.399,
-  1.667,
-  2.4
-]);
 
 const ENHANCE_TICKET_COST = Object.freeze([
   0, 1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7, 20, 20, 29, 60, 118
@@ -674,6 +650,18 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           markProfileDirty();
         }
         return true;
+      }
+
+      function pushProfileUpdate(partial){
+        if(!partial || typeof partial !== 'object') return;
+        if(!currentFirebaseUser) return;
+        const payload = { ...partial };
+        if(!Object.prototype.hasOwnProperty.call(payload, 'updatedAt')){
+          payload.updatedAt = Date.now();
+        }
+        update(ref(db, `users/${currentFirebaseUser.uid}`), payload).catch((error)=>{
+          console.error('프로필 업데이트 실패', error);
+        });
       }
 
       function detachProfileListener(){ if(state.profileListener){ try { state.profileListener(); } catch (err) { console.warn('프로필 리스너 해제 실패', err); } state.profileListener = null; } }
@@ -1354,8 +1342,36 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       }
 
       // Points (wallet)
-      function loadWallet(){ if(isAdmin()){ state.wallet = Number.POSITIVE_INFINITY; } else { const stored = userProfile?.wallet; state.wallet = typeof stored === 'number' ? stored : 1000; } updatePointsView(); }
-      function saveWallet(){ if(isAdmin()) return; if(!userProfile) return; userProfile.wallet = state.wallet; updatePointsView(); markProfileDirty(); }
+      function loadWallet(){
+        if(isAdmin()){
+          state.wallet = Number.POSITIVE_INFINITY;
+          updatePointsView();
+          return;
+        }
+        const stored = userProfile?.wallet;
+        if(typeof stored === 'number' && isFinite(stored)){
+          state.wallet = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, stored);
+          userProfile.wallet = state.wallet;
+          if(state.profile) state.profile.wallet = state.wallet;
+        } else {
+          state.wallet = 1000;
+          saveWallet({ force: true, silent: true });
+        }
+        updatePointsView();
+      }
+      function saveWallet(opts){
+        if(isAdmin()) return;
+        if(!userProfile) return;
+        const coerced = clampNumber(state.wallet, 0, Number.MAX_SAFE_INTEGER, 0);
+        state.wallet = coerced;
+        const prev = typeof userProfile.wallet === 'number' && isFinite(userProfile.wallet) ? userProfile.wallet : null;
+        userProfile.wallet = coerced;
+        if(state.profile) state.profile.wallet = coerced;
+        if(opts?.force || prev !== coerced){
+          pushProfileUpdate({ wallet: coerced });
+        }
+        if(!opts || !opts.silent) updatePointsView();
+      }
       function updatePointsView(){ els.points.textContent = isAdmin()? '∞' : formatNum(state.wallet); updateDrawButtons(); updateReviveButton(); }
       function updateDrawButtons(){ const running = !!state.inRun; const mode = state.ui.gachaMode || 'gear'; const isGear = mode === 'gear'; const isPet = !isGear; const enough = isAdmin() || state.wallet >= 100; const petTickets = state.items.petTicket || 0;
         if(els.draw1) els.draw1.disabled = !isGear || running || !enough;
@@ -1369,13 +1385,69 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function canSpend(amt){ if(isAdmin()) return true; return state.wallet >= amt; }
       function spendPoints(amt){ if(isAdmin()) return true; if(state.wallet < amt) return false; state.wallet -= amt; saveWallet(); return true; }
       function addPoints(amt){ if(isAdmin()) return; state.wallet += amt; saveWallet(); }
-      function loadGold(){ if(isAdmin()){ state.gold = Number.POSITIVE_INFINITY; } else { const stored = userProfile?.gold; state.gold = (typeof stored === 'number' && isFinite(stored)) ? stored : 10000; } updateGoldView(); }
-      function saveGold(){ if(isAdmin()) return; if(!userProfile) return; userProfile.gold = state.gold; updateGoldView(); markProfileDirty(); }
+      function loadGold(){
+        if(isAdmin()){
+          state.gold = Number.POSITIVE_INFINITY;
+          updateGoldView();
+          return;
+        }
+        const stored = userProfile?.gold;
+        if(typeof stored === 'number' && isFinite(stored)){
+          state.gold = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, stored);
+          userProfile.gold = state.gold;
+          if(state.profile) state.profile.gold = state.gold;
+        } else {
+          state.gold = 10000;
+          saveGold({ force: true, silent: true });
+        }
+        updateGoldView();
+      }
+      function saveGold(opts){
+        if(isAdmin()) return;
+        if(!userProfile) return;
+        const coerced = clampNumber(state.gold, 0, Number.MAX_SAFE_INTEGER, 0);
+        state.gold = coerced;
+        const prev = typeof userProfile.gold === 'number' && isFinite(userProfile.gold) ? userProfile.gold : null;
+        userProfile.gold = coerced;
+        if(state.profile) state.profile.gold = coerced;
+        if(opts?.force || prev !== coerced){
+          pushProfileUpdate({ gold: coerced });
+        }
+        if(!opts || !opts.silent) updateGoldView();
+      }
       function updateGoldView(){ if(els.gold){ if(isAdmin()){ els.gold.textContent = '∞'; } else { els.gold.textContent = formatNum(state.gold||0); } } updateShopButtons(); }
       function addGold(amount){ if(!(amount>0)) return; state.gold = (state.gold||0) + Math.floor(amount); saveGold(); }
       function spendGold(amount){ amount = Math.floor(amount); if(!(amount>0)) return false; if((state.gold||0) < amount) return false; state.gold -= amount; saveGold(); return true; }
-      function loadDiamonds(){ if(isAdmin()){ state.diamonds = Number.POSITIVE_INFINITY; } else { const stored = userProfile?.diamonds; state.diamonds = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, 0); userProfile.diamonds = state.diamonds; } updateDiamondsView(); }
-      function saveDiamonds(){ if(isAdmin()) return; if(!userProfile) return; userProfile.diamonds = state.diamonds; updateDiamondsView(); markProfileDirty(); }
+      function loadDiamonds(){
+        if(isAdmin()){
+          state.diamonds = Number.POSITIVE_INFINITY;
+          updateDiamondsView();
+          return;
+        }
+        const stored = userProfile?.diamonds;
+        if(typeof stored === 'number' && isFinite(stored)){
+          state.diamonds = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, stored);
+          userProfile.diamonds = state.diamonds;
+          if(state.profile) state.profile.diamonds = state.diamonds;
+        } else {
+          state.diamonds = 0;
+          saveDiamonds({ force: true, silent: true });
+        }
+        updateDiamondsView();
+      }
+      function saveDiamonds(opts){
+        if(isAdmin()) return;
+        if(!userProfile) return;
+        const coerced = clampNumber(state.diamonds, 0, Number.MAX_SAFE_INTEGER, 0);
+        state.diamonds = coerced;
+        const prev = typeof userProfile.diamonds === 'number' && isFinite(userProfile.diamonds) ? userProfile.diamonds : null;
+        userProfile.diamonds = coerced;
+        if(state.profile) state.profile.diamonds = coerced;
+        if(opts?.force || prev !== coerced){
+          pushProfileUpdate({ diamonds: coerced });
+        }
+        if(!opts || !opts.silent) updateDiamondsView();
+      }
       function updateDiamondsView(){ if(els.diamonds){ els.diamonds.textContent = isAdmin()? '∞' : formatNum(state.diamonds||0); } }
       function addDiamonds(amount){ amount = Math.floor(amount); if(!(amount>0)) return; if(isAdmin()) return; state.diamonds += amount; saveDiamonds(); }
       function spendDiamonds(amount){ amount = Math.floor(amount); if(!(amount>0)) return false; if(isAdmin()) return true; if((state.diamonds||0) < amount) return false; state.diamonds -= amount; saveDiamonds(); return true; }
@@ -1691,9 +1763,6 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           updatedAt: Date.now()
         };
         if(role !== 'admin'){
-          payload.wallet = clampNumber(state.wallet, 0, Number.MAX_SAFE_INTEGER, 1000);
-          payload.gold = clampNumber(state.gold, 0, Number.MAX_SAFE_INTEGER, 10000);
-          payload.diamonds = clampNumber(state.diamonds, 0, Number.MAX_SAFE_INTEGER, 0);
           payload.presets = personalPresetsToMap(state.presets.personal);
           payload.selectedPreset = state.selectedPreset && state.selectedPreset.scope ? { scope: state.selectedPreset.scope, id: state.selectedPreset.id } : null;
         } else {
@@ -1938,9 +2007,6 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
         if(!admin){
           state.items.enhance = Math.max(0, (state.items.enhance || 0) - enhanceCost);
-          if(wantProtect && protectCost > 0){
-            state.items.protect = Math.max(0, (state.items.protect || 0) - protectCost);
-          }
           state.gold = Math.max(0, (state.gold || 0) - expectedGold);
           saveGold();
           updateItemCountsView();
@@ -1960,8 +2026,12 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           return {status:'success', level: nextLv};
         }
 
-        const protectActive = wantProtect && (admin || protectCost >= 0);
+        const protectActive = wantProtect && (admin || (protectCost > 0 ? (state.items.protect || 0) >= protectCost : true));
         if(protectActive){
+          if(!admin && protectCost > 0){
+            state.items.protect = Math.max(0, (state.items.protect || 0) - protectCost);
+            updateItemCountsView();
+          }
           updateInventoryView();
           updateForgeInfo();
           setForgeMsg('강화 실패! 보호권이 소모되어 장비가 보호되었습니다.', 'warn');
@@ -2161,7 +2231,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const currentMul = state.enhance.multipliers[lv] || 1;
         const nextMul = (next <= 20 ? state.enhance.multipliers[next] : currentMul);
         const successProb = lv >= 20 ? null : (state.enhance.probs[next] || 0);
-        const stageMul = lv >= 20 ? null : (ENHANCE_STAGE_MULTIPLIER[next] || (nextMul / (currentMul || 1)));
+        const stepMultiplier = lv >= 20 ? null : (nextMul / (currentMul || 1));
         const nextTotalMul = lv >= 20 ? null : nextMul;
         const enhanceCost = ENHANCE_TICKET_COST[next] || 0;
         const protectCost = ENHANCE_PROTECT_COST[next] || 0;
@@ -2170,7 +2240,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         els.forgeLv.textContent = String(lv);
         els.forgeMul.textContent = `${currentMul.toFixed(2)}×`;
         els.forgeP.textContent = successProb === null ? '-' : `${(successProb * 100).toFixed(2)}%`;
-        if(els.forgeStageMul){ els.forgeStageMul.textContent = stageMul === null ? '-' : `${stageMul.toFixed(stageMul >= 10 ? 1 : 3)}×`; }
+        if(els.forgeStageMul){ els.forgeStageMul.textContent = stepMultiplier === null ? '-' : `${stepMultiplier.toFixed(stepMultiplier >= 10 ? 1 : 3)}×`; }
         if(els.forgeNextMul){ els.forgeNextMul.textContent = nextTotalMul === null ? '-' : `${nextTotalMul.toFixed(nextTotalMul >= 10 ? 1 : 3)}×`; }
         if(els.forgeCostEnh){ els.forgeCostEnh.textContent = lv >= 20 ? '-' : String(enhanceCost); }
         if(els.forgeCostProtect){ els.forgeCostProtect.textContent = lv >= 20 ? '-' : String(protectCost); }
@@ -2178,7 +2248,13 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
         const cur = effectiveStat(it);
         const after = Math.floor((it.base || 0) * nextMul);
-        els.forgePreview.textContent = lv >= 20 ? '-' : `${formatNum(cur)} → ${formatNum(after)} (Lv.${next})`;
+        if(lv >= 20){
+          els.forgePreview.textContent = '-';
+        } else {
+          const curMulText = currentMul.toFixed(currentMul >= 10 ? 1 : 3);
+          const nextMulText = nextMul.toFixed(nextMul >= 10 ? 1 : 3);
+          els.forgePreview.textContent = `${formatNum(cur)} (×${curMulText}) → ${formatNum(after)} (×${nextMulText})`;
+        }
         els.forgeOnce.disabled = lv >= 20;
       }
       function doForgeOnce(){ if(state.forge.autoRunning){ setForgeMsg('자동 강화 중에는 수동 강화를 사용할 수 없습니다.', 'warn'); return; }

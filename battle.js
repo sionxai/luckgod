@@ -1188,15 +1188,19 @@ function handlePetTurnStart() {
       break;
     }
     case 'tigerLegend': {
-      const killChance = Math.max(0, Math.min(1, active.killChance ?? 0.1));
+      const baseKillChance = Math.max(0, Math.min(1, active.killChance ?? 0.05));
+      const isBossFight = !!gameState.battle.bossFight;
+      const killChance = isBossFight ? 0 : baseKillChance;
       const blockChance = Math.max(0, Math.min(1, active.blockChance ?? 0.15));
       const reflectChance = Math.max(0, Math.min(1, active.reflectChance ?? 0.05));
       const effects = [];
-      if (gameState.enemy.hp > 0 && Math.random() < killChance) {
+      if (killChance > 0 && gameState.enemy.hp > 0 && Math.random() < killChance) {
         gameState.enemy.hp = 0;
         triggerAnimation('monsterSprite', 'hurt');
         addBattleLog('[펫] 호랭찡의 포효! 적이 즉시 쓰러졌습니다.', 'critical');
         effects.push('kill');
+      } else if (isBossFight && baseKillChance > 0 && gameState.enemy.hp > 0) {
+        addBattleLog('[펫] 보스에게는 호랭찡의 즉사 효과가 통하지 않습니다.', 'warn');
       }
       if (Math.random() < blockChance) {
         gameState.player.petTigerGuard = true;
@@ -1272,6 +1276,9 @@ function queueProfileUpdate(partial) {
     state.saveTimer = null;
     const payload = { ...state.pendingUpdates };
     state.pendingUpdates = {};
+    if (!Object.prototype.hasOwnProperty.call(payload, 'updatedAt')) {
+      payload.updatedAt = Date.now();
+    }
     try {
       await update(ref(db, `users/${state.user.uid}`), payload);
     } catch (error) {
