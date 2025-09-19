@@ -9,7 +9,8 @@ import {
   update,
   EmailAuthProvider,
   reauthenticateWithCredential,
-  updatePassword
+  updatePassword,
+  onValue
 } from './firebase.js';
 import {
   sanitizePetState,
@@ -221,6 +222,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         petGachaWeights: sanitizePetWeights(null),
         buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
         combat: { useBattleRes: true, prefBattleRes: true },
+        profileListener: null,
       };
       state.config.petWeights = sanitizePetWeights(state.config.petWeights);
       state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
@@ -658,6 +660,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(typeof deltas.diamonds === 'number' && deltas.diamonds !== 0){ const baseDiamonds = typeof data.diamonds === 'number' && isFinite(data.diamonds) ? data.diamonds : 0; updates.diamonds = Math.max(0, baseDiamonds + deltas.diamonds); }
         if(typeof deltas.petTickets === 'number' && deltas.petTickets !== 0 && canModifyEconomy){ const items = sanitizeItems(data.items); const nextTickets = Math.max(0, (items.petTicket || 0) + deltas.petTickets); updates['items/petTicket'] = nextTickets; }
         if(Object.keys(updates).length === 0) return false;
+        updates.updatedAt = Date.now();
         await update(userRef, updates);
         if(currentFirebaseUser && uid === currentFirebaseUser.uid){ if(Object.prototype.hasOwnProperty.call(updates, 'wallet')){ state.wallet = updates.wallet; if(userProfile) userProfile.wallet = updates.wallet; updatePointsView(); }
           if(Object.prototype.hasOwnProperty.call(updates, 'gold')){ state.gold = updates.gold; if(userProfile) userProfile.gold = updates.gold; updateGoldView(); }
@@ -672,6 +675,40 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }
         return true;
       }
+
+      function detachProfileListener(){ if(state.profileListener){ try { state.profileListener(); } catch (err) { console.warn('프로필 리스너 해제 실패', err); } state.profileListener = null; } }
+
+      function attachProfileListener(uid){ if(!uid) return; detachProfileListener(); const userRef = ref(db, `users/${uid}`); state.profileListener = onValue(userRef, (snapshot)=>{
+          if(!snapshot.exists()) return;
+          if(!state.user || state.user.uid !== uid) return;
+          const data = snapshot.val() || {};
+          const role = data.role === 'admin' ? 'admin' : 'user';
+          if(state.user.role !== role){ state.user.role = role; }
+          if(role === 'admin'){ return; }
+          if(typeof data.wallet === 'number' && isFinite(data.wallet)){
+            const walletVal = clampNumber(data.wallet, 0, Number.MAX_SAFE_INTEGER, data.wallet);
+            if(walletVal !== state.wallet){ state.wallet = walletVal; if(userProfile) userProfile.wallet = walletVal; if(state.profile) state.profile.wallet = walletVal; updatePointsView(); }
+          }
+          if(typeof data.gold === 'number' && isFinite(data.gold)){
+            const goldVal = clampNumber(data.gold, 0, Number.MAX_SAFE_INTEGER, data.gold);
+            if(goldVal !== state.gold){ state.gold = goldVal; if(userProfile) userProfile.gold = goldVal; if(state.profile) state.profile.gold = goldVal; updateGoldView(); }
+          }
+          if(typeof data.diamonds === 'number' && isFinite(data.diamonds)){
+            const diamondsVal = clampNumber(data.diamonds, 0, Number.MAX_SAFE_INTEGER, data.diamonds);
+            if(diamondsVal !== state.diamonds){ state.diamonds = diamondsVal; if(userProfile) userProfile.diamonds = diamondsVal; if(state.profile) state.profile.diamonds = diamondsVal; updateDiamondsView(); }
+          }
+          const items = sanitizeItems(data.items);
+          const prevItems = state.items || {};
+          let itemsChanged = false;
+          Object.keys(items).forEach(function(key){ const next = items[key]; if((prevItems[key] || 0) !== next){ itemsChanged = true; } });
+          if(itemsChanged){ state.items = { ...prevItems, ...items }; if(userProfile){ if(!userProfile.items || typeof userProfile.items !== 'object'){ userProfile.items = {}; } Object.assign(userProfile.items, items); }
+            if(state.profile){ if(!state.profile.items || typeof state.profile.items !== 'object'){ state.profile.items = {}; } Object.assign(state.profile.items, items); }
+            updateItemCountsView();
+            updateBattleResControls();
+          }
+        }, (error)=>{
+          console.error('프로필 실시간 수신 실패', error);
+        }); }
 
       async function fetchGlobalConfig(){ try {
           const snapshot = await get(ref(db, GLOBAL_CONFIG_PATH));
@@ -1486,6 +1523,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           email: currentFirebaseUser.email || ''
         };
 
+        attachProfileListener(uid);
+
         const configFromProfile = sanitizeConfig(userProfile.config);
         const globalData = await fetchGlobalConfig();
         if(globalData){
@@ -1726,6 +1765,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
             clearTimeout(profileSaveTimer);
             profileSaveTimer = null;
           }
+          detachProfileListener();
           await saveProfileSnapshot();
           await signOut(auth);
         } catch (error) {
@@ -2169,6 +2209,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       onAuthStateChanged(auth, async (firebaseUser)=>{
         if(profileSaveTimer){ clearTimeout(profileSaveTimer); profileSaveTimer = null; }
         if(!firebaseUser){
+          detachProfileListener();
           window.location.href = 'login.html';
           return;
         }
