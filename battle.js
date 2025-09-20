@@ -119,7 +119,14 @@ const els = {
   resetBossSelection: qs('#resetBossSelection'),
   bossInfo: qs('#bossInfo'),
   petCompanion: qs('#petCompanion'),
-  petCompanionImg: qs('#petCompanionImg')
+  petCompanionImg: qs('#petCompanionImg'),
+  bossIntroOverlay: qs('#bossIntroOverlay'),
+  bossIntroVideo: qs('#bossIntroVideo'),
+  bossIntroVideoWrap: qs('#bossIntroVideoWrap'),
+  bossIntroTitle: qs('#bossIntroTitle'),
+  bossIntroSkip: qs('#bossIntroSkip'),
+  tigerKillOverlay: qs('#tigerKillOverlay'),
+  tigerKillImage: qs('#tigerKillImage')
 };
 
 const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
@@ -181,6 +188,8 @@ const AUTO_STOP_REASON_LABELS = {
   other: '중지'
 };
 const AUTO_SESSION_STORAGE_PREFIX = 'gacha:autoSession:';
+const FIRST_BOSS_INTRO_VIDEO_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/kling_20250920_Image_to_Video__3595_0.mp4?alt=media&token=6ab78f59-2753-4c22-bfd0-14d21739b6f0';
+const TIGER_KILL_GIF_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/new4.gif?alt=media&token=3d395ec5-a922-45e0-9486-524b0a3f07aa';
 const BOSS_IDS = ['boss150', 'boss300', 'boss450', 'boss550', 'boss800'];
 
 const BOSS_UNLOCK_LEVELS = {
@@ -413,7 +422,10 @@ const state = {
   lastNormalLevel: 1,
   petEffectTimers: [],
   petEffectTimer: null,
-  bossImageTimer: null
+  bossImageTimer: null,
+  pendingBossIntro: null,
+  tigerKillTimer: null,
+  tigerKillPending: false
 };
 
 const gameState = {
@@ -541,7 +553,8 @@ function sanitizeBossProgress(raw) {
     const entry = raw && typeof raw === 'object' ? raw[id] : null;
     progress[id] = {
       clears: clampNumber(entry?.clears, 0, Number.MAX_SAFE_INTEGER, 0),
-      firstRewardClaimed: !!(entry && entry.firstRewardClaimed)
+      firstRewardClaimed: !!(entry && entry.firstRewardClaimed),
+      introShown: !!(entry && entry.introShown)
     };
   });
   return progress;
@@ -757,8 +770,149 @@ function getBossProgress(bossId) {
   if (!bossId) return null;
   const entry = state.bossProgress?.[bossId];
   if (entry) return entry;
-  state.bossProgress[bossId] = { clears: 0, firstRewardClaimed: false };
+  state.bossProgress[bossId] = { clears: 0, firstRewardClaimed: false, introShown: false };
   return state.bossProgress[bossId];
+}
+
+function shouldShowBossIntro(boss) {
+  if (!boss) return false;
+  if (boss.id !== 'boss150') return false;
+  const progress = getBossProgress(boss.id);
+  return !progress.introShown;
+}
+
+function markBossIntroSeen(bossId) {
+  if (!bossId) return;
+  const progress = getBossProgress(bossId);
+  if (progress.introShown) return;
+  progress.introShown = true;
+  if (state.profile) {
+    state.profile.bossProgress = JSON.parse(JSON.stringify(state.bossProgress));
+  }
+  queueProfileUpdate({ bossProgress: state.bossProgress });
+}
+
+function detachBossIntroListeners() {
+  if (!state.pendingBossIntro || !Array.isArray(state.pendingBossIntro.listeners)) return;
+  if (!els.bossIntroVideo) return;
+  state.pendingBossIntro.listeners.forEach(({ event, handler }) => {
+    try {
+      els.bossIntroVideo.removeEventListener(event, handler);
+    } catch (error) {
+      // ignore removal errors
+    }
+  });
+  state.pendingBossIntro.listeners.length = 0;
+}
+
+function teardownBossIntroOverlay() {
+  detachBossIntroListeners();
+  if (els.bossIntroVideo) {
+    try { els.bossIntroVideo.pause(); } catch (error) {}
+    els.bossIntroVideo.removeAttribute('src');
+    if (typeof els.bossIntroVideo.load === 'function') {
+      try { els.bossIntroVideo.load(); } catch (error) {}
+    }
+  }
+  if (els.bossIntroVideoWrap) {
+    els.bossIntroVideoWrap.classList.remove('visible');
+  }
+  if (els.bossIntroOverlay) {
+    els.bossIntroOverlay.classList.remove('show', 'preloading', 'is-ready');
+    els.bossIntroOverlay.hidden = true;
+  }
+  document.body.classList.remove('boss-intro-active');
+}
+
+function launchBossIntro(boss) {
+  if (!els.bossIntroOverlay || !els.bossIntroVideo) {
+    return false;
+  }
+  detachBossIntroListeners();
+  state.pendingBossIntro = { bossId: boss.id, listeners: [] };
+  document.body.classList.add('boss-intro-active');
+  const overlay = els.bossIntroOverlay;
+  const video = els.bossIntroVideo;
+  const title = els.bossIntroTitle;
+  const wrap = els.bossIntroVideoWrap;
+
+  overlay.hidden = false;
+  overlay.classList.remove('is-ready');
+  overlay.classList.add('show', 'preloading');
+  if (wrap) {
+    wrap.classList.remove('visible');
+  }
+  if (title) {
+    title.textContent = '첫번째 보스 등장!';
+  }
+
+  video.pause();
+  try {
+    video.removeAttribute('src');
+    video.load();
+  } catch (error) {}
+  video.preload = 'auto';
+  video.src = FIRST_BOSS_INTRO_VIDEO_URL;
+  video.currentTime = 0;
+
+  const finalizeReady = () => {
+    overlay.classList.remove('preloading');
+    overlay.classList.add('is-ready');
+    if (wrap) {
+      wrap.classList.add('visible');
+    }
+    const playResult = video.play();
+    if (playResult && typeof playResult.catch === 'function') {
+      playResult.catch(() => {
+        // 자동 재생이 막혀도 사용자 조작 시 재생 가능
+      });
+    }
+  };
+
+  const handleCanPlay = () => {
+    detachBossIntroListeners();
+    finalizeReady();
+  };
+
+  const handleLoadedData = () => {
+    if (!overlay.classList.contains('is-ready')) {
+      detachBossIntroListeners();
+      finalizeReady();
+    }
+  };
+
+  const handleError = () => {
+    detachBossIntroListeners();
+    if (title) {
+      title.textContent = '영상 로딩에 실패했습니다. 전투를 시작합니다...';
+    }
+    setTimeout(() => completeBossIntro(), 600);
+  };
+
+  video.addEventListener('canplaythrough', handleCanPlay);
+  video.addEventListener('loadeddata', handleLoadedData);
+  video.addEventListener('error', handleError);
+
+  state.pendingBossIntro.listeners.push(
+    { event: 'canplaythrough', handler: handleCanPlay },
+    { event: 'loadeddata', handler: handleLoadedData },
+    { event: 'error', handler: handleError }
+  );
+
+  return true;
+}
+
+function completeBossIntro() {
+  const pending = state.pendingBossIntro;
+  detachBossIntroListeners();
+  teardownBossIntroOverlay();
+  state.pendingBossIntro = null;
+  if (!pending || !pending.bossId) return;
+  markBossIntroSeen(pending.bossId);
+  const boss = getBossConfig(pending.bossId);
+  if (boss) {
+    beginBossBattle(boss);
+  }
 }
 
 function ensureBossState(bossContext) {
@@ -1198,12 +1352,24 @@ function startBossBattle() {
   if (gameState.battle.ongoing) {
     forceEndCurrentBattle('boss');
   }
+  const needsIntro = shouldShowBossIntro(boss);
+  setBossControlsDisabled(true);
+  updateBossUi();
+  if (needsIntro && launchBossIntro(boss)) {
+    return;
+  }
+  if (needsIntro) {
+    markBossIntroSeen(boss.id);
+  }
+  beginBossBattle(boss);
+}
+
+function beginBossBattle(boss) {
+  if (!boss) return;
   const currentLevel = clampMonsterLevel(els.monsterLevelInput?.value || els.monsterLevel?.value || state.lastNormalLevel || 1);
   setLastNormalLevel(currentLevel);
   clearAutoSchedules();
   if (els.battleLog) els.battleLog.innerHTML = '';
-  setBossControlsDisabled(true);
-  updateBossUi();
   resetPetCombatState();
   updateMonsterLevelUI(boss.level);
   updateEnemyStats(boss.level);
@@ -1259,6 +1425,49 @@ function clearPetEffectAnimations() {
   if (els.petCompanion) {
     els.petCompanion.classList.remove(...PET_EFFECT_CLASSES);
   }
+  hideTigerKillOverlay();
+}
+
+function hideTigerKillOverlay({ resume = false } = {}) {
+  if (state.tigerKillTimer) {
+    clearTimeout(state.tigerKillTimer);
+    state.tigerKillTimer = null;
+  }
+  if (els.tigerKillOverlay) {
+    els.tigerKillOverlay.classList.remove('visible');
+    els.tigerKillOverlay.hidden = true;
+  }
+  if (els.tigerKillImage) {
+    els.tigerKillImage.removeAttribute('src');
+  }
+  const wasPending = state.tigerKillPending;
+  state.tigerKillPending = false;
+  if (wasPending) {
+    gameState.battle.actionLock = false;
+    if (resume) {
+      if (gameState.player.hp <= 0 || gameState.enemy.hp <= 0) {
+        concludeTurn();
+      } else if (gameState.battle.autoPlay && gameState.battle.isPlayerTurn) {
+        queueAutoPlayerAction(350);
+      }
+    }
+  }
+}
+
+function showTigerKillOverlay() {
+  if (!els.tigerKillOverlay || !els.tigerKillImage) return;
+  if (state.tigerKillTimer) {
+    clearTimeout(state.tigerKillTimer);
+    state.tigerKillTimer = null;
+  }
+  state.tigerKillPending = true;
+  gameState.battle.actionLock = true;
+  els.tigerKillImage.src = TIGER_KILL_GIF_URL;
+  els.tigerKillOverlay.hidden = false;
+  els.tigerKillOverlay.classList.add('visible');
+  state.tigerKillTimer = setTimeout(() => {
+    hideTigerKillOverlay({ resume: true });
+  }, 3000);
 }
 
 function triggerPetAnimation(effect) {
@@ -1269,6 +1478,9 @@ function triggerPetAnimation(effect) {
   el.classList.remove(...PET_EFFECT_CLASSES);
   void el.offsetWidth; // restart animation
   el.classList.add(className);
+  if (effect === 'kill') {
+    showTigerKillOverlay();
+  }
   if (state.petEffectTimer) {
     clearTimeout(state.petEffectTimer);
   }
@@ -2662,8 +2874,11 @@ function beginPlayerTurn(context = 'default') {
   handlePetTurnStart();
   updateHpBars();
   updateCombatPowerUI();
-  if (gameState.player.hp <= 0 || gameState.enemy.hp <= 0) {
+  if (!state.tigerKillPending && (gameState.player.hp <= 0 || gameState.enemy.hp <= 0)) {
     if (concludeTurn()) return;
+  }
+  if (state.tigerKillPending) {
+    return;
   }
   if (gameState.battle.autoPlay) {
     const initialDelay = context === 'battleStart' ? 500 : 350;
@@ -3506,6 +3721,24 @@ function initEventListeners() {
   els.resetBossSelection?.addEventListener('click', () => {
     resetBossSelection();
   });
+  els.bossIntroSkip?.addEventListener('click', () => {
+    completeBossIntro();
+  });
+  if (els.bossIntroVideo) {
+    els.bossIntroVideo.addEventListener('ended', () => {
+      completeBossIntro();
+    });
+    els.bossIntroVideo.addEventListener('error', () => {
+      completeBossIntro();
+    });
+  }
+  if (els.bossIntroOverlay) {
+    els.bossIntroOverlay.addEventListener('click', (event) => {
+      if (event.target === els.bossIntroOverlay) {
+        completeBossIntro();
+      }
+    });
+  }
   els.monsterLevel?.addEventListener('input', (e) => {
     const level = clampMonsterLevel(e.target.value);
     updateMonsterLevelUI(level);
