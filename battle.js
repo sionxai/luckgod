@@ -36,7 +36,8 @@ import {
   CHARACTER_IDS,
   getCharacterDefinition,
   getCharacterImageVariants,
-  characterBaseStats
+  characterBaseStats,
+  CHARACTER_ULTIMATE_DEFS
 } from './combat-core.js';
 
 const qs = (selector) => document.querySelector(selector);
@@ -126,7 +127,11 @@ const els = {
   bossIntroTitle: qs('#bossIntroTitle'),
   bossIntroSkip: qs('#bossIntroSkip'),
   tigerKillOverlay: qs('#tigerKillOverlay'),
-  tigerKillImage: qs('#tigerKillImage')
+  tigerKillImage: qs('#tigerKillImage'),
+  ultimateOverlay: qs('#ultimateOverlay'),
+  ultimateTitle: qs('#ultimateTitle'),
+  ultimateGifWrap: qs('#ultimateGifWrap'),
+  ultimateGif: qs('#ultimateGif')
 };
 
 const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
@@ -190,6 +195,10 @@ const AUTO_STOP_REASON_LABELS = {
 const AUTO_SESSION_STORAGE_PREFIX = 'gacha:autoSession:';
 const FIRST_BOSS_INTRO_VIDEO_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/kling_20250920_Image_to_Video__3595_0.mp4?alt=media&token=6ab78f59-2753-4c22-bfd0-14d21739b6f0';
 const TIGER_KILL_GIF_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/new4.gif?alt=media&token=3d395ec5-a922-45e0-9486-524b0a3f07aa';
+const DEFAULT_ULTIMATE_GIF_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/RarSS%2B.gif?alt=media&token=670e1733-9801-44ce-b91d-1f82f1b0146f';
+const ULTIMATE_TEXT_DURATION_MS = 1000;
+const ULTIMATE_GIF_DURATION_MS = 2500;
+const PLAYER_ULTIMATE_DEFAULT_CHANCE = 0.05;
 const BOSS_IDS = ['boss150', 'boss300', 'boss450', 'boss550', 'boss800'];
 
 const BOSS_UNLOCK_LEVELS = {
@@ -298,7 +307,7 @@ const BOSS_BEHAVIORS = {
           addBattleLog('[보스] 청동피갑이 번쩍이며 우레각인이 발동됩니다!', 'warn');
         },
         post() {
-          const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, true);
+          const result = calculateDamage(getEnemyOffensiveStats(), getPlayerDefensiveStats(), true);
           let damage = result.damage;
           if (!damage || result.type === 'MISS') {
             damage = Math.max(1, Math.round(gameState.enemy.stats.atk * 1.6));
@@ -325,7 +334,7 @@ const BOSS_BEHAVIORS = {
           addBattleLog('[보스] 모래눈보라가 몰아치며 갑옷 파쇄를 준비합니다!', 'warn');
         },
         post() {
-          const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, true);
+          const result = calculateDamage(getEnemyOffensiveStats(), getPlayerDefensiveStats(), true);
           let damage = result.damage;
           const crit = result.type === 'CRITICAL';
           if (!damage || result.type === 'MISS') {
@@ -425,7 +434,11 @@ const state = {
   bossImageTimer: null,
   pendingBossIntro: null,
   tigerKillTimer: null,
-  tigerKillPending: false
+  tigerKillPending: false,
+  playerUltimateUsed: false,
+  ultimateActive: false,
+  ultimatePending: null,
+  ultimateTimers: []
 };
 
 const gameState = {
@@ -1371,6 +1384,8 @@ function beginBossBattle(boss) {
   clearAutoSchedules();
   if (els.battleLog) els.battleLog.innerHTML = '';
   resetPetCombatState();
+  gameState.player.status = {};
+  resetUltimateState();
   updateMonsterLevelUI(boss.level);
   updateEnemyStats(boss.level);
   applyBossScaling(boss);
@@ -1470,6 +1485,404 @@ function showTigerKillOverlay() {
   }, 3000);
 }
 
+function cancelUltimateTimers() {
+  if (state.ultimateTimers && state.ultimateTimers.length) {
+    state.ultimateTimers.forEach((timerId) => clearTimeout(timerId));
+  }
+  state.ultimateTimers = [];
+}
+
+function hideUltimateOverlay() {
+  if (!els.ultimateOverlay) return;
+  cancelUltimateTimers();
+  if (els.ultimateGif) {
+    els.ultimateGif.removeAttribute('src');
+  }
+  els.ultimateOverlay.classList.remove('show', 'gif-visible');
+  els.ultimateOverlay.hidden = true;
+}
+
+function resetUltimateState() {
+  cancelUltimateTimers();
+  hideUltimateOverlay();
+  state.playerUltimateUsed = false;
+  state.ultimateActive = false;
+  state.ultimatePending = null;
+}
+
+function ensurePlayerStatus() {
+  if (!gameState.player.status || typeof gameState.player.status !== 'object') {
+    gameState.player.status = {};
+  }
+  return gameState.player.status;
+}
+
+function applyPlayerAttackBuff(percent, turns, opts = {}) {
+  if (!(percent > 0) || !(turns > 0)) return;
+  const status = ensurePlayerStatus();
+  status.atkBuff = { percent, turns };
+  if (!opts.silent) addBattleLog(`[버프] 공격력 +${Math.round(percent * 100)}% (${turns}턴)`, 'heal');
+  updateCombatPowerUI();
+  renderTotalStats();
+}
+
+function applyPlayerDefenseBuff(percent, turns, opts = {}) {
+  if (!(percent > 0) || !(turns > 0)) return;
+  const status = ensurePlayerStatus();
+  status.defBuff = { percent, turns };
+  if (!opts.silent) addBattleLog(`[버프] 방어력 +${Math.round(percent * 100)}% (${turns}턴)`, 'heal');
+  updateCombatPowerUI();
+  renderTotalStats();
+}
+
+function applyPlayerDamageReduction(percent, turns, opts = {}) {
+  if (!(percent > 0) || !(turns > 0)) return;
+  const status = ensurePlayerStatus();
+  status.damageReduction = { percent, turns };
+  if (!opts.silent) addBattleLog(`[버프] 피해 ${Math.round(percent * 100)}% 감소 (${turns}턴)`, 'heal');
+}
+
+function applyPlayerDodgeBuff(amount, turns, opts = {}) {
+  if (!(amount > 0) || !(turns > 0)) return;
+  const status = ensurePlayerStatus();
+  status.dodgeBuff = { amount, turns };
+  if (!opts.silent) addBattleLog(`[버프] 회피율 +${Math.round(amount * 100)}% (${turns}턴)`, 'heal');
+  updateCombatPowerUI();
+  renderTotalStats();
+}
+
+function applyPlayerSpeedBuff(amount, turns, opts = {}) {
+  if (!(amount > 0) || !(turns > 0)) return;
+  const status = ensurePlayerStatus();
+  status.speedBuff = { amount, turns };
+  if (!opts.silent) addBattleLog(`[버프] 속도 +${formatNum(amount)} (${turns}턴)`, 'heal');
+  updateCombatPowerUI();
+  renderTotalStats();
+}
+
+function reducePlayerSkillCooldown(amount) {
+  if (!(amount > 0)) return;
+  const current = Number.isFinite(gameState.player.skillCooldown) ? gameState.player.skillCooldown : 0;
+  gameState.player.skillCooldown = Math.max(0, current - amount);
+}
+
+function resetPlayerSkillCooldown() {
+  gameState.player.skillCooldown = 0;
+}
+
+function tickPlayerStatus() {
+  const status = ensurePlayerStatus();
+  const expired = [];
+  const decrement = (key, label) => {
+    const entry = status[key];
+    if (!entry) return;
+    entry.turns -= 1;
+    if (entry.turns <= 0) {
+      delete status[key];
+      expired.push(label);
+    }
+  };
+  decrement('atkBuff', '공격력 버프');
+  decrement('defBuff', '방어력 버프');
+  decrement('damageReduction', '피해 감소 버프');
+  decrement('dodgeBuff', '회피 버프');
+  decrement('speedBuff', '속도 버프');
+  if (expired.length) {
+    addBattleLog(`[버프 종료] ${expired.join(', ')}`, 'warn');
+    updateCombatPowerUI();
+    renderTotalStats();
+  }
+}
+
+function showUltimateOverlay(def, onComplete) {
+  if (!els.ultimateOverlay) {
+    onComplete?.();
+    return;
+  }
+  cancelUltimateTimers();
+  const overlay = els.ultimateOverlay;
+  overlay.hidden = false;
+  overlay.classList.remove('gif-visible');
+  overlay.classList.add('show');
+  if (els.ultimateTitle) {
+    els.ultimateTitle.textContent = def.name || '필살기';
+  }
+  if (els.ultimateGif) {
+    els.ultimateGif.removeAttribute('src');
+  }
+  const textTimer = setTimeout(() => {
+    overlay.classList.add('gif-visible');
+    if (els.ultimateGif) {
+      els.ultimateGif.src = def.gif || DEFAULT_ULTIMATE_GIF_URL;
+    }
+  }, ULTIMATE_TEXT_DURATION_MS);
+  const endTimer = setTimeout(() => {
+    hideUltimateOverlay();
+    onComplete?.();
+  }, ULTIMATE_TEXT_DURATION_MS + ULTIMATE_GIF_DURATION_MS);
+  state.ultimateTimers.push(textTimer, endTimer);
+}
+
+function skipUltimateOverlay() {
+  if (!state.ultimateActive || !state.ultimatePending) return;
+  const pending = state.ultimatePending;
+  cancelUltimateTimers();
+  hideUltimateOverlay();
+  pending.onComplete?.();
+}
+
+function dealUltimateDamage(amount, message = null) {
+  const dmg = Math.max(0, Math.round(amount || 0));
+  if (dmg <= 0) return 0;
+  return applyDamageToEnemy(dmg, message);
+}
+
+function applyEnemyDefBreak(percent, turns) {
+  if (!(percent > 0) || !(turns > 0)) return;
+  const status = ensureEnemyStatus();
+  const baseDef = gameState.enemy.stats?.def || 0;
+  const amount = Math.max(1, Math.round(baseDef * percent));
+  status.defBreak = { turns, amount };
+  refreshEnemyDerivedStats(true);
+  addBattleLog(`[디버프] 적 방어력 -${Math.round(percent * 100)}% (${turns}턴)`, 'warn');
+}
+
+function applyEnemyDamageTakenUp(percent, turns, label = '받는 피해') {
+  if (!(percent > 0) || !(turns > 0)) return;
+  const status = ensureEnemyStatus();
+  status.damageTakenUp = { amount: percent, turns };
+  addBattleLog(`[디버프] 적 ${label} +${Math.round(percent * 100)}% (${turns}턴)`, 'warn');
+}
+
+function applyEnemyAccuracyDown(amount, turns) {
+  if (!(amount > 0) || !(turns > 0)) return;
+  const status = ensureEnemyStatus();
+  status.accuracyDown = { amount, turns };
+  addBattleLog(`[디버프] 적 명중률 -${Math.round(amount * 100)}% (${turns}턴)`, 'warn');
+}
+
+function applyEnemyBleed(damage, turns, message) {
+  if (!(damage > 0) || !(turns > 0)) return;
+  const status = ensureEnemyStatus();
+  status.bleed = { turns, damage: Math.round(damage), message: message || `출혈 피해! {dmg}` };
+  addBattleLog(`[디버프] 적이 ${turns}턴 동안 출혈 피해를 입습니다.`, 'warn');
+}
+
+function applyEnemyTimeStop(turns) {
+  if (!(turns > 0)) return;
+  const status = ensureEnemyStatus();
+  status.timeStop = Math.max(status.timeStop || 0, turns);
+  addBattleLog(`[필살기] 적이 ${turns}턴 동안 행동하지 못합니다!`, 'critical');
+}
+
+function triggerPlayerUltimate(def) {
+  state.playerUltimateUsed = true;
+  state.ultimateActive = true;
+  state.ultimatePending = { def, resolved: false };
+  gameState.battle.actionLock = true;
+  addBattleLog(`[필살기 준비] ${def.name}`, 'critical');
+  const finalize = () => {
+    if (!state.ultimatePending || state.ultimatePending.resolved) return;
+    state.ultimatePending.resolved = true;
+    applyUltimateEffect(def);
+    finalizeUltimateTurn();
+  };
+  state.ultimatePending.onComplete = finalize;
+  showUltimateOverlay(def, finalize);
+}
+
+function finalizeUltimateTurn() {
+  state.ultimateActive = false;
+  const pending = state.ultimatePending;
+  state.ultimatePending = null;
+  cancelUltimateTimers();
+  hideUltimateOverlay();
+  gameState.battle.actionLock = false;
+  updateHpBars();
+  updateCombatPowerUI();
+  if (gameState.enemy.hp <= 0 || gameState.player.hp <= 0) {
+    concludeTurn();
+    return;
+  }
+  if (gameState.battle.autoPlay && gameState.battle.isPlayerTurn && !state.tigerKillPending) {
+    queueAutoPlayerAction(350);
+  }
+}
+
+function applyUltimateEffect(def) {
+  const variant = def.variant || `${def.classId}-${def.tier}`;
+  const offensive = getPlayerOffensiveStats();
+  switch (variant) {
+    case 'warrior-sssplus': {
+      const baseDamage = Math.round(offensive.atk * 5.5);
+      const dealt = dealUltimateDamage(baseDamage, `[필살기] ${def.name}! {dmg} 피해`);
+      if (gameState.enemy.hp > 0) {
+        const trueDamage = Math.max(1, Math.round(gameState.enemy.hp * 0.15));
+        gameState.enemy.hp = Math.max(0, gameState.enemy.hp - trueDamage);
+        addBattleLog(`[필살기] 추가 진실 피해 ${formatNum(trueDamage)}!`, 'critical');
+      }
+      applyEnemyDefBreak(0.45, 2);
+      applyPlayerDamageReduction(0.3, 2);
+      break;
+    }
+    case 'warrior-ssplus': {
+      dealUltimateDamage(Math.round(offensive.atk * 4.2), `[필살기] ${def.name}! {dmg} 피해`);
+      applyEnemyDefBreak(0.35, 2);
+      applyPlayerDamageReduction(0.2, 2);
+      break;
+    }
+    case 'mage-sssplus': {
+      dealUltimateDamage(Math.round(offensive.atk * 5.2), `[필살기] ${def.name}! {dmg} 피해`);
+      if (gameState.enemy.hp > 0) {
+        const trueDamage = Math.max(1, Math.round(gameState.enemy.hp * 0.12));
+        gameState.enemy.hp = Math.max(0, gameState.enemy.hp - trueDamage);
+        addBattleLog(`[필살기] 추가 폭발 피해 ${formatNum(trueDamage)}!`, 'critical');
+      }
+      applyEnemyDamageTakenUp(0.4, 3, '마법 피해');
+      reducePlayerSkillCooldown(1);
+      addBattleLog('스킬 쿨다운이 1턴 감소했습니다.', 'heal');
+      break;
+    }
+    case 'mage-ssplus': {
+      dealUltimateDamage(Math.round(offensive.atk * 3.8), `[필살기] ${def.name}! {dmg} 피해`);
+      applyEnemyDamageTakenUp(0.25, 3, '마법 피해');
+      healPlayer(Math.round(gameState.player.maxHp * 0.25), `마나 회복! 체력 {heal} 회복`);
+      break;
+    }
+    case 'archer-sssplus': {
+      const hits = 7;
+      const multiplier = 0.9;
+      const accuracyDebuff = { amount: 0.15, turns: 2 };
+      let total = 0;
+      let allHit = true;
+      const critRate = Math.min(100, (offensive.critRate || 0) + 0);
+      for (let i = 0; i < hits; i += 1) {
+        const isCrit = Math.random() * 100 < critRate;
+        let dmg = Math.max(1, Math.round(offensive.atk * multiplier));
+        if (isCrit) {
+          dmg = Math.max(1, Math.round(dmg * (offensive.critDmg || 150) / 100));
+          applyEnemyAccuracyDown(accuracyDebuff.amount, accuracyDebuff.turns);
+        }
+        const dealt = dealUltimateDamage(dmg, null);
+        if (dealt <= 0) allHit = false;
+        total += dealt;
+      }
+      addBattleLog(`[필살기] ${def.name}! 총 ${formatNum(total)} 피해`, 'critical');
+      if (allHit) {
+        reducePlayerSkillCooldown(1);
+        addBattleLog('모든 화살이 명중! 스킬 쿨다운 1턴 감소', 'heal');
+      }
+      break;
+    }
+    case 'archer-ssplus': {
+      const hits = 5;
+      const multiplier = 0.8;
+      const accuracyDebuff = { amount: 0.1, turns: 1 };
+      let total = 0;
+      const critRate = offensive.critRate || 0;
+      for (let i = 0; i < hits; i += 1) {
+        const isCrit = Math.random() * 100 < critRate;
+        let dmg = Math.max(1, Math.round(offensive.atk * multiplier));
+        if (isCrit) {
+          dmg = Math.max(1, Math.round(dmg * (offensive.critDmg || 150) / 100));
+          applyEnemyAccuracyDown(accuracyDebuff.amount, accuracyDebuff.turns);
+        }
+        total += dealUltimateDamage(dmg, null);
+      }
+      addBattleLog(`[필살기] ${def.name}! 총 ${formatNum(total)} 피해`, 'critical');
+      break;
+    }
+    case 'rogue-sssplus': {
+      const hits = 2;
+      const multiplier = 2.4;
+      const bonusCrit = 30;
+      let total = 0;
+      for (let i = 0; i < hits; i += 1) {
+        const critRate = Math.min(100, (offensive.critRate || 0) + bonusCrit);
+        const isCrit = Math.random() * 100 < critRate;
+        let dmg = Math.max(1, Math.round(offensive.atk * multiplier));
+        if (isCrit) {
+          dmg = Math.max(1, Math.round(dmg * (offensive.critDmg || 150) / 100));
+        }
+        total += dealUltimateDamage(dmg, null);
+      }
+      addBattleLog(`[필살기] ${def.name}! 총 ${formatNum(total)} 피해`, 'critical');
+      const bleedDamage = Math.max(1, Math.round(offensive.atk * 1.2));
+      applyEnemyBleed(bleedDamage, 4, `출혈 피해! {dmg}`);
+      applyPlayerDodgeBuff(0.25, 2);
+      applyPlayerSpeedBuff(15, 2);
+      break;
+    }
+    case 'rogue-ssplus': {
+      const damage = Math.round(offensive.atk * 3.0);
+      dealUltimateDamage(damage, `[필살기] ${def.name}! {dmg} 피해`);
+      const bleedDamage = Math.max(1, Math.round(offensive.atk * 0.9));
+      applyEnemyBleed(bleedDamage, 3, `출혈 피해! {dmg}`);
+      applyPlayerDodgeBuff(0.2, 1);
+      break;
+    }
+    case 'goddess-sssplus': {
+      gameState.player.hp = gameState.player.maxHp;
+      addBattleLog('[필살기] 창세의 빛! 체력이 완전히 회복되었습니다.', 'heal');
+      addBattleLog('아군 전체가 신성한 빛으로 되살아납니다!', 'heal');
+      const damage = Math.round(offensive.atk * 6.5);
+      dealUltimateDamage(damage, `[필살기] ${def.name}! {dmg} 피해`);
+      if (gameState.enemy.hp > 0) {
+        const trueDamage = Math.max(1, Math.round(gameState.enemy.hp * 0.2));
+        gameState.enemy.hp = Math.max(0, gameState.enemy.hp - trueDamage);
+        addBattleLog(`[필살기] 거대한 빛이 ${formatNum(trueDamage)}의 추가 피해를 입혔습니다!`, 'critical');
+      }
+      applyPlayerAttackBuff(0.35, 3, { silent: true });
+      applyPlayerDefenseBuff(0.35, 3, { silent: true });
+      applyPlayerSpeedBuff(25, 3, { silent: true });
+      addBattleLog('[버프] 공격/방어/속도 +35% (3턴)', 'heal');
+      applyEnemyDamageTakenUp(0.3, 2, '받는 피해');
+      break;
+    }
+    case 'goddess-ssplus': {
+      healPlayer(Math.round(gameState.player.maxHp * 0.5), `천상의 빛! 체력 {heal} 회복`);
+      const shield = Math.max(1, Math.round(offensive.atk * 2.0));
+      gameState.player.petShield = (gameState.player.petShield || 0) + shield;
+      addBattleLog(`[필살기] 신성 보호막이 ${formatNum(shield)} 피해를 흡수합니다.`, 'heal');
+      applyEnemyTimeStop(1);
+      resetPlayerSkillCooldown();
+      addBattleLog('스킬 쿨다운이 초기화되었습니다.', 'heal');
+      dealUltimateDamage(Math.round(offensive.atk * 3.2), `[필살기] ${def.name}! {dmg} 피해`);
+      break;
+    }
+    case 'goddess-splus': {
+      healPlayer(Math.round(gameState.player.maxHp * 0.4), `천상의 축복! 체력 {heal} 회복`);
+      applyPlayerAttackBuff(0.25, 2, { silent: true });
+      applyPlayerDefenseBuff(0.25, 2, { silent: true });
+      addBattleLog('[버프] 공격/방어 +25% (2턴)', 'heal');
+      dealUltimateDamage(Math.round(offensive.atk * 2.8), `[필살기] ${def.name}! {dmg} 피해`);
+      break;
+    }
+    default: {
+      dealUltimateDamage(Math.round(offensive.atk * 3.5), `[필살기] ${def.name}! {dmg} 피해`);
+    }
+  }
+}
+
+function maybeTriggerCharacterUltimate() {
+  if (state.ultimateActive || state.ultimatePending || state.tigerKillPending) return false;
+  if (state.playerUltimateUsed) return false;
+  if (gameState.player.hp <= 0 || gameState.enemy.hp <= 0) return false;
+  const character = gameState.player.character;
+  if (!character) return false;
+  const ultimateDef = CHARACTER_ULTIMATE_DEFS[character.id];
+  if (!ultimateDef) return false;
+  const chance = typeof ultimateDef.chance === 'number' ? ultimateDef.chance : PLAYER_ULTIMATE_DEFAULT_CHANCE;
+  if (!(chance > 0)) return false;
+  if (Math.random() >= chance) return false;
+  const preparedDef = {
+    ...ultimateDef,
+    gif: ultimateDef.gif || DEFAULT_ULTIMATE_GIF_URL
+  };
+  triggerPlayerUltimate(preparedDef);
+  return true;
+}
+
 function triggerPetAnimation(effect) {
   const el = els.petCompanion;
   if (!el || !el.classList.contains('show')) return;
@@ -1521,6 +1934,19 @@ function updatePetCompanion() {
 
 function getPlayerOffensiveStats() {
   const base = { ...gameState.player.totalStats };
+  const status = ensurePlayerStatus();
+  if (status.atkBuff && status.atkBuff.turns > 0) {
+    base.atk = Math.max(1, Math.round(base.atk * (1 + status.atkBuff.percent)));
+  }
+  if (status.defBuff && status.defBuff.turns > 0) {
+    base.def = Math.max(0, Math.round(base.def * (1 + status.defBuff.percent)));
+  }
+  if (status.speedBuff && status.speedBuff.turns > 0) {
+    base.speed = Math.max(1, Math.round((base.speed || 0) + status.speedBuff.amount));
+  }
+  if (status.dodgeBuff && status.dodgeBuff.turns > 0) {
+    base.dodge = Math.min(95, Math.round((base.dodge || 0) + status.dodgeBuff.amount * 100));
+  }
   if (gameState.player.petAttackMultiplier && gameState.player.petAttackMultiplier !== 1) {
     base.atk = Math.max(1, Math.round(base.atk * gameState.player.petAttackMultiplier));
   }
@@ -1529,6 +1955,24 @@ function getPlayerOffensiveStats() {
   }
   if (gameState.player.petCritBonus) {
     base.critRate = Math.min(100, (base.critRate || 0) + gameState.player.petCritBonus);
+  }
+  return base;
+}
+
+function getPlayerDefensiveStats() {
+  const base = { ...gameState.player.totalStats };
+  const status = ensurePlayerStatus();
+  if (status.defBuff && status.defBuff.turns > 0) {
+    base.def = Math.max(0, Math.round(base.def * (1 + status.defBuff.percent)));
+  }
+  if (status.atkBuff && status.atkBuff.turns > 0) {
+    base.atk = Math.max(1, Math.round(base.atk * (1 + status.atkBuff.percent)));
+  }
+  if (status.speedBuff && status.speedBuff.turns > 0) {
+    base.speed = Math.max(1, Math.round((base.speed || 0) + status.speedBuff.amount));
+  }
+  if (status.dodgeBuff && status.dodgeBuff.turns > 0) {
+    base.dodge = Math.min(95, Math.round((base.dodge || 0) + status.dodgeBuff.amount * 100));
   }
   return base;
 }
@@ -1552,6 +1996,15 @@ function applyDamageToPlayer(amount, options = {}) {
     return 0;
   }
   if (remaining <= 0) return 0;
+  const playerStatus = ensurePlayerStatus();
+  if (playerStatus.damageReduction && playerStatus.damageReduction.turns > 0) {
+    const reduction = Math.min(0.9, Math.max(0, playerStatus.damageReduction.percent || 0));
+    if (reduction > 0) {
+      const reduced = Math.max(0, Math.round(remaining * reduction));
+      remaining = Math.max(0, remaining - reduced);
+      addBattleLog(`[버프] 피해 ${Math.round(reduction * 100)}% 감소!`, 'heal');
+    }
+  }
   gameState.player.hp -= remaining;
   if (gameState.player.petTigerReflect && remaining > 0) {
     gameState.player.petTigerReflect = false;
@@ -1564,6 +2017,10 @@ function applyDamageToPlayer(amount, options = {}) {
 function applyDamageToEnemy(amount, message = '') {
   let incoming = Math.max(0, Math.round(amount || 0));
   if (incoming <= 0) return 0;
+  const status = ensureEnemyStatus();
+  if (status.damageTakenUp && status.damageTakenUp.turns > 0) {
+    incoming = Math.max(0, Math.round(incoming * (1 + status.damageTakenUp.amount)));
+  }
   const bossContext = gameState.battle.bossFight;
   const state = bossContext ? ensureBossState(bossContext) : null;
   if (state?.shieldHp > 0) {
@@ -1616,6 +2073,15 @@ function ensureEnemyStatus() {
   return gameState.enemy.status;
 }
 
+function getEnemyOffensiveStats() {
+  const stats = { ...gameState.enemy.stats };
+  const status = ensureEnemyStatus();
+  if (status.accuracyDown && status.accuracyDown.turns > 0) {
+    stats.accuracyPenalty = Math.min(0.9, Math.max(0, status.accuracyDown.amount || 0));
+  }
+  return stats;
+}
+
 function refreshEnemyDerivedStats(updateUi = true) {
   const base = gameState.enemy.baseStats ? { ...gameState.enemy.baseStats } : { ...gameState.enemy.stats };
   const status = ensureEnemyStatus();
@@ -1661,6 +2127,20 @@ function tickEnemyStatusBeforeEnemyAction() {
       delete status.defBreak;
       refreshEnemyDerivedStats(true);
       addBattleLog('마법 방어 약화가 해제되었습니다.', 'warn');
+    }
+  }
+  if (status.damageTakenUp && status.damageTakenUp.turns > 0) {
+    status.damageTakenUp.turns -= 1;
+    if (status.damageTakenUp.turns <= 0) {
+      delete status.damageTakenUp;
+      addBattleLog('적의 약점 노출이 종료되었습니다.', 'warn');
+    }
+  }
+  if (status.accuracyDown && status.accuracyDown.turns > 0) {
+    status.accuracyDown.turns -= 1;
+    if (status.accuracyDown.turns <= 0) {
+      delete status.accuracyDown;
+      addBattleLog('적의 명중률 감소 효과가 사라졌습니다.', 'warn');
     }
   }
   return battleEnded;
@@ -2415,6 +2895,7 @@ function forceEndCurrentBattle(reason = 'manual') {
       updateBossUi();
     }
   }
+  resetUltimateState();
   updateHpBars();
   if (reason === 'boss') {
     addBattleLog('보스 전에 기존 전투를 종료했습니다.', 'warn');
@@ -2871,7 +3352,11 @@ function beginPlayerTurn(context = 'default') {
   gameState.battle.isPlayerTurn = true;
   gameState.battle.actionLock = false;
   gameState.player.defending = false;
+  tickPlayerStatus();
   handlePetTurnStart();
+  if (maybeTriggerCharacterUltimate()) {
+    return;
+  }
   updateHpBars();
   updateCombatPowerUI();
   if (!state.tigerKillPending && (gameState.player.hp <= 0 || gameState.enemy.hp <= 0)) {
@@ -3209,6 +3694,8 @@ function startNewBattle() {
   setLastNormalLevel(level);
   updateMonsterLevelUI(level);
   if (gameState.battle.ongoing) return;
+  gameState.player.status = {};
+  resetUltimateState();
   gameState.battle.ongoing = true;
   gameState.battle.actionLock = false;
   gameState.player.defending = false;
@@ -3440,6 +3927,7 @@ function handleVictory(level) {
   if (bossContext) {
     endBossEncounter('victory');
   }
+  resetUltimateState();
   if (gameState.battle.autoPlay && !bossContext) {
     scheduleNextAutoBattle('victory');
   }
@@ -3452,6 +3940,7 @@ function handleDefeat(level, context) {
   gameState.battle.actionLock = false;
   if (resurrected) {
     if (bossContext) endBossEncounter('defeat');
+    resetUltimateState();
     if (gameState.battle.autoPlay) scheduleNextAutoBattle('defeat');
     return;
   }
@@ -3601,6 +4090,17 @@ function enemyAction() {
     if (concludeTurn()) return;
     if (!gameState.battle.ongoing) return;
   }
+  const status = ensureEnemyStatus();
+  if (status.timeStop && status.timeStop > 0) {
+    status.timeStop -= 1;
+    addBattleLog('적이 시간 정지로 행동하지 못했습니다!', 'heal');
+    if (status.timeStop <= 0) {
+      delete status.timeStop;
+      addBattleLog('적이 다시 움직일 수 있게 되었습니다.', 'warn');
+    }
+    beginPlayerTurn('afterEnemy');
+    return;
+  }
   const choice = Math.random();
   gameState.enemy.defending = false;
   const speedMul = currentSpeedMultiplier();
@@ -3616,7 +4116,7 @@ function enemyAction() {
   if (choice < 0.7) {
     triggerAnimation('monsterSprite', 'attacking');
     setTimeout(() => {
-      const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, false);
+      const result = calculateDamage(getEnemyOffensiveStats(), getPlayerDefensiveStats(), false);
       if (result.type === 'MISS') {
         addBattleLog('몬스터의 공격이 빗나갔습니다!', 'miss');
       } else {
@@ -3634,7 +4134,7 @@ function enemyAction() {
   } else if (choice < 0.9) {
     triggerAnimation('monsterSprite', 'attacking');
     setTimeout(() => {
-      const result = calculateDamage(gameState.enemy.stats, gameState.player.totalStats, true);
+      const result = calculateDamage(getEnemyOffensiveStats(), getPlayerDefensiveStats(), true);
       triggerAnimation('playerSprite', 'hurt');
       const dealt = applyDamageToPlayer(result.damage, { source: 'skill', critical: true });
       if (dealt > 0) {
@@ -3736,6 +4236,20 @@ function initEventListeners() {
     els.bossIntroOverlay.addEventListener('click', (event) => {
       if (event.target === els.bossIntroOverlay) {
         completeBossIntro();
+      }
+    });
+  }
+  if (els.ultimateOverlay) {
+    els.ultimateOverlay.addEventListener('click', () => {
+      if (state.ultimateActive && state.ultimatePending) {
+        skipUltimateOverlay();
+      }
+    });
+  }
+  if (els.ultimateGif) {
+    els.ultimateGif.addEventListener('error', () => {
+      if (state.ultimateActive && state.ultimatePending) {
+        skipUltimateOverlay();
       }
     });
   }
@@ -3896,6 +4410,8 @@ async function hydrateProfile(firebaseUser) {
   state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
   state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
   ensurePlayerReady();
+  gameState.player.status = {};
+  resetUltimateState();
   const savedLevel = clampMonsterLevel(state.battleProgress?.lastLevel || 1);
   updateMonsterLevelUI(savedLevel);
   setLastNormalLevel(savedLevel, { persist: false });

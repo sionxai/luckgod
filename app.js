@@ -157,7 +157,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), invHolyWater: $('#invHolyWater'), shopPanel: $('#shop'),
         petList: $('#petList'),
         characterList: $('#characterList'),
-        characterSkillDetail: $('#characterSkillDetail'),
+        characterDetailHint: $('#characterDetailHint'),
+        characterDetailModal: $('#characterDetailModal'),
+        characterDetailBody: $('#characterDetailBody'),
+        characterDetailClose: $('#characterDetailClose'),
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantPetTickets: $('#adminGrantPetTickets'), adminGrantSubmit: $('#adminGrantSubmit'),
@@ -238,7 +241,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         enhance: defaultEnhance(),
         forge: { protectEnabled: false, protectStock: 0, autoRunning: false },
         user: null,
-        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear' },
+        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear', selectedCharacterDetail: null, characterDetailOpen: false },
         wallet: 0,
         gold: 0,
         diamonds: 0,
@@ -255,6 +258,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
         combat: { useBattleRes: true, prefBattleRes: true },
         profileListener: null,
+        globalConfigListener: null,
       };
       state.config.petWeights = sanitizePetWeights(state.config.petWeights);
       state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
@@ -874,6 +878,17 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
       function detachProfileListener(){ if(state.profileListener){ try { state.profileListener(); } catch (err) { console.warn('프로필 리스너 해제 실패', err); } state.profileListener = null; } }
 
+      function detachGlobalConfigListener(){
+        if(state.globalConfigListener){
+          try {
+            state.globalConfigListener();
+          } catch (err) {
+            console.warn('전역 설정 리스너 해제 실패', err);
+          }
+          state.globalConfigListener = null;
+        }
+      }
+
       function attachProfileListener(uid){ if(!uid) return; detachProfileListener(); const userRef = ref(db, `users/${uid}`); state.profileListener = onValue(userRef, (snapshot)=>{
           if(!snapshot.exists()) return;
           if(!state.user || state.user.uid !== uid) return;
@@ -905,6 +920,48 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }, (error)=>{
           console.error('프로필 실시간 수신 실패', error);
         }); }
+
+      function applyGlobalConfigUpdate(raw){
+        if(!state.user) return;
+        const payload = (raw && typeof raw === 'object') ? raw : {};
+        const configSource = (payload.config && typeof payload.config === 'object') ? payload.config : payload;
+        state.config = sanitizeConfig(configSource);
+        state.enhance = sanitizeEnhanceConfig(payload.enhance);
+        const activePresetId = typeof payload.activePresetId === 'string' ? payload.activePresetId : null;
+        const activePresetName = typeof payload.activePresetName === 'string' ? payload.activePresetName : null;
+        state.presets.activeGlobalId = activePresetId;
+        state.presets.activeGlobalName = activePresetName;
+
+        buildForgeTable();
+        updateForgeInfo();
+        reflectConfig();
+
+        if(userProfile){
+          userProfile.config = state.config;
+          userProfile.petGachaWeights = state.petGachaWeights;
+          if(userProfile.enhance){
+            delete userProfile.enhance;
+          }
+        }
+
+        updateAdminPresetSelector();
+        updateUserPresetSelectors();
+      }
+
+      function attachGlobalConfigListener(){
+        if(!state.user) return;
+        detachGlobalConfigListener();
+        const globalRef = ref(db, GLOBAL_CONFIG_PATH);
+        state.globalConfigListener = onValue(globalRef, (snapshot)=>{
+          if(!snapshot.exists()){
+            applyGlobalConfigUpdate(null);
+            return;
+          }
+          applyGlobalConfigUpdate(snapshot.val());
+        }, (error)=>{
+          console.error('전역 설정 실시간 수신 실패', error);
+        });
+      }
 
       async function fetchGlobalConfig(){ try {
           const snapshot = await get(ref(db, GLOBAL_CONFIG_PATH));
@@ -1205,6 +1262,14 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         $('#exportCsv').addEventListener('click', exportCsv);
         if (els.resetSession) els.resetSession.addEventListener('click', resetSession);
         if (els.resetGlobal) els.resetGlobal.addEventListener('click', resetGlobal);
+        if (els.characterDetailClose) els.characterDetailClose.addEventListener('click', closeCharacterDetail);
+        if (els.characterDetailModal) {
+          els.characterDetailModal.addEventListener('click', (event) => {
+            if (event.target === els.characterDetailModal || event.target.classList.contains('character-modal__backdrop')) {
+              closeCharacterDetail();
+            }
+          });
+        }
         // combat
         if(els.monLevel){ els.monLevel.addEventListener('input', ()=>{ setLevel(parseInt(els.monLevel.value||'1',10)); }); }
         if(els.nextMonster){ els.nextMonster.addEventListener('click', ()=>{ const rng = getRng(); const lvl = 1 + Math.floor(rng()*999); setLevel(lvl); }); }
@@ -1227,10 +1292,17 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         els.adminChangePw.addEventListener('click', changeAdminPassword);
         if(els.legendaryOverlay){ els.legendaryOverlay.addEventListener('click', (event)=>{ if(!isLegendaryVisible()) return; if(event.target === els.legendaryOverlay && activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); } else if(event.target === els.legendaryOverlay && activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); } }); }
         document.addEventListener('keydown', (event)=>{
-          if(event.key === 'Escape' && isLegendaryVisible()){
-            event.preventDefault();
-            if(activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); }
-            else if(activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); }
+          if(event.key === 'Escape'){
+            if(isLegendaryVisible()){
+              event.preventDefault();
+              if(activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); }
+              else if(activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); }
+              return;
+            }
+            if(state.ui.characterDetailOpen){
+              event.preventDefault();
+              closeCharacterDetail();
+            }
           }
         });
         els.saveDrops.addEventListener('click', ()=>{
@@ -1916,6 +1988,79 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }
       });
 
+      const PLAYER_ULTIMATE_DEFAULT_CHANCE = 0.05;
+
+      const CHARACTER_ULTIMATE_DATA = Object.freeze({
+        warrior: [
+          { minTier: 'SS+', name: '천룡 파쇄격', variant: 'warrior-ssplus' },
+          { minTier: 'SSS+', name: '파멸의 낙뢰도', variant: 'warrior-sssplus' }
+        ],
+        mage: [
+          { minTier: 'SS+', name: '마나 초신성', variant: 'mage-ssplus' },
+          { minTier: 'SSS+', name: '라그나로크 오브', variant: 'mage-sssplus' }
+        ],
+        archer: [
+          { minTier: 'SS+', name: '섬광의 연사', variant: 'archer-ssplus' },
+          { minTier: 'SSS+', name: '운석 낙하 사격', variant: 'archer-sssplus' }
+        ],
+        rogue: [
+          { minTier: 'SS+', name: '그림자 찌르기', variant: 'rogue-ssplus' },
+          { minTier: 'SSS+', name: '혈월 난무', variant: 'rogue-sssplus' }
+        ],
+        goddess: [
+          { minTier: 'S+', name: '천상의 축복', variant: 'goddess-splus' },
+          { minTier: 'SS+', name: '시간의 기도', variant: 'goddess-ssplus' },
+          { minTier: 'SSS+', name: '창세의 빛', variant: 'goddess-sssplus' }
+        ]
+      });
+
+      const CHARACTER_ULTIMATE_INFO = Object.freeze({
+        'warrior-ssplus': {
+          summary: '공격력의 420% 피해를 입히고 2턴 동안 적 방어력을 35% 낮추며, 자신은 2턴 동안 피해 20% 감소.',
+          detail: '천룡 파쇄격은 방어력 감소와 생존 버프를 동시에 제공하여 후속 딜을 강화합니다.'
+        },
+        'warrior-sssplus': {
+          summary: '공격력의 550% 피해 + 적 현재 체력 15% 진실 피해, 방어력 45% 감소(2턴), 자신 피해 감소 30%(2턴).',
+          detail: '파멸의 낙뢰도는 거대한 폭발 피해로 전투 흐름을 뒤집고, 강력한 방어 디버프와 생존 버프를 제공합니다.'
+        },
+        'mage-ssplus': {
+          summary: '공격력의 380% 피해 후 3턴 동안 적이 받는 마법 피해 +25%, 자신 체력 25% 회복.',
+          detail: '마나 초신성은 마법 취약을 부여해 동료의 마법 피해를 강화하고, 안정적인 회복을 제공합니다.'
+        },
+        'mage-sssplus': {
+          summary: '공격력의 520% 피해 + 적 현재 체력 12% 진실 피해, 마법 피해 +40%(3턴), 스킬 쿨다운 1턴 감소.',
+          detail: '라그나로크 오브는 폭발적인 피해와 함께 적을 취약하게 만들고, 자신의 다음 스킬 사용을 앞당깁니다.'
+        },
+        'archer-ssplus': {
+          summary: '5연속 사격(각 80% 피해). 치명 시 적 명중률 10% 감소(1턴).',
+          detail: '섬광의 연사는 빠른 연속 공격으로 적을 무력화하고 명중률을 떨어뜨립니다.'
+        },
+        'archer-sssplus': {
+          summary: '7연속 사격(각 90% 피해). 치명 시 명중률 15% 감소(2턴), 모두 명중 시 스킬 쿨다운 1턴 감소.',
+          detail: '운석 낙하 사격은 다단히트로 피해를 누적시키고, 모든 화살을 적중시키면 추가 행동 기회를 제공합니다.'
+        },
+        'rogue-ssplus': {
+          summary: '공격력의 300% 피해 + 3턴 출혈(공격력 90%), 자신 회피 20%(1턴).',
+          detail: '그림자 찌르기는 빠른 공격과 출혈로 적을 괴롭히고, 회피 버프로 반격을 피합니다.'
+        },
+        'rogue-sssplus': {
+          summary: '2연속 240% 피해(치명률 +30%) 후 4턴 출혈(공격력 120%), 회피 25%·속도 +15 (2턴).',
+          detail: '혈월 난무는 암살자의 진수를 보여 주며, 전투 템포를 장악합니다.'
+        },
+        'goddess-splus': {
+          summary: '체력 40% 회복, 2턴 동안 공격·방어 +25%, 성속성 피해 280%.',
+          detail: '천상의 축복은 파티를 회복하고 강화하며, 신성한 낙뢰로 적을 공격합니다.'
+        },
+        'goddess-ssplus': {
+          summary: '체력 50% 회복 + 보호막 생성, 적 1턴 시간정지, 스킬 쿨다운 초기화, 성속성 피해 320%.',
+          detail: '시간의 기도는 적을 멈추고 아군을 완벽히 지켜 주며, 다시 공격할 준비를 갖춥니다.'
+        },
+        'goddess-sssplus': {
+          summary: '체력 완전 회복 + 아군 전원 부활/회복, 공격·방어·속도 +35%(3턴), 성속성 피해 650% + 진실 피해 20%, 적 받는 피해 +30%(2턴).',
+          detail: '창세의 빛은 전투당 한 번 모든 것을 되돌리는 궁극기입니다. 전열을 재정비하고 적을 말 그대로 태워 버립니다.'
+        }
+      });
+
       function ensureCharacterState(){
         if(!state.characters || typeof state.characters !== 'object'){
           state.characters = createDefaultCharacterState();
@@ -1955,6 +2100,13 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         return { atk: 0, def: 0, hp: 5000, critRate: 5, critDmg: 150, dodge: 5, speed: 100 };
       }
 
+      function characterTierAtLeast(tier, minTier){
+        const current = TIER_INDEX[tier];
+        const required = TIER_INDEX[minTier];
+        if(current === undefined || required === undefined) return false;
+        return current <= required;
+      }
+
       function randomCharacterIdForTier(tier, rng){
         const pool = (CHARACTER_IDS_BY_TIER[tier] || []).slice();
         if(pool.length === 0){
@@ -1966,12 +2118,99 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
       function getCharacterSkillInfo(def){ if(!def) return null; return CHARACTER_SKILL_INFO[def.classId] || null; }
       function getCharacterSkillDescription(def){ const info = getCharacterSkillInfo(def); return info ? `${info.title}: ${info.summary}` : ''; }
-      function updateCharacterSkillDetail(def){ if(!els.characterSkillDetail) return; const info = getCharacterSkillInfo(def); if(!info){ els.characterSkillDetail.innerHTML = '캐릭터를 선택하면 직업별 스킬 정보를 확인할 수 있습니다.'; return; } const parts = [
-          `<span class="skill-title">${info.title}</span>`,
-          `<span class="skill-summary">${info.summary}</span>`
+      function getCharacterUltimateDefinition(def){
+        if(!def) return null;
+        const entries = CHARACTER_ULTIMATE_DATA[def.classId];
+        if(!entries) return null;
+        let matched = null;
+        entries.forEach((entry) => {
+          if(characterTierAtLeast(def.tier, entry.minTier)){
+            matched = entry;
+          }
+        });
+        if(!matched) return null;
+        return {
+          name: matched.name,
+          variant: matched.variant,
+          chance: PLAYER_ULTIMATE_DEFAULT_CHANCE,
+          oncePerBattle: true
+        };
+      }
+      function getCharacterUltimateInfo(ultimateDef){ if(!ultimateDef) return null; return CHARACTER_ULTIMATE_INFO[ultimateDef.variant] || null; }
+
+      function formatUltimateChance(ultimateDef){ const chance = typeof ultimateDef?.chance === 'number' ? ultimateDef.chance : PLAYER_ULTIMATE_DEFAULT_CHANCE; const pct = (chance * 100).toFixed(1); return pct.endsWith('.0') ? `${pct.slice(0, -2)}%` : `${pct}%`; }
+
+      function buildCharacterDetailContent(def){ if(!def){ return '<p class="muted">캐릭터를 선택하면 상세 정보를 확인할 수 있습니다.</p>'; }
+        const characters = ensureCharacterState();
+        const owned = characters.owned?.[def.id] || 0;
+        const stats = def.stats || {};
+        const skillInfo = getCharacterSkillInfo(def);
+        const ultimateDef = getCharacterUltimateDefinition(def);
+        const ultimateInfo = getCharacterUltimateInfo(ultimateDef);
+        const statEntries = [
+          { key:'hp', label:'HP', format:(v)=>formatNum(Math.round(v||0)) },
+          { key:'atk', label:'공격력', format:(v)=>formatNum(Math.round(v||0)) },
+          { key:'def', label:'방어력', format:(v)=>formatNum(Math.round(v||0)) },
+          { key:'critRate', label:'치명타율', format:(v)=>`${Math.round(v||0)}%` },
+          { key:'critDmg', label:'치명타 피해', format:(v)=>`${Math.round(v||0)}%` },
+          { key:'dodge', label:'회피율', format:(v)=>`${Math.round(v||0)}%` },
+          { key:'speed', label:'속도', format:(v)=>formatNum(Math.round(v||0)) }
         ];
-        if(info.detail){ parts.push(`<span class="skill-detail">${info.detail}</span>`); }
-        els.characterSkillDetail.innerHTML = parts.join(''); }
+        const statHtml = statEntries.map(({ key, label, format }) => {
+          const value = stats[key];
+          const text = format ? format(value || 0) : formatNum(Math.round(value || 0));
+          return `<span><span class="stat-label">${label}</span>${text}</span>`;
+        }).join('');
+        const ownedText = isAdmin() ? '∞' : formatNum(owned);
+        const sections = [];
+        sections.push(`
+          <div class="detail-header">
+            <div>
+              <div class="detail-title" id="characterDetailTitle">${def.name || def.id}</div>
+              <div class="detail-tier">${def.tier || '-'} · ${def.className || def.classId || ''}</div>
+            </div>
+            <div class="detail-owned muted">보유: <b>${ownedText}</b></div>
+          </div>
+        `);
+        sections.push(`
+          <div class="detail-section">
+            <h4>기본 능력치</h4>
+            <div class="stat-list">${statHtml}</div>
+          </div>
+        `);
+        if(skillInfo){
+          sections.push(`
+            <div class="detail-section">
+              <h4>직업 스킬 — ${skillInfo.title}</h4>
+              <p>${skillInfo.summary}</p>
+              ${skillInfo.detail ? `<p class="muted">${skillInfo.detail}</p>` : ''}
+            </div>
+          `);
+        }
+        if(ultimateDef){
+          const chanceText = formatUltimateChance(ultimateDef);
+          const ultimateSummary = ultimateInfo?.summary || '발동 시 강력한 필살기가 전개됩니다.';
+          const ultimateDetail = ultimateInfo?.detail ? `<p class="muted">${ultimateInfo.detail}</p>` : '';
+          const onceText = ultimateDef.oncePerBattle === false ? '' : ' · 전투당 1회';
+          sections.push(`
+            <div class="detail-section">
+              <h4>필살기 — ${ultimateDef.name}</h4>
+              <p>발동 확률 ${chanceText}${onceText}</p>
+              <p>${ultimateSummary}</p>
+              ${ultimateDetail}
+            </div>
+          `);
+        }
+        return sections.join('');
+      }
+
+      function openCharacterDetail(def){ if(!els.characterDetailModal || !els.characterDetailBody) return; const content = buildCharacterDetailContent(def); els.characterDetailBody.innerHTML = content; els.characterDetailBody.scrollTop = 0; els.characterDetailModal.hidden = false; requestAnimationFrame(()=>{ els.characterDetailModal.classList.add('show'); }); state.ui.characterDetailOpen = true; }
+
+      function closeCharacterDetail(){ if(!els.characterDetailModal) return; els.characterDetailModal.classList.remove('show'); state.ui.characterDetailOpen = false; setTimeout(()=>{ if(!state.ui.characterDetailOpen && els.characterDetailModal) els.characterDetailModal.hidden = true; }, 200); }
+
+      function selectCharacterDetail(characterId){ if(!CHARACTER_IDS.includes(characterId)) return; state.ui.selectedCharacterDetail = characterId; updateCharacterDetailSelection(); openCharacterDetail(getCharacterDefinition(characterId)); }
+
+      function updateCharacterDetailSelection(){ if(!els.characterList) return; const selectedId = state.ui.selectedCharacterDetail || getActiveCharacterId(); const cards = els.characterList.querySelectorAll('.character-card'); cards.forEach((card) => { card.classList.toggle('selected', card.dataset.character === selectedId); }); if(state.ui.characterDetailOpen && els.characterDetailBody){ els.characterDetailBody.innerHTML = buildCharacterDetailContent(getCharacterDefinition(selectedId)); } }
 
       // Points (wallet)
       function loadWallet(){
@@ -2216,6 +2455,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
       async function applyProfileState(){
         if(!currentFirebaseUser || !userProfile) return;
+        detachGlobalConfigListener();
         const uid = currentFirebaseUser.uid;
         const fallbackBase = `user-${uid.slice(0, 6)}`;
         const derivedName = sanitizeUsername(userProfile.username, deriveUsernameFromUser(currentFirebaseUser) || fallbackBase) || fallbackBase;
@@ -2274,6 +2514,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(userProfile.enhance){
           delete userProfile.enhance;
         }
+        buildForgeTable();
+        updateForgeInfo();
         const profilePetWeights = sanitizePetWeights(userProfile.petGachaWeights);
         const configPetWeights = sanitizePetWeights(state.config.petWeights);
         const configHasCustom = PET_IDS.some((id) => configPetWeights[id] !== 1);
@@ -2351,6 +2593,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }
         applySelectedPresetIfAvailable(role === 'admin');
         refreshPresetSelectors();
+
+        attachGlobalConfigListener();
 
         refreshInventoryCache();
         const equipIds = PART_KEYS.map(k=> (state.equip[k]?.id)||0);
@@ -2561,6 +2805,9 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           if(a.count !== b.count) return b.count - a.count;
           return a.id.localeCompare(b.id);
         });
+        if(!state.ui.selectedCharacterDetail || !entries.some((entry) => entry.id === state.ui.selectedCharacterDetail)){
+          state.ui.selectedCharacterDetail = activeId;
+        }
         let appended = 0;
         entries.forEach(({ id, def, count, isActive }) => {
           const card = document.createElement('div');
@@ -2609,13 +2856,25 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           if(isActive){
             btn.disabled = true;
           } else {
-            btn.addEventListener('click', () => setActiveCharacter(id));
+            btn.addEventListener('click', (event) => {
+              event.stopPropagation();
+              setActiveCharacter(id);
+            });
           }
           actions.appendChild(btn);
           card.appendChild(actions);
+          card.addEventListener('click', (event) => {
+            if(event.target instanceof HTMLElement && event.target.closest('button')) return;
+            selectCharacterDetail(id);
+          });
           fragment.appendChild(card);
           appended += 1;
         });
+        if(els.characterDetailHint){
+          els.characterDetailHint.textContent = appended === 0
+            ? '보유한 캐릭터가 없습니다.'
+            : '캐릭터 카드를 눌러 상세 정보를 확인하세요.';
+        }
         if(appended === 0){
           const empty = document.createElement('div');
           empty.className = 'muted small';
@@ -2624,11 +2883,11 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         } else {
           container.appendChild(fragment);
         }
-        updateCharacterSkillDetail(getActiveCharacterDefinition());
+        updateCharacterDetailSelection();
         renderCharacterStats();
       }
 
-      function setActiveCharacter(characterId){ if(!CHARACTER_IDS.includes(characterId)) return; const characters = ensureCharacterState(); if(!isAdmin() && (characters.owned?.[characterId] || 0) <= 0){ alert('해당 캐릭터를 보유하고 있지 않습니다.'); return; } if(characters.active === characterId) return; characters.active = characterId; state.characters = characters; if(userProfile) userProfile.characters = characters; updateCharacterSkillDetail(getCharacterDefinition(characterId)); updateInventoryView(); markProfileDirty(); }
+      function setActiveCharacter(characterId){ if(!CHARACTER_IDS.includes(characterId)) return; const characters = ensureCharacterState(); if(!isAdmin() && (characters.owned?.[characterId] || 0) <= 0){ alert('해당 캐릭터를 보유하고 있지 않습니다.'); return; } if(characters.active === characterId) return; characters.active = characterId; state.characters = characters; if(userProfile) userProfile.characters = characters; state.ui.selectedCharacterDetail = characterId; updateInventoryView(); markProfileDirty(); }
       function getTotals(){
         const baseStats = getActiveCharacterBaseStats();
         const derived = deriveCombatStats(state.equip, state.enhance, baseStats, state.pets?.active || null);
@@ -2708,7 +2967,34 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
       function buildForgeTable(){ const tb = els.forgeTableBody; tb.innerHTML=''; const admin = isAdmin(); for(let lv=1; lv<=20; lv++){ const tr = document.createElement('tr'); const mul = state.enhance.multipliers[lv]||1; const p = state.enhance.probs[lv]||0; tr.innerHTML = `<td>${lv}</td><td><input data-kind="mul" data-lv="${lv}" type="number" step="any" value="${mul}" style="width:100px" ${admin?'':'disabled'} /></td><td><input data-kind="p" data-lv="${lv}" type="number" step="any" min="0" max="1" value="${p}" style="width:100px" ${admin?'':'disabled'} /></td>`; tb.appendChild(tr); }
       }
-      function onForgeTableInput(e){ const t = e.target; if(!(t instanceof HTMLInputElement)) return; if(!isAdmin()) return; const lv = parseInt(t.dataset.lv||'0',10); if(!lv) return; if(t.dataset.kind==='mul'){ let v = parseFloat(t.value); if(!(v>0)) v=1; state.enhance.multipliers[lv] = v; } else if(t.dataset.kind==='p'){ let v = parseFloat(t.value); if(!(v>=0)) v=0; if(v>1) v=1; state.enhance.probs[lv] = v; } updateInventoryView(); updateForgeInfo(); markProfileDirty(); }
+      function onForgeTableInput(e){
+        const t = e.target;
+        if(!(t instanceof HTMLInputElement)) return;
+        if(!isAdmin()) return;
+        const lv = parseInt(t.dataset.lv||'0',10);
+        if(!lv) return;
+        let changed = false;
+        if(t.dataset.kind==='mul'){
+          let v = parseFloat(t.value);
+          if(!(v>0)) v = 1;
+          state.enhance.multipliers[lv] = v;
+          t.value = String(v);
+          changed = true;
+        } else if(t.dataset.kind==='p'){
+          let v = parseFloat(t.value);
+          if(!(v>=0)) v = 0;
+          if(v>1) v = 1;
+          state.enhance.probs[lv] = v;
+          t.value = String(v);
+          changed = true;
+        }
+        if(!changed) return;
+        updateForgeInfo();
+        markProfileDirty();
+        if(isAdmin()){
+          persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
+        }
+      }
 
       function performForgeAttempt(opts){
         const auto = !!(opts && opts.auto);
@@ -3094,6 +3380,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(profileSaveTimer){ clearTimeout(profileSaveTimer); profileSaveTimer = null; }
         if(!firebaseUser){
           detachProfileListener();
+          detachGlobalConfigListener();
           window.location.href = 'login.html';
           return;
         }

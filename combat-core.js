@@ -296,6 +296,61 @@ const CHARACTER_IDS_BY_TIER = TIERS.reduce((acc, tier) => {
   acc[tier] = [];
   return acc;
 }, {});
+const CHARACTER_ULTIMATE_DEFS = {};
+
+const TIER_SEQUENCE = ['D', 'C', 'B', 'A', 'S', 'S+', 'SS+', 'SSS+'];
+
+function tierAtLeast(tier, threshold) {
+  const currentIndex = TIER_SEQUENCE.indexOf(tier);
+  const requiredIndex = TIER_SEQUENCE.indexOf(threshold);
+  if (currentIndex === -1 || requiredIndex === -1) return false;
+  return currentIndex >= requiredIndex;
+}
+
+const DEFAULT_ULTIMATE_CHANCE = 0.05;
+
+function createUltimateDefinition(classId, tier) {
+  if (classId === 'goddess') {
+    if (!tierAtLeast(tier, 'S+')) return null;
+  } else {
+    if (!tierAtLeast(tier, 'SS+')) return null;
+  }
+  const base = {
+    chance: DEFAULT_ULTIMATE_CHANCE,
+    oncePerBattle: true,
+    classId,
+    tier
+  };
+  switch (classId) {
+    case 'warrior':
+      return tier === 'SSS+'
+        ? { ...base, name: '파멸의 낙뢰도', variant: 'warrior-sssplus' }
+        : { ...base, name: '천룡 파쇄격', variant: 'warrior-ssplus' };
+    case 'mage':
+      return tier === 'SSS+'
+        ? { ...base, name: '라그나로크 오브', variant: 'mage-sssplus' }
+        : { ...base, name: '마나 초신성', variant: 'mage-ssplus' };
+    case 'archer':
+      return tier === 'SSS+'
+        ? { ...base, name: '운석 낙하 사격', variant: 'archer-sssplus' }
+        : { ...base, name: '섬광의 연사', variant: 'archer-ssplus' };
+    case 'rogue':
+      return tier === 'SSS+'
+        ? { ...base, name: '혈월 난무', variant: 'rogue-sssplus' }
+        : { ...base, name: '그림자 찌르기', variant: 'rogue-ssplus' };
+    case 'goddess': {
+      if (tier === 'SSS+') {
+        return { ...base, name: '창세의 빛', variant: 'goddess-sssplus' };
+      }
+      if (tier === 'SS+') {
+        return { ...base, name: '시간의 기도', variant: 'goddess-ssplus' };
+      }
+      return { ...base, name: '천상의 축복', variant: 'goddess-splus' };
+    }
+    default:
+      return null;
+  }
+}
 
 function characterImageCandidates(classInfo, tier) {
   const dir = classInfo.assetDir || classInfo.code;
@@ -360,6 +415,10 @@ function registerCharacter(def) {
   };
   CHARACTER_IDS.push(id);
   CHARACTER_IDS_BY_TIER[tier].push(id);
+  const ultimate = createUltimateDefinition(classId, tier);
+  if (ultimate) {
+    CHARACTER_ULTIMATE_DEFS[id] = ultimate;
+  }
 }
 
 [
@@ -809,7 +868,9 @@ export function calculateDamage(attacker, defender, isSkill = false, rng = Math.
     baseDamage *= critDmg / 100;
   }
   const dodgeRate = defender.dodge || defender.stats?.dodge || 5;
-  if (rng() * 100 < dodgeRate) {
+  const accuracyPenalty = Math.max(0, Math.min(0.95, attacker.accuracyPenalty || 0));
+  const effectiveDodge = Math.min(95, dodgeRate + accuracyPenalty * 100);
+  if (rng() * 100 < effectiveDodge) {
     return { damage: 0, type: 'MISS' };
   }
   const defense = defender.def || defender.stats?.def || 0;
@@ -825,7 +886,8 @@ export {
   CHARACTER_CLASS_INFO,
   CHARACTER_DEFS,
   CHARACTER_IDS,
-  CHARACTER_IDS_BY_TIER
+  CHARACTER_IDS_BY_TIER,
+  CHARACTER_ULTIMATE_DEFS
 };
 
 function createCombatant(config) {
