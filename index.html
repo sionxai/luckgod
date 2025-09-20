@@ -193,6 +193,22 @@
             <label>펫 뽑기권<input id="adminGrantPetTickets" type="number" step="1" value="0" /></label>
             <button id="adminGrantSubmit">지급</button>
           </div>
+          <div class="row" style="margin-top:16px">
+            <h3 class="muted" style="margin:0">백업 · 복원</h3>
+          </div>
+          <div class="row preset-admin-row">
+            <button id="adminBackupRefresh" type="button">목록 새로고침</button>
+            <button id="adminRestoreFromMirror" type="button">미러 복원</button>
+            <label>스냅샷<select id="adminSnapshotSelect"></select></label>
+            <button id="adminRestoreFromSnapshot" type="button">스냅샷 복원</button>
+          </div>
+          <div id="adminBackupStatus" class="muted small" aria-live="polite"></div>
+          <table class="stats" id="adminSnapshotTable" aria-label="백업 스냅샷 목록" style="margin-top:8px">
+            <thead>
+              <tr><th>스냅샷 키</th><th>생성 시각</th><th>메모</th></tr>
+            </thead>
+            <tbody id="adminSnapshotTableBody"></tbody>
+          </table>
         </section>
 
         <section class="panel" id="configPanel" data-section="gacha">

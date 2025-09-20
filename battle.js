@@ -180,6 +180,7 @@ const AUTO_STOP_REASON_LABELS = {
   boss: '보스 도전',
   other: '중지'
 };
+const AUTO_SESSION_STORAGE_PREFIX = 'gacha:autoSession:';
 const BOSS_IDS = ['boss150', 'boss300', 'boss450', 'boss550', 'boss800'];
 
 const BOSS_UNLOCK_LEVELS = {
@@ -387,6 +388,8 @@ const state = {
   combat: { useBattleRes: true, prefBattleRes: true, autoPotion: false, autoHyper: false },
   saveTimer: null,
   pendingUpdates: {},
+  autoSessionDirty: false,
+  autoSessionPersistTimer: null,
   buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
   autoNextTimer: null,
   autoPlayerTimer: null,
@@ -1738,17 +1741,27 @@ function queueProfileUpdate(partial) {
   if (state.saveTimer) return;
   state.saveTimer = setTimeout(async () => {
     state.saveTimer = null;
-    const payload = { ...state.pendingUpdates };
-    state.pendingUpdates = {};
-    if (!Object.prototype.hasOwnProperty.call(payload, 'updatedAt')) {
-      payload.updatedAt = Date.now();
-    }
-    try {
-      await update(ref(db, `users/${state.user.uid}`), payload);
-    } catch (error) {
-      console.error('프로필 저장 실패', error);
-    }
+    await flushProfileUpdates();
   }, 800);
+}
+
+async function flushProfileUpdates() {
+  if (state.saveTimer) {
+    clearTimeout(state.saveTimer);
+    state.saveTimer = null;
+  }
+  if (!state.user) return;
+  const payload = { ...state.pendingUpdates };
+  state.pendingUpdates = {};
+  if (!Object.keys(payload).length) return;
+  if (!Object.prototype.hasOwnProperty.call(payload, 'updatedAt')) {
+    payload.updatedAt = Date.now();
+  }
+  try {
+    await update(ref(db, `users/${state.user.uid}`), payload);
+  } catch (error) {
+    console.error('프로필 저장 실패', error);
+  }
 }
 
 function updateResourceSummary() {
@@ -1849,25 +1862,158 @@ function persistDifficultyState() {
   queueProfileUpdate({ difficultyState: payload });
 }
 
+function autoSessionStorageKey() {
+  const uid = state.user?.uid;
+  if (!uid) return null;
+  return `${AUTO_SESSION_STORAGE_PREFIX}${uid}`;
+}
+
+function rememberAutoSessionSnapshot(payload) {
+  if (!payload) return;
+  const key = autoSessionStorageKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  try {
+    const snapshot = { ...payload, savedAt: Date.now() };
+    localStorage.setItem(key, JSON.stringify(snapshot));
+  } catch (error) {
+    // ignore storage errors
+  }
+}
+
+function readAutoSessionSnapshot() {
+  const key = autoSessionStorageKey();
+  if (!key || typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return sanitizeAutoSession(parsed);
+  } catch (error) {
+    return null;
+  }
+}
+
+function clearAutoSessionSnapshot() {
+  const key = autoSessionStorageKey();
+  if (!key || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    // ignore storage errors
+  }
+}
+
+function mergeAutoSessionSnapshot() {
+  const snapshot = readAutoSessionSnapshot();
+  if (!snapshot) return;
+  const current = state.autoSession || sanitizeAutoSession(null);
+  const currentStamp = Math.max(0, current.lastUpdate || 0);
+  const snapshotStamp = Math.max(0, snapshot.lastUpdate || 0);
+  if (snapshotStamp <= currentStamp) {
+    return;
+  }
+  state.autoSession = sanitizeAutoSession({
+    ...current,
+    ...snapshot
+  });
+  persistAutoSession();
+}
+
+function buildAutoSessionPayload(session = state.autoSession) {
+  const source = session || sanitizeAutoSession(null);
+  return {
+    accumulatedMs: Math.max(0, Math.round(source.accumulatedMs || 0)),
+    lastUpdate: Math.max(0, Math.round(source.lastUpdate || 0)),
+    preloaded: clampNumber(source.preloaded, 0, HOLY_WATER_MAX_PRELOAD, 0),
+    hellActive: !!source.hellActive,
+    hellStartedAt: Math.max(0, Math.round(source.hellStartedAt || 0)),
+    hellEndsAt: Math.max(0, Math.round(source.hellEndsAt || 0)),
+    forcedDifficulty: DIFFICULTY_ORDER.includes(source.forcedDifficulty)
+      ? source.forcedDifficulty
+      : null
+  };
+}
+
 function persistAutoSession(options = {}) {
   if (!state.autoSession) {
     state.autoSession = sanitizeAutoSession(null);
   }
-  const payload = {
-    accumulatedMs: Math.max(0, Math.round(state.autoSession.accumulatedMs || 0)),
-    lastUpdate: Math.max(0, Math.round(state.autoSession.lastUpdate || 0)),
-    preloaded: clampNumber(state.autoSession.preloaded, 0, HOLY_WATER_MAX_PRELOAD, 0),
-    hellActive: !!state.autoSession.hellActive,
-    hellStartedAt: Math.max(0, Math.round(state.autoSession.hellStartedAt || 0)),
-    hellEndsAt: Math.max(0, Math.round(state.autoSession.hellEndsAt || 0)),
-    forcedDifficulty: DIFFICULTY_ORDER.includes(state.autoSession.forcedDifficulty) ? state.autoSession.forcedDifficulty : null
-  };
+  const payload = buildAutoSessionPayload(state.autoSession);
   if (state.profile) {
     state.profile.autoSession = { ...payload };
   }
   if (options.persist !== false) {
     queueProfileUpdate({ autoSession: payload });
   }
+  if (options.snapshot !== false) {
+    rememberAutoSessionSnapshot(payload);
+  }
+  state.autoSessionDirty = false;
+  if (state.autoSessionPersistTimer) {
+    clearTimeout(state.autoSessionPersistTimer);
+    state.autoSessionPersistTimer = null;
+  }
+  return payload;
+}
+
+function persistAutoSessionImmediate(payload) {
+  if (!state.user) return;
+  const prepared = payload || buildAutoSessionPayload(state.autoSession);
+  rememberAutoSessionSnapshot(prepared);
+  try {
+    const immediatePayload = {
+      autoSession: prepared,
+      updatedAt: Date.now()
+    };
+    update(ref(db, `users/${state.user.uid}`), immediatePayload).catch((error) => {
+      console.error('자동 전투 상태 즉시 저장 실패', error);
+    });
+  } catch (error) {
+    console.error('자동 전투 상태 즉시 저장 중 오류', error);
+  }
+}
+
+function scheduleAutoSessionPersist({ immediate = false } = {}) {
+  if (!state.autoSession) {
+    state.autoSession = sanitizeAutoSession(null);
+  }
+  if (immediate) {
+    if (state.autoSessionPersistTimer) {
+      clearTimeout(state.autoSessionPersistTimer);
+      state.autoSessionPersistTimer = null;
+    }
+    state.autoSessionDirty = false;
+    const payload = persistAutoSession({ persist: false, snapshot: false });
+    if (!state.user) return;
+    persistAutoSessionImmediate(payload);
+    return;
+  }
+  state.autoSessionDirty = true;
+  if (state.autoSessionPersistTimer) return;
+  state.autoSessionPersistTimer = setTimeout(() => {
+    state.autoSessionPersistTimer = null;
+    if (!state.autoSessionDirty) return;
+    state.autoSessionDirty = false;
+    persistAutoSession();
+  }, 5000);
+}
+
+function syncAutoSessionNow() {
+  if (!state.user) return;
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  state.autoSession.lastUpdate = Date.now();
+  scheduleAutoSessionPersist({ immediate: true });
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    syncAutoSessionNow();
+  }
+}
+
+function handlePageHide() {
+  syncAutoSessionNow();
 }
 
 function buildEquipmentList() {
@@ -2246,6 +2392,7 @@ function updateAutoSession(now = Date.now()) {
   if (!Number.isFinite(delta) || delta < 0) {
     delta = 0;
   }
+  const hadDelta = delta > 0;
   session.lastUpdate = now;
 
   if (session.hellActive) {
@@ -2275,12 +2422,17 @@ function updateAutoSession(now = Date.now()) {
       closeHell('cooldown');
       updateAutoSessionUi();
     }
+    if (hadDelta) {
+      scheduleAutoSessionPersist();
+    }
     return;
   }
 
   const threshold = computeAutoThresholdMs(session);
   if (threshold > 0 && session.accumulatedMs >= threshold) {
     openHell('threshold');
+  } else if (hadDelta) {
+    scheduleAutoSessionPersist();
   }
 }
 
@@ -3392,6 +3544,7 @@ function initEventListeners() {
     window.location.href = 'pvp.html';
   });
   els.logout?.addEventListener('click', async () => {
+    clearAutoSessionSnapshot();
     await signOut(auth);
   });
   document.addEventListener('keydown', (event) => {
@@ -3401,6 +3554,9 @@ function initEventListeners() {
     event.preventDefault();
     startNewBattle();
   });
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('pagehide', handlePageHide);
+  window.addEventListener('beforeunload', handlePageHide);
 }
 
 function maybeApplyAutoPlayPreference() {
@@ -3469,6 +3625,7 @@ async function hydrateProfile(firebaseUser) {
   state.battleProgress = sanitizeBattleProgress(rawProfile.battleProgress);
   state.difficultyState = sanitizeDifficultyState(rawProfile.difficultyState);
   state.autoSession = sanitizeAutoSession(rawProfile.autoSession);
+  mergeAutoSessionSnapshot();
   state.pets = sanitizePetState(rawProfile.pets);
   state.characters = sanitizeCharacterState(rawProfile.characters);
   ensureCharacterState();

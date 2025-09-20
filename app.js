@@ -9,7 +9,9 @@ import {
   update,
   EmailAuthProvider,
   reauthenticateWithCredential,
-  updatePassword
+  updatePassword,
+  functions,
+  httpsCallable
 } from './firebase.js';
 import { onValue } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js';
 import {
@@ -159,6 +161,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantPetTickets: $('#adminGrantPetTickets'), adminGrantSubmit: $('#adminGrantSubmit'),
+        adminBackupRefresh: $('#adminBackupRefresh'), adminRestoreFromMirror: $('#adminRestoreFromMirror'), adminRestoreFromSnapshot: $('#adminRestoreFromSnapshot'), adminSnapshotSelect: $('#adminSnapshotSelect'), adminBackupStatus: $('#adminBackupStatus'), adminSnapshotTableBody: $('#adminSnapshotTableBody'),
         globalPresetSelect: $('#globalPresetSelect'), personalPresetSelect: $('#personalPresetSelect'), applyGlobalPreset: $('#applyGlobalPreset'), applyPersonalPreset: $('#applyPersonalPreset'), personalPresetName: $('#personalPresetName'), savePersonalPreset: $('#savePersonalPreset'), presetMsg: $('#presetMsg'), toggleUserEdit: $('#toggleUserEdit'),
         petTicketInline: $('#petTicketInline'),
         holyWaterCount: $('#holyWaterCount'),
@@ -242,6 +245,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         presets: { global: [], personal: [], activeGlobalId: null, activeGlobalName: null },
         selectedPreset: { scope: null, id: null },
         adminUsers: [],
+        backups: { mirror: null, snapshots: [] },
         timers: { manualLast: 0, autoLast: 0, uiTimer: null, autoTimer: null, autoOn: false },
         inRun: false,
         items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, holyWater: 0, petTicket: 0 },
@@ -649,6 +653,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           list.sort(function(a,b){ return a.username.localeCompare(b.username, 'ko-KR', { sensitivity:'base', numeric:true }); });
           state.adminUsers = list;
           populateAdminUserSelect();
+          await refreshAdminBackups({ silent: true });
         } catch (error) {
           console.error('사용자 목록을 불러오지 못했습니다.', error);
           setAdminMsg('사용자 목록을 불러오지 못했습니다.', 'error');
@@ -669,6 +674,152 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const goldText = info.gold === null ? '∞' : formatNum(info.gold||0);
         const petTicketText = info.role === 'admin' ? '∞' : formatNum(info.petTickets || 0);
         statsEl.textContent = `포인트 ${walletText} / 골드 ${goldText} / 다이아 ${formatNum(info.diamonds||0)} / 펫 뽑기권 ${petTicketText}`;
+      }
+
+      function setBackupMsg(text, tone){
+        if(!els.adminBackupStatus) return;
+        els.adminBackupStatus.textContent = text || '';
+        els.adminBackupStatus.classList.remove('msg-ok','msg-warn','msg-danger');
+        if(!tone) return;
+        if(tone === 'ok') els.adminBackupStatus.classList.add('msg-ok');
+        else if(tone === 'warn') els.adminBackupStatus.classList.add('msg-warn');
+        else if(tone === 'error') els.adminBackupStatus.classList.add('msg-danger');
+      }
+
+      function resetSnapshotSelect(label){
+        if(!els.adminSnapshotSelect) return;
+        els.adminSnapshotSelect.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = label;
+        els.adminSnapshotSelect.appendChild(opt);
+      }
+
+      function clearBackupUi(){
+        resetSnapshotSelect('스냅샷 없음');
+        if(els.adminSnapshotTableBody) els.adminSnapshotTableBody.innerHTML = '';
+      }
+
+      function renderAdminSnapshotList(){
+        const snapshots = Array.isArray(state.backups.snapshots) ? state.backups.snapshots : [];
+        if(!els.adminSnapshotTableBody) return;
+        resetSnapshotSelect(snapshots.length ? '스냅샷 선택' : '스냅샷 없음');
+        if(snapshots.length && els.adminSnapshotSelect){
+          snapshots.forEach(function(entry){
+            const opt = document.createElement('option');
+            opt.value = entry.key;
+            opt.textContent = entry.label;
+            els.adminSnapshotSelect.appendChild(opt);
+          });
+        }
+        els.adminSnapshotTableBody.innerHTML = '';
+        if(!snapshots.length) return;
+        const frag = document.createDocumentFragment();
+        snapshots.forEach(function(entry){
+          const tr = document.createElement('tr');
+          const keyTd = document.createElement('td');
+          keyTd.textContent = entry.key;
+          const timeTd = document.createElement('td');
+          timeTd.textContent = entry.snapshotAt ? formatDateTime(entry.snapshotAt) : '-';
+          const noteTd = document.createElement('td');
+          noteTd.textContent = entry.note || '';
+          tr.appendChild(keyTd);
+          tr.appendChild(timeTd);
+          tr.appendChild(noteTd);
+          frag.appendChild(tr);
+        });
+        els.adminSnapshotTableBody.appendChild(frag);
+      }
+
+      const callRestoreUserProfile = httpsCallable(functions, 'restoreUserProfile');
+
+      async function refreshAdminBackups(options){
+        if(!isAdmin()) return;
+        const uid = els.adminUserSelect?.value || '';
+        if(!uid){
+          state.backups = { mirror: null, snapshots: [] };
+          clearBackupUi();
+          setBackupMsg('사용자를 선택하세요.', 'warn');
+          return;
+        }
+        if(!options || !options.silent){
+          resetSnapshotSelect('로딩 중...');
+          setBackupMsg('백업 정보를 불러오는 중입니다...', null);
+        }
+        try {
+          const [mirrorSnap, snapshotsSnap] = await Promise.all([
+            get(ref(db, `mirrors/${uid}`)),
+            get(ref(db, `snapshots/${uid}`))
+          ]);
+          const mirror = mirrorSnap.exists() ? mirrorSnap.val() : null;
+          const snapshotEntries = [];
+          if(snapshotsSnap.exists()){
+            const raw = snapshotsSnap.val() || {};
+            Object.keys(raw).forEach(function(key){
+              const entry = raw[key] || {};
+              const snapshotAt = typeof entry.snapshotAt === 'number' ? entry.snapshotAt : 0;
+              const note = typeof entry.note === 'string' ? entry.note : '';
+              const labelTime = snapshotAt ? formatDateTime(snapshotAt) : '시간 정보 없음';
+              snapshotEntries.push({
+                key,
+                snapshotAt,
+                note,
+                label: `${key} · ${labelTime}`
+              });
+            });
+          }
+          snapshotEntries.sort(function(a,b){ return (b.snapshotAt||0) - (a.snapshotAt||0); });
+          state.backups.mirror = mirror;
+          state.backups.snapshots = snapshotEntries;
+          renderAdminSnapshotList();
+          if(mirror && mirror.mirroredAt){
+            setBackupMsg(`미러 복제본 기준 ${formatDateTime(mirror.mirroredAt)} 저장됨`, 'ok');
+          } else {
+            setBackupMsg('미러 데이터가 없습니다.', 'warn');
+          }
+        } catch (error) {
+          console.error('백업 정보를 불러오지 못했습니다.', error);
+          state.backups.mirror = null;
+          state.backups.snapshots = [];
+          clearBackupUi();
+          setBackupMsg('백업 정보를 불러오지 못했습니다.', 'error');
+        }
+      }
+
+      async function restoreFromMirror(){
+        if(!isAdmin()) return;
+        const uid = els.adminUserSelect?.value || '';
+        if(!uid){ setBackupMsg('복원할 사용자를 선택하세요.', 'warn'); return; }
+        if(!window.confirm('미러 백업으로 즉시 복원합니다. 계속할까요?')) return;
+        setBackupMsg('미러 복원을 진행 중입니다...', null);
+        try {
+          await callRestoreUserProfile({ targetUid: uid, source: 'mirror' });
+          setBackupMsg('미러 데이터로 복원했습니다.', 'ok');
+          await refreshAdminBackups({ silent: true });
+        } catch (error) {
+          console.error('미러 복원 실패', error);
+          const message = error?.message || '미러 복원 중 오류가 발생했습니다.';
+          setBackupMsg(message, 'error');
+        }
+      }
+
+      async function restoreFromSnapshot(){
+        if(!isAdmin()) return;
+        const uid = els.adminUserSelect?.value || '';
+        if(!uid){ setBackupMsg('복원할 사용자를 선택하세요.', 'warn'); return; }
+        const snapshotId = els.adminSnapshotSelect?.value || '';
+        if(!snapshotId){ setBackupMsg('복원할 스냅샷을 선택하세요.', 'warn'); return; }
+        if(!window.confirm(`스냅샷 '${snapshotId}'로 복원합니다. 계속할까요?`)) return;
+        setBackupMsg('스냅샷 복원을 진행 중입니다...', null);
+        try {
+          await callRestoreUserProfile({ targetUid: uid, source: 'snapshot', snapshotId });
+          setBackupMsg('스냅샷 복원이 완료되었습니다.', 'ok');
+          await refreshAdminBackups({ silent: true });
+        } catch (error) {
+          console.error('스냅샷 복원 실패', error);
+          const message = error?.message || '스냅샷 복원 중 오류가 발생했습니다.';
+          setBackupMsg(message, 'error');
+        }
       }
 
       async function handleAdminGrantResources(){ if(!isAdmin()) return; const uid = els.adminUserSelect?.value || ''; if(!uid){ setAdminMsg('지급할 사용자를 선택하세요.', 'warn'); return; } const points = parseInt(els.adminGrantPoints?.value||'0', 10) || 0; const gold = parseInt(els.adminGrantGold?.value||'0', 10) || 0; const diamonds = parseInt(els.adminGrantDiamonds?.value||'0', 10) || 0; const petTickets = parseInt(els.adminGrantPetTickets?.value||'0', 10) || 0; if(points===0 && gold===0 && diamonds===0 && petTickets===0){ setAdminMsg('지급할 수치를 입력하세요.', 'warn'); return; }
@@ -890,6 +1041,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function formatPct(x){ return (x*100).toFixed(5)+'%'; }
       function formatNum(x){ return x.toLocaleString('ko-KR'); }
       function formatMultiplier(mult){ const rounded = Math.round(( (mult ?? 0) )*100)/100; return Number.isInteger(rounded)? String(rounded) : rounded.toString(); }
+      function formatDateTime(ts){ if(typeof ts !== 'number') return '-'; const date = new Date(ts); if(Number.isNaN(date.getTime())) return '-'; return date.toLocaleString('ko-KR', { hour12:false }); }
       function escapeHtml(value){ return String(value ?? '').replace(/[&<>"']/g, function(ch){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[ch]); }); }
       async function sha256Hex(str){ try {
         if(typeof crypto!=='undefined' && crypto.subtle && typeof TextEncoder!=='undefined'){
@@ -1162,7 +1314,13 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(els.adminPresetLoad) els.adminPresetLoad.addEventListener('click', ()=>{
           if(!isAdmin()) return; const id = els.adminPresetSelect?.value || ''; const preset = findGlobalPreset(id); if(!preset){ setAdminPresetMsg('불러올 프리셋을 선택하세요.', 'warn'); return; } loadAdminPresetForEditing(preset); });
         if(els.adminPresetDelete) els.adminPresetDelete.addEventListener('click', handleAdminPresetDelete);
-        if(els.adminUserSelect) els.adminUserSelect.addEventListener('change', updateAdminUserStats);
+        if(els.adminUserSelect) els.adminUserSelect.addEventListener('change', ()=>{
+          updateAdminUserStats();
+          refreshAdminBackups({ silent: true });
+        });
+        if(els.adminBackupRefresh) els.adminBackupRefresh.addEventListener('click', ()=> refreshAdminBackups());
+        if(els.adminRestoreFromMirror) els.adminRestoreFromMirror.addEventListener('click', restoreFromMirror);
+        if(els.adminRestoreFromSnapshot) els.adminRestoreFromSnapshot.addEventListener('click', restoreFromSnapshot);
         if(els.adminGrantSubmit) els.adminGrantSubmit.addEventListener('click', handleAdminGrantResources);
         if(els.applyGlobalPreset) els.applyGlobalPreset.addEventListener('click', ()=>{ const id = els.globalPresetSelect?.value || ''; if(!id){ clearSelectedPreset(); setPresetMsg('프리셋 선택을 해제했습니다.', 'warn'); return; } const preset = findGlobalPreset(id); if(!preset){ setPresetMsg('선택한 프리셋을 찾을 수 없습니다.', 'error'); return; } applyGlobalPresetForUser(preset); });
         if(els.applyPersonalPreset) els.applyPersonalPreset.addEventListener('click', ()=>{ const id = els.personalPresetSelect?.value || ''; if(!id){ clearSelectedPreset(); setPresetMsg('프리셋 선택을 해제했습니다.', 'warn'); return; } const preset = findPersonalPreset(id); if(!preset){ setPresetMsg('선택한 프리셋을 찾을 수 없습니다.', 'error'); return; } applyPersonalPresetForUser(preset); });

@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAiWYAFsDFivmWBoJzbziWN9jAZt9gME-U",
@@ -15,11 +16,13 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
+const functions = getFunctions(app, 'asia-southeast1');
 
 export {
   app,
   auth,
   db,
+  functions,
   onAuthStateChanged,
   signOut,
   signInWithEmailAndPassword,
@@ -31,5 +34,6 @@ export {
   get,
   set,
   update,
-  onValue
+  onValue,
+  httpsCallable
 };
