@@ -354,6 +354,21 @@
       .auto-stats-grid { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--muted); }
       .auto-stats-grid span { background: rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 4px 8px; display: inline-flex; align-items: center; gap: 4px; }
       .auto-stats-grid span b { color: var(--text); }
+      .auto-difficulty-panel { margin-top: 12px; padding: 12px; background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(142, 238, 255, 0.18); border-radius: 10px; font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+      .holywater-controls { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+      .holywater-controls button { flex: 0 0 auto; }
+      .difficulty-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+      .difficulty-btn { flex: 1 1 0; min-width: 80px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(142,238,255,0.25); background: rgba(0,0,0,0.25); color: var(--text); cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s; }
+      .difficulty-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(106, 169, 255, 0.25); }
+      .difficulty-btn.active { background: rgba(106, 169, 255, 0.35); border-color: rgba(106, 169, 255, 0.6); }
+      .difficulty-btn.forced { background: rgba(235, 87, 87, 0.4); border-color: rgba(235, 87, 87, 0.7); }
+      .difficulty-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .admin-only { background: rgba(255, 200, 120, 0.18); border: 1px solid rgba(255, 200, 120, 0.45); color: var(--text); }
+      body[data-role="admin"] .admin-only { display: block !important; }
+      .monster-sprite[data-difficulty] { padding: 6px; border-radius: 16px; }
+      .monster-sprite[data-difficulty="easy"] { background: rgba(150, 200, 255, 0.12); }
+      .monster-sprite[data-difficulty="normal"] { background: rgba(255, 120, 120, 0.14); }
+      .monster-sprite[data-difficulty="hard"] { background: rgba(180, 80, 255, 0.16); }
       button.ghost { background: transparent; border: 1px solid rgba(142, 238, 255, 0.3); }
       button.ghost:hover { border-color: var(--accent); }
       .boss-section { margin-top: 18px; }
@@ -571,6 +586,19 @@
               <span>보호권 <b id="autoStatsProtect">0</b></span>
               <span>전투부활권 <b id="autoStatsBattleRes">0</b></span>
             </div>
+          </div>
+          <div class="auto-difficulty-panel">
+            <div class="muted small" id="difficultyStatus">현재 난이도: -</div>
+            <div class="difficulty-buttons" id="difficultyButtons"></div>
+            <div class="muted small" id="autoTimerStatus">평화 구간 경과: 00:00:00 / 03:00:00</div>
+            <div class="muted small" id="holyWaterPreloadStatus">사전 성수 사용: 0/2</div>
+            <div class="muted small" id="hellStatus">지옥문 닫힘 (평화 상태)</div>
+            <div class="muted small" id="timeAccelStatus">시간 가속: 없음</div>
+            <div class="holywater-controls">
+              <span>성수 보유: <b id="holyWaterStock">0</b></span>
+              <button id="useHolyWaterBtn" type="button">성수 사용</button>
+            </div>
+            <button id="adminTimeAccelBtn" class="admin-only" type="button" style="display:none;">시간 가속 물약 (x100, 5분)</button>
           </div>
           <div class="boss-section">
             <h3>보스 전투</h3>

@@ -46,7 +46,7 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const DEFAULT_ENHANCE_P = DEFAULT_DROP_RATES.enhance.base;
       const DEFAULT_BATTLERES_P = DEFAULT_DROP_RATES.battleRes.base;
       const DEFAULT_GOLD_SCALING = { minLow: 120, maxLow: 250, minHigh: 900, maxHigh: 1400 };
-      const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, starterPack: 5000 };
+      const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, holyWater: 1000000, starterPack: 5000 };
       const DEFAULT_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 1000, autoCdMs: 2000, speedMultiplier: 2 };
       const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
 const DEFAULT_MONSTER_SCALING = {
@@ -152,7 +152,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         invCount: $('#invCount'), equipGrid: $('#equipGrid'), spareList: $('#spareList'),
         forgeTarget: $('#forgeTarget'), forgeLv: $('#forgeLv'), forgeMul: $('#forgeMul'), forgeStageMul: $('#forgeStageMul'), forgeP: $('#forgeP'), forgePreview: $('#forgePreview'), forgeCostEnh: $('#forgeCostEnh'), forgeCostProtect: $('#forgeCostProtect'), forgeCostGold: $('#forgeCostGold'), forgeOnce: $('#forgeOnce'), forgeAuto: $('#forgeAuto'), forgeTableBody: $('#forgeTableBody'), forgeReset: $('#forgeReset'), forgeMsg: $('#forgeMsg'), forgeEffect: $('#forgeEffect'), forgeProtectUse: $('#forgeProtectUse'), protectCount: $('#protectCount'), enhanceCount: $('#enhanceCount'), reviveCount: $('#reviveCount'),
         pricePotion: $('#pricePotion'), priceHyper: $('#priceHyper'), priceProtect: $('#priceProtect'), priceEnhance: $('#priceEnhance'), priceBattleRes: $('#priceBattleRes'), priceStarter: $('#priceStarter'),
-        invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), shopPanel: $('#shop'),
+        invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), invHolyWater: $('#invHolyWater'), shopPanel: $('#shop'),
         petList: $('#petList'),
         characterList: $('#characterList'),
         characterSkillDetail: $('#characterSkillDetail'),
@@ -160,7 +160,39 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantPetTickets: $('#adminGrantPetTickets'), adminGrantSubmit: $('#adminGrantSubmit'),
         globalPresetSelect: $('#globalPresetSelect'), personalPresetSelect: $('#personalPresetSelect'), applyGlobalPreset: $('#applyGlobalPreset'), applyPersonalPreset: $('#applyPersonalPreset'), personalPresetName: $('#personalPresetName'), savePersonalPreset: $('#savePersonalPreset'), presetMsg: $('#presetMsg'), toggleUserEdit: $('#toggleUserEdit'),
-        petTicketInline: $('#petTicketInline')
+        petTicketInline: $('#petTicketInline'),
+        holyWaterCount: $('#holyWaterCount'),
+        priceHolyWater: $('#priceHolyWater'),
+        legendaryOverlay: $('#legendaryOverlay'),
+        gearLegendaryModal: $('#gearLegendaryModal'),
+        characterLegendaryModal: $('#characterLegendaryModal'),
+        gearLegendaryTitle: $('#gearLegendaryTitle'),
+        gearNewTier: $('#gearNewTier'),
+        gearNewPart: $('#gearNewPart'),
+        gearNewBase: $('#gearNewBase'),
+        gearNewEffective: $('#gearNewEffective'),
+        gearCurrentTier: $('#gearCurrentTier'),
+        gearCurrentPart: $('#gearCurrentPart'),
+        gearCurrentBase: $('#gearCurrentBase'),
+        gearCurrentEffective: $('#gearCurrentEffective'),
+        gearComparisonDelta: $('#gearComparisonDelta'),
+        gearEquipBtn: $('#gearEquipBtn'),
+        gearSpareBtn: $('#gearSpareBtn'),
+        gearDiscardBtn: $('#gearDiscardBtn'),
+        characterLegendaryTitle: $('#characterLegendaryTitle'),
+        characterNewImage: $('#characterNewImage'),
+        characterNewName: $('#characterNewName'),
+        characterNewTier: $('#characterNewTier'),
+        characterNewClass: $('#characterNewClass'),
+        characterNewCount: $('#characterNewCount'),
+        characterNewStats: $('#characterNewStats'),
+        characterCurrentImage: $('#characterCurrentImage'),
+        characterCurrentName: $('#characterCurrentName'),
+        characterCurrentTier: $('#characterCurrentTier'),
+        characterCurrentClass: $('#characterCurrentClass'),
+        characterCurrentCount: $('#characterCurrentCount'),
+        characterCurrentStats: $('#characterCurrentStats'),
+        characterLegendaryClose: $('#characterLegendaryClose')
       };
 
       // Config and state
@@ -212,7 +244,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         adminUsers: [],
         timers: { manualLast: 0, autoLast: 0, uiTimer: null, autoTimer: null, autoOn: false },
         inRun: false,
-        items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, petTicket: 0 },
+        items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, holyWater: 0, petTicket: 0 },
         pets: createDefaultPetState(),
         characters: createDefaultCharacterState(),
         petGachaWeights: sanitizePetWeights(null),
@@ -352,7 +384,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       }
 
       function sanitizeItems(raw){
-        const template = { potion:0, hyperPotion:0, protect:0, enhance:0, revive:0, battleRes:0, petTicket:0 };
+        const template = { potion:0, hyperPotion:0, protect:0, enhance:0, revive:0, battleRes:0, holyWater:0, petTicket:0 };
         const result = {...template};
         if(raw && typeof raw === 'object'){
           Object.keys(template).forEach(function(key){
@@ -845,7 +877,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       }
       function refreshInventoryCache(){ state.inventory = [...Object.values(state.equip).filter(Boolean), ...PART_KEYS.map(function(part){ return state.spares[part]; }).filter(Boolean)]; }
       function spareItem(part){ return state.spares[part] || null; }
-      function storeSpare(item){ if(!item || !item.part) return; const part = item.part; const existing = spareItem(part); if(!existing){ state.spares[part] = item; refreshInventoryCache(); markProfileDirty(); return; }
+      function storeSpare(item, force){ if(!item || !item.part) return; const part = item.part; const existing = spareItem(part); if(force){ state.spares[part] = item; refreshInventoryCache(); markProfileDirty(); return; }
+        if(!existing){ state.spares[part] = item; refreshInventoryCache(); markProfileDirty(); return; }
         const better = effectiveStat(item) > effectiveStat(existing) || (effectiveStat(item) === effectiveStat(existing) && TIER_RANK[item.tier] > TIER_RANK[existing.tier]);
         if(better){ state.spares[part] = item; refreshInventoryCache(); markProfileDirty(); }
       }
@@ -857,6 +890,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function formatPct(x){ return (x*100).toFixed(5)+'%'; }
       function formatNum(x){ return x.toLocaleString('ko-KR'); }
       function formatMultiplier(mult){ const rounded = Math.round(( (mult ?? 0) )*100)/100; return Number.isInteger(rounded)? String(rounded) : rounded.toString(); }
+      function escapeHtml(value){ return String(value ?? '').replace(/[&<>"']/g, function(ch){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[ch]); }); }
       async function sha256Hex(str){ try {
         if(typeof crypto!=='undefined' && crypto.subtle && typeof TextEncoder!=='undefined'){
           const enc = new TextEncoder().encode(str);
@@ -893,6 +927,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function shuffle(arr, rng){ for(let i=arr.length-1;i>0;i--){ const j=Math.floor(rng()* (i+1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; }
       const CD_MANUAL_MS = 10000, CD_AUTO_MS = 20000;
       function isAtLeast(tier, floor){ return TIER_INDEX[tier] <= TIER_INDEX[floor]; }
+      const LEGENDARY_GEAR_FLOOR = 'SS+';
+      const LEGENDARY_CHARACTER_FLOOR = 'S+';
+      function isLegendaryGearTier(tier){ return !!tier && isAtLeast(tier, LEGENDARY_GEAR_FLOOR); }
+      function isLegendaryCharacterTier(tier){ return !!tier && isAtLeast(tier, LEGENDARY_CHARACTER_FLOOR); }
       function rescaledPick(allowed, probs, rng){ const total = allowed.reduce((s,t)=>s+probs[t],0); let u = rng() * total, acc=0; for(const t of allowed){ acc += probs[t]; if(u < acc) return t; } return allowed[allowed.length-1]; }
 
       function expectedCounts(n, probs){ return Object.fromEntries(TIERS.map(t=>[t, n*probs[t]])); }
@@ -1035,6 +1073,14 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(els.toPvp){ els.toPvp.addEventListener('click', ()=>{ window.location.href = 'pvp.html'; }); }
         if(els.goBattle){ els.goBattle.addEventListener('click', ()=>{ window.location.href = 'battle.html'; }); }
         els.adminChangePw.addEventListener('click', changeAdminPassword);
+        if(els.legendaryOverlay){ els.legendaryOverlay.addEventListener('click', (event)=>{ if(!isLegendaryVisible()) return; if(event.target === els.legendaryOverlay && activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); } else if(event.target === els.legendaryOverlay && activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); } }); }
+        document.addEventListener('keydown', (event)=>{
+          if(event.key === 'Escape' && isLegendaryVisible()){
+            event.preventDefault();
+            if(activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); }
+            else if(activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); }
+          }
+        });
         els.saveDrops.addEventListener('click', ()=>{
           if(!isAdmin()) return;
           const parseDrop = (baseEl, perEl, maxEl, defaults)=>{
@@ -1159,15 +1205,15 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const collectFn = shouldRender ? function(payload){ if(!payload) return; const partName = getPartNameByKey(payload.part) || ''; collected.push({ tier: payload.tier, part: payload.part, icon: iconForPart(payload.part), partName }); } : null;
         const batch = n >= 200; const updateEvery = n>=10000? 200 : n>=1000? 50 : n>=200? 10 : 1;
         if(n===10 && state.config.minGuarantee10.enabled){ // 10-pull with minimum guarantee
-          for(let i=0;i<9;i++){ if(state.cancelFlag) break; if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; break; } const t = drawOneWithPity(rng); results.push(t); applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch && ((i+1)%updateEvery===0)) { syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); }
+          for(let i=0;i<9;i++){ if(state.cancelFlag) break; if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; break; } const t = drawOneWithPity(rng); results.push(t); await applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch && ((i+1)%updateEvery===0)) { syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); }
           if(!state.cancelFlag){ const floor = state.config.minGuarantee10.tier; const ok = results.some(t=> isAtLeast(t, floor)); if(!ok){ const allowed = TIERS.filter(t=> isAtLeast(t, floor)); const forced = rescaledPick(allowed, state.config.probs, rng); // force one
               if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; }
-              else { applyResult(forced, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); results.push(forced); if(batch){ syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); }
+              else { await applyResult(forced, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); results.push(forced); if(batch){ syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); }
             } else { if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; }
-              else { const t = drawOneWithPity(rng); results.push(t); applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch){ syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); } }
+              else { const t = drawOneWithPity(rng); results.push(t); await applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch){ syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); } }
           }
         } else {
-          for(let i=0;i<n;i++){ if(state.cancelFlag) break; if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; break; } const t = drawOneWithPity(rng); results.push(t); applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch && ((i+1)%updateEvery===0)) { syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(i+1, n); }
+          for(let i=0;i<n;i++){ if(state.cancelFlag) break; if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; break; } const t = drawOneWithPity(rng); results.push(t); await applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch && ((i+1)%updateEvery===0)) { syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(i+1, n); }
         }
         if(batch){ syncStats(); drawChart(); updateInventoryView(); const h = latestHistory(); if(h) appendLog(h); }
         els.cancel.disabled = true; els.draw1.disabled = els.draw10.disabled = els.draw100.disabled = els.draw1k.disabled = els.draw10k.disabled = false; state.inRun = false; updateDrawButtons(); if(state.cancelFlag){ state.cancelFlag=false; }
@@ -1176,12 +1222,18 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         markProfileDirty();
       }
 
-      function applyResult(tier, runId, cfgHash, opts){ opts = opts||{}; const rng = opts.rng || getRng(); state.session.draws++; state.session.counts[tier]++; const now=Date.now(); const id = state.session.history.length + 1; const part = choosePart(rng); const stat = rollStatFor(tier, part, rng); const rec = {id, tier, ts: now, runId, cfgHash, part, stat}; state.session.history.push(rec);
+      async function applyResult(tier, runId, cfgHash, opts){ opts = opts||{}; const rng = opts.rng || getRng(); state.session.draws++; state.session.counts[tier]++; const now=Date.now(); const id = state.session.history.length + 1; const part = choosePart(rng); const stat = rollStatFor(tier, part, rng); const rec = {id, tier, ts: now, runId, cfgHash, part, stat}; state.session.history.push(rec);
         const item = { id: state.itemSeq++, tier, part, base: stat, lvl: 0, type: PARTS.find(p=>p.key===part).type };
         if(typeof opts.onCollect === 'function'){ opts.onCollect({ tier, part, item }); }
-        applyEquipAndInventory(item);
+        let decision = opts.decision || null;
+        if(!opts.skipPrompt && isLegendaryGearTier(tier)){
+          const current = state.equip[part] || null;
+          decision = await showGearLegendaryModal(item, current);
+        }
+        applyEquipAndInventory(item, { decision });
         // global
         state.global.draws++; state.global.counts[tier]++; saveGlobal(); if(!opts.skipLog) appendLog(rec); if(!opts.deferUI){ syncStats(); drawChart(); updateInventoryView(); }
+        return item;
       }
 
       function latestHistory(){ const h = state.session.history; return h.length? h[h.length-1] : null; }
@@ -1203,6 +1255,186 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       // Log
       function getPartNameByKey(key){ const p = PARTS.find(function(pp){ return pp.key===key; }); return p ? p.name : ''; }
       function iconForPart(part){ return PART_ICONS[part] || '🎁'; }
+      let activeLegendaryType = null;
+      function isLegendaryVisible(){ return !!(els.legendaryOverlay && !els.legendaryOverlay.hidden && els.legendaryOverlay.classList.contains('visible')); }
+      function openLegendaryModal(type){ if(!els.legendaryOverlay) return; activeLegendaryType = type; els.legendaryOverlay.hidden = false; requestAnimationFrame(()=> els.legendaryOverlay.classList.add('visible')); if(els.gearLegendaryModal) els.gearLegendaryModal.classList.toggle('active', type === 'gear'); if(els.characterLegendaryModal) els.characterLegendaryModal.classList.toggle('active', type === 'character'); document.body.classList.add('modal-open'); }
+      function closeLegendaryModal(){ if(!els.legendaryOverlay) return; els.legendaryOverlay.classList.remove('visible'); els.legendaryOverlay.hidden = true; if(els.gearLegendaryModal) els.gearLegendaryModal.classList.remove('active'); if(els.characterLegendaryModal) els.characterLegendaryModal.classList.remove('active'); document.body.classList.remove('modal-open'); activeLegendaryType = null; }
+      function fillCharacterStats(target, stats){ if(!target) return; const rows = [
+          ['hp', 'HP', false],
+          ['atk', 'ATK', false],
+          ['def', 'DEF', false],
+          ['critRate', '치명타율', true],
+          ['critDmg', '치명타피해', true],
+          ['dodge', '회피', true],
+          ['speed', '속도', false]
+        ];
+        const html = rows.map(([key, label, percent]) => {
+          const value = stats && typeof stats[key] === 'number' ? stats[key] : null;
+          if(value === null){
+            return `<div>${label}: <b>-</b></div>`;
+          }
+          return `<div>${label}: <b>${percent ? `${value}%` : formatNum(value)}</b></div>`;
+        }).join('');
+        target.innerHTML = html;
+      }
+      function buildGearComparison(item, current){ const partName = getPartNameByKey(item.part) || ''; const partIcon = iconForPart(item.part); const newEffectiveVal = effectiveStat(item); const currentEffectiveVal = current ? effectiveStat(current) : 0; const diff = newEffectiveVal - currentEffectiveVal; let deltaText; let deltaClass;
+        if(current){ if(diff === 0){ deltaText = '전투력 변화 없음'; deltaClass = 'neutral'; } else if(diff > 0){ deltaText = `전투력 변화: +${formatNum(diff)}`; deltaClass = 'positive'; } else { deltaText = `전투력 변화: ${formatNum(diff)}`; deltaClass = 'negative'; } }
+        else { deltaText = `전투력 변화: +${formatNum(newEffectiveVal)}`; deltaClass = 'positive'; }
+        return {
+          title: `${item.tier} ${partName} 획득!`,
+          partName,
+          partIcon,
+          newTier: item.tier,
+          newPartLabel: `${partIcon} ${partName}`,
+          newBase: formatNum(item.base || 0),
+          newEffective: formatNum(newEffectiveVal),
+          newEffectiveValue: newEffectiveVal,
+          currentTier: current ? current.tier : '없음',
+          currentPartLabel: current ? `${iconForPart(current.part)} ${getPartNameByKey(current.part) || ''}` : '장착 장비 없음',
+          currentBase: current ? formatNum(current.base || 0) : '-',
+          currentEffective: current ? formatNum(currentEffectiveVal) : '-',
+          currentEffectiveValue: currentEffectiveVal,
+          deltaText,
+          deltaClass,
+          diff
+        };
+      }
+
+      function showGearLegendaryModal(item, current){ const comparison = buildGearComparison(item, current); const token = `legendary-${Date.now()}-${Math.random().toString(36).slice(2)}`; let popup = null;
+        try {
+          popup = window.open('', `legendaryGear_${token}`, 'width=520,height=640,resizable=yes,scrollbars=yes');
+        } catch (error) {
+          popup = null;
+        }
+        if(popup){ const data = {
+            token,
+            title: comparison.title,
+            newTier: comparison.newTier,
+            newPartLabel: comparison.newPartLabel,
+            newBase: comparison.newBase,
+            newEffective: comparison.newEffective,
+            currentTier: comparison.currentTier,
+            currentPartLabel: comparison.currentPartLabel,
+            currentBase: comparison.currentBase,
+            currentEffective: comparison.currentEffective,
+            deltaText: comparison.deltaText,
+            deltaClass: comparison.deltaClass
+          };
+          const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8" /><title>${escapeHtml(comparison.title)}</title><style>
+              body{margin:0;padding:18px 20px;background:#111826;color:#e7ecf3;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Noto Sans KR,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji;}
+              h2{margin:0 0 14px;font-size:18px;color:#6aa9ff;}
+              .section{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:12px;}
+              .card{background:rgba(255,255,255,0.04);border:1px solid rgba(142,238,255,0.25);border-radius:10px;padding:12px;}
+              .label{font-size:12px;color:#aeb7c6;margin-bottom:4px;}
+              .tier{font-weight:600;margin-bottom:4px;}
+              .part{font-size:13px;margin-bottom:8px;}
+              .stat{font-size:13px;margin:2px 0;}
+              .delta{margin:12px 0;font-weight:600;}
+              .delta.positive{color:#6aa9ff;}
+              .delta.negative{color:#ff6b6b;}
+              .delta.neutral{color:#aeb7c6;}
+              .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;}
+              button{background:rgba(142,238,255,0.15);color:#e7ecf3;border:1px solid rgba(142,238,255,0.35);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px;}
+              button.primary{background:#6aa9ff;color:#06122a;border:none;}
+              button.danger{background:rgba(255,107,107,0.18);border-color:rgba(255,107,107,0.45);}
+            </style></head><body>
+            <h2>${escapeHtml(comparison.title)}</h2>
+            <div class="section">
+              <div class="card">
+                <div class="label">새 장비</div>
+                <div class="tier">${escapeHtml(comparison.newTier)}</div>
+                <div class="part">${escapeHtml(comparison.newPartLabel)}</div>
+                <div class="stat">기본 수치: <b>${escapeHtml(comparison.newBase)}</b></div>
+                <div class="stat">강화 포함: <b>${escapeHtml(comparison.newEffective)}</b></div>
+              </div>
+              <div class="card">
+                <div class="label">현재 장비</div>
+                <div class="tier">${escapeHtml(comparison.currentTier)}</div>
+                <div class="part">${escapeHtml(comparison.currentPartLabel)}</div>
+                <div class="stat">기본 수치: <b>${escapeHtml(comparison.currentBase)}</b></div>
+                <div class="stat">강화 포함: <b>${escapeHtml(comparison.currentEffective)}</b></div>
+              </div>
+            </div>
+            <div class="delta ${escapeHtml(comparison.deltaClass || 'neutral')}">${escapeHtml(comparison.deltaText || '')}</div>
+            <div class="actions">
+              <button data-choice="discard" class="danger">버리기</button>
+              <button data-choice="spare">예비 보관</button>
+              <button data-choice="equip" class="primary">즉시 착용</button>
+            </div>
+            <script>(function(){
+              var token=${JSON.stringify(token)};
+              var sent=false;
+              function choose(choice){
+                if(sent) return;
+                sent=true;
+                if(window.opener && !window.opener.closed){
+                  window.opener.postMessage({type:'legendaryGearChoice', token: token, choice: choice}, '*');
+                }
+                window.close();
+              }
+              document.querySelectorAll('[data-choice]').forEach(function(btn){
+                btn.addEventListener('click', function(){ choose(btn.getAttribute('data-choice')); });
+              });
+              window.addEventListener('beforeunload', function(){
+                if(!sent && window.opener && !window.opener.closed){
+                  window.opener.postMessage({type:'legendaryGearChoice', token: token, choice: 'discard'}, '*');
+                }
+              });
+            })();</script></body></html>`;
+          popup.document.write(html);
+          popup.document.close();
+          try { popup.focus(); } catch (e) {}
+          return new Promise((resolve) => {
+            const listener = (event) => {
+              if(!event.data || event.data.type !== 'legendaryGearChoice' || event.data.token !== token) return;
+              window.removeEventListener('message', listener);
+              clearInterval(checkTimer);
+              resolve(event.data.choice || 'discard');
+            };
+            window.addEventListener('message', listener);
+            const checkTimer = setInterval(() => {
+              if(popup.closed){
+                clearInterval(checkTimer);
+                window.removeEventListener('message', listener);
+                resolve('discard');
+              }
+            }, 400);
+          });
+        }
+        return showGearLegendaryOverlay(comparison, current);
+      }
+
+      function showGearLegendaryOverlay(comparison, current){ if(!els.legendaryOverlay) return Promise.resolve('spare'); openLegendaryModal('gear'); if(els.gearLegendaryTitle) els.gearLegendaryTitle.textContent = comparison.title; if(els.gearNewTier){ els.gearNewTier.className = `tier ${comparison.newTier}`; els.gearNewTier.textContent = comparison.newTier; } if(els.gearNewPart) els.gearNewPart.textContent = comparison.newPartLabel; if(els.gearNewBase) els.gearNewBase.textContent = comparison.newBase; if(els.gearNewEffective) els.gearNewEffective.textContent = comparison.newEffective; if(els.gearCurrentTier){ els.gearCurrentTier.className = current ? `tier ${comparison.currentTier}` : 'tier'; els.gearCurrentTier.textContent = comparison.currentTier; }
+        if(els.gearCurrentPart) els.gearCurrentPart.textContent = comparison.currentPartLabel; if(els.gearCurrentBase) els.gearCurrentBase.textContent = comparison.currentBase; if(els.gearCurrentEffective) els.gearCurrentEffective.textContent = comparison.currentEffective; if(els.gearComparisonDelta){ els.gearComparisonDelta.textContent = comparison.deltaText; if(comparison.deltaClass === 'positive'){ els.gearComparisonDelta.style.color = 'var(--accent)'; } else if(comparison.deltaClass === 'negative'){ els.gearComparisonDelta.style.color = 'var(--danger)'; } else { els.gearComparisonDelta.style.color = 'var(--muted)'; } }
+        return new Promise((resolve) => {
+          const cleanup = (choice) => { if(els.gearEquipBtn) els.gearEquipBtn.onclick = null; if(els.gearSpareBtn) els.gearSpareBtn.onclick = null; if(els.gearDiscardBtn) els.gearDiscardBtn.onclick = null; closeLegendaryModal(); resolve(choice); };
+          if(els.gearEquipBtn) els.gearEquipBtn.onclick = () => cleanup('equip');
+          if(els.gearSpareBtn) els.gearSpareBtn.onclick = () => cleanup('spare');
+          if(els.gearDiscardBtn) els.gearDiscardBtn.onclick = () => cleanup('discard');
+        });
+      }
+      function showCharacterLegendaryModal(payload){ if(!els.legendaryOverlay) return Promise.resolve(); const { name, tier, className, stats, count, image, imageSources, activeName, activeTier, activeClass, activeStats, activeCount, activeImage } = payload;
+        openLegendaryModal('character');
+        if(els.characterLegendaryTitle) els.characterLegendaryTitle.textContent = `${tier} ${name} 획득!`;
+        if(els.characterNewName) els.characterNewName.textContent = name;
+        if(els.characterNewTier){ els.characterNewTier.className = `char-tier tier ${tier}`; els.characterNewTier.textContent = tier; }
+        if(els.characterNewClass) els.characterNewClass.textContent = className || '-';
+        if(els.characterNewCount) els.characterNewCount.textContent = `보유: ${formatNum(count || 0)}`;
+        const newImageSrc = image || (imageSources && imageSources[0]) || CHARACTER_IMAGE_PLACEHOLDER;
+        if(els.characterNewImage){ els.characterNewImage.src = newImageSrc; els.characterNewImage.alt = name || '새 캐릭터'; }
+        fillCharacterStats(els.characterNewStats, stats || {});
+        if(els.characterCurrentName) els.characterCurrentName.textContent = activeName || '-';
+        if(els.characterCurrentTier){ const tierLabel = activeTier || '-'; els.characterCurrentTier.className = `char-tier tier ${activeTier || ''}`; els.characterCurrentTier.textContent = tierLabel; }
+        if(els.characterCurrentClass) els.characterCurrentClass.textContent = activeClass || '-';
+        if(els.characterCurrentCount) els.characterCurrentCount.textContent = `보유: ${formatNum(activeCount || 0)}`;
+        const activeImageSrc = activeImage || CHARACTER_IMAGE_PLACEHOLDER;
+        if(els.characterCurrentImage){ els.characterCurrentImage.src = activeImageSrc; els.characterCurrentImage.alt = activeName || '현재 캐릭터'; }
+        fillCharacterStats(els.characterCurrentStats, activeStats || {});
+        return new Promise((resolve) => {
+          const cleanup = () => { if(els.characterLegendaryClose) els.characterLegendaryClose.onclick = null; closeLegendaryModal(); resolve(); };
+          if(els.characterLegendaryClose) els.characterLegendaryClose.onclick = cleanup;
+        });
+      }
       function createGearCard(partDef, item, opts){ opts = opts || {}; const card = document.createElement('div'); card.className = 'gear-card'; if(opts.kind) card.classList.add(opts.kind); card.dataset.slot = partDef.key; const icon = iconForPart(partDef.key); if(item){ card.dataset.tier = item.tier||'NONE'; const isEquip = opts.kind === 'gear-equip'; const isSpare = opts.kind === 'gear-spare'; if(isEquip) card.classList.add('equipped'); const label = `${item.tier}${item.lvl ? ' +' + item.lvl : ''}`; const statLabel = item.type === 'atk' ? 'ATK' : 'DEF'; const eff = formatNum(effectiveStat(item)); const base = formatNum(item.base||0); card.innerHTML = `
           <div class="gear-slot">${partDef.name}</div>
           <div class="gear-icon">${icon}</div>
@@ -1402,7 +1634,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         markProfileDirty();
       }
 
-      function runCharacterDraws(count){ if((state.ui.gachaMode || 'gear') !== 'character'){ updateGachaModeView('character'); }
+      async function runCharacterDraws(count){ if((state.ui.gachaMode || 'gear') !== 'character'){ updateGachaModeView('character'); }
         const n = Math.max(1, parseInt(count, 10) || 1);
         const admin = isAdmin();
         if(!admin && state.wallet < CHARACTER_DRAW_COST){ alert('포인트가 부족합니다.'); return; }
@@ -1423,7 +1655,29 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           const def = getCharacterDefinition(charId) || { name: charId, image: '', className: '' };
           const imageSources = getCharacterImageVariants(charId);
           if(def.image && !imageSources.includes(def.image)){ imageSources.unshift(def.image); }
-          results.push({ type: 'character', characterId: charId, tier, name: def.name || charId, image: imageSources[0] || '', imageSources, className: def.className || '' });
+          const cardPayload = { type: 'character', characterId: charId, tier, name: def.name || charId, image: imageSources[0] || '', imageSources, className: def.className || '' };
+          results.push(cardPayload);
+          if(isLegendaryCharacterTier(tier)){
+            const activeId = getActiveCharacterId();
+            const activeDef = getCharacterDefinition(activeId) || getActiveCharacterDefinition();
+            const activeSources = getCharacterImageVariants(activeId);
+            if(activeDef?.image && !activeSources.includes(activeDef.image)){ activeSources.unshift(activeDef.image); }
+            await showCharacterLegendaryModal({
+              name: def.name || charId,
+              tier,
+              className: def.className || '',
+              stats: def.stats || {},
+              count: characters.owned[charId] || 0,
+              image: cardPayload.image,
+              imageSources,
+              activeName: activeDef?.name || activeId,
+              activeTier: activeDef?.tier || '-',
+              activeClass: activeDef?.className || '-',
+              activeStats: activeDef?.stats || {},
+              activeCount: characters.owned?.[activeId] || 0,
+              activeImage: activeSources[0] || CHARACTER_IMAGE_PLACEHOLDER
+            });
+          }
         }
         ensureCharacterState();
         state.characters = characters;
@@ -1810,6 +2064,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         userProfile.username = derivedName;
         const role = userProfile.role === 'admin' || derivedName === 'admin' ? 'admin' : 'user';
         userProfile.role = role;
+        document.body.dataset.role = role;
         if(role === 'admin'){
           userProfile.wallet = null;
           userProfile.gold = null;
@@ -2079,6 +2334,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         } finally {
           state.user = null;
           try { localStorage.removeItem('gachaCurrentUser_v1'); } catch(e){}
+          document.body.removeAttribute('data-role');
           setAutoForgeRunning(false);
           stopAutoTimer();
           stopUiTimer();
@@ -2255,12 +2511,26 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function maybeAwardRevive(){ if(isAdmin()) return false; var emptyEquip = totalKept()===0; var noPoints = (state.wallet||0) <= 0; if(emptyEquip && noPoints){ state.items.revive = (state.items.revive||0) + 1; addPoints(1000); updateItemCountsView(); updateReviveButton(); markProfileDirty(); if(els.fightResult) els.fightResult.textContent += ' [부활권 +1, +1000포인트 지급]'; return true; } return false; }
       function itemLabel(it){ const name = getPartNameByKey(it.part) || ''; return `${name} ${it.tier}`; }
       function removeRandomItems(k, rng){ const pool = []; PART_DEFS.forEach(function(p){ const eq = state.equip[p.key]; if(eq) pool.push({type:'equip', part:p.key, item:eq}); const spare = state.spares[p.key]; if(spare) pool.push({type:'spare', part:p.key, item:spare}); }); if(pool.length===0) return []; shuffle(pool, rng); const selected = pool.slice(0, Math.min(k, pool.length)); selected.forEach(function(entry){ if(entry.type==='equip'){ state.equip[entry.part] = null; } else if(entry.type==='spare'){ state.spares[entry.part] = null; } }); updateInventoryView(); markProfileDirty(); return selected.map(function(e){ return e.item; }); }
-      function applyEquipAndInventory(item){ const part = item.part; const current = state.equip[part]; const better = !current || (effectiveStat(item)>effectiveStat(current)) || (effectiveStat(item)===effectiveStat(current) && TIER_RANK[item.tier] > TIER_RANK[current.tier]);
-        if(better){ if(current){ storeSpare(current); } state.equip[part] = item; }
-        else { storeSpare(item); }
+      function applyEquipAndInventory(item, opts){ opts = opts || {}; const decision = opts.decision || null; const part = item.part; const current = state.equip[part];
+        if(decision === 'discard'){ markProfileDirty(); return; }
+        if(decision === 'equip'){
+          if(current){ storeSpare(current); }
+          state.equip[part] = item;
+        } else if(decision === 'spare'){
+          storeSpare(item, true);
+        } else {
+          const better = !current || (effectiveStat(item) > effectiveStat(current)) || (effectiveStat(item) === effectiveStat(current) && TIER_RANK[item.tier] > TIER_RANK[current.tier]);
+          if(better){
+            if(current){ storeSpare(current); }
+            state.equip[part] = item;
+          } else {
+            storeSpare(item);
+          }
+        }
         if(state.spares[part] === state.equip[part]){ state.spares[part] = null; }
         refreshInventoryCache();
-        markProfileDirty(); }
+        markProfileDirty();
+      }
 
       // Forge UI/model
       function showForgeEffect(kind){ const eff = els.forgeEffect; if(!eff) return; const textMap = { success:'강화 성공!', fail:'강화 실패...', protected:'보호권 발동!', destroyed:'장비 파괴...' }; if(forgeEffectTimer){ clearTimeout(forgeEffectTimer); forgeEffectTimer = null; } eff.classList.remove('success','fail','protected','destroyed','show'); // restart animation
@@ -2416,6 +2686,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const enhances = state.items.enhance || 0;
         const revive = state.items.revive || 0;
         const br = state.items.battleRes || 0;
+        const holyWater = state.items.holyWater || 0;
         const petTickets = state.items.petTicket || 0;
 
         if (els.potionCount) els.potionCount.textContent = String(potions);
@@ -2425,6 +2696,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if (els.protectCount) els.protectCount.textContent = isAdmin() ? '∞' : String(protects);
         if (els.enhanceCount) els.enhanceCount.textContent = String(enhances);
         if (els.reviveCount) els.reviveCount.textContent = String(revive);
+        const holyWaterDisplay = isAdmin() ? '∞' : formatNum(holyWater);
+        if (els.holyWaterCount) els.holyWaterCount.textContent = holyWaterDisplay;
         if (els.petTickets) els.petTickets.textContent = isAdmin() ? '∞' : formatNum(petTickets);
         if (els.petTicketInline) els.petTicketInline.textContent = isAdmin() ? '∞' : formatNum(petTickets);
 
@@ -2433,6 +2706,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if (els.invProtect) els.invProtect.textContent = isAdmin() ? '∞' : String(protects);
         if (els.invEnhance) els.invEnhance.textContent = String(enhances);
         if (els.invBattleRes) els.invBattleRes.textContent = String(br);
+        if (els.invHolyWater) els.invHolyWater.textContent = isAdmin() ? '∞' : formatNum(holyWater);
 
         updateReviveButton();
         updateShopButtons();
@@ -2506,7 +2780,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function shopPrice(type){ const prices = state.config.shopPrices || DEFAULT_SHOP_PRICES; const val = prices.hasOwnProperty(type) ? prices[type] : DEFAULT_SHOP_PRICES[type]; return Math.max(0, Math.floor(val)); }
       function onShopClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(!target.classList.contains('shop-buy')) return; const item = target.dataset.item; const count = parseInt(target.dataset.count||'1',10) || 1; if(item) buyShopItem(item, count); }
       function setShopMessage(msg, status){ if(!els.shopMsg) return; els.shopMsg.textContent = msg || ''; els.shopMsg.classList.remove('ok','warn','error'); if(status){ els.shopMsg.classList.add(status); } }
-      function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack')); const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0); const buttons = els.shopPanel.querySelectorAll('.shop-buy'); buttons.forEach(function(btn){ const type = btn.dataset.item; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; }); }
+      function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceHolyWater) els.priceHolyWater.textContent = formatNum(shopPrice('holyWater')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack')); const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0); const buttons = els.shopPanel.querySelectorAll('.shop-buy'); buttons.forEach(function(btn){ const type = btn.dataset.item; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; }); }
       function grantStarterPack(count){ count = Math.max(1, parseInt(count,10)||1); const rng = getRng(); for(let n=0;n<count;n++){ PART_DEFS.forEach(function(part){ const item = { id: state.itemSeq++, tier: 'B', part: part.key, base: rollStatFor('B', part.key, rng), lvl: 0, type: part.type }; applyEquipAndInventory(item); }); } updateInventoryView(); }
       function buyShopItem(type, count){
         count = Math.max(1, parseInt(count,10)||1);
@@ -2533,6 +2807,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           case 'battleRes':
             state.items.battleRes = (state.items.battleRes||0) + count;
             setShopMessage(`전투부활권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'holyWater':
+            state.items.holyWater = (state.items.holyWater||0) + count;
+            setShopMessage(`성수 ${count}개를 구매했습니다.`, 'ok');
             break;
           case 'starterPack':
             grantStarterPack(count);

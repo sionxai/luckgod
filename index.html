@@ -17,6 +17,7 @@
         <span class="muted small">골드: <b id="gold">-</b></span>
         <span class="muted small">다이아: <b id="diamonds">-</b></span>
         <span class="muted small">펫 뽑기권: <b id="petTicketCount">0</b></span>
+        <span class="muted small">성수: <b id="holyWaterCount">0</b></span>
         <button id="toUser">사용자 페이지</button>
         <button id="toAdmin">관리자 페이지</button>
         <button id="toBattle">전투 페이지</button>
@@ -415,6 +416,17 @@
                 </td>
               </tr>
               <tr>
+                <td>성수</td>
+                <td><span id="priceHolyWater">-</span> G</td>
+                <td><span id="invHolyWater">0</span></td>
+                <td>
+                  <div class="shop-btns">
+                    <button class="shop-buy" data-item="holyWater" data-count="1">1개</button>
+                    <button class="shop-buy" data-item="holyWater" data-count="2">2개</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
                 <td>초보자 패키지<br /><span class="muted small">B 등급 장비 5종 세트</span></td>
                 <td><span id="priceStarter">-</span> G</td>
                 <td>-</td>
@@ -474,6 +486,68 @@
           </div>
           <div class="log" id="log"></div>
         </section>
+      </div>
+    </div>
+
+    <div id="legendaryOverlay" class="legendary-overlay" hidden>
+      <div id="gearLegendaryModal" class="legendary-modal" role="dialog" aria-modal="true" aria-labelledby="gearLegendaryTitle">
+        <h3 id="gearLegendaryTitle">전설 장비 획득!</h3>
+        <div class="gear-compare">
+          <div class="gear-card">
+            <div class="label">새 장비</div>
+            <div class="tier" id="gearNewTier">-</div>
+            <div class="part" id="gearNewPart">-</div>
+            <div class="stat-line">기본 수치: <span id="gearNewBase">-</span></div>
+            <div class="stat-line">강화 포함: <span id="gearNewEffective">-</span></div>
+          </div>
+          <div class="gear-card">
+            <div class="label">현재 장비</div>
+            <div class="tier" id="gearCurrentTier">없음</div>
+            <div class="part" id="gearCurrentPart">-</div>
+            <div class="stat-line">기본 수치: <span id="gearCurrentBase">-</span></div>
+            <div class="stat-line">강화 포함: <span id="gearCurrentEffective">-</span></div>
+          </div>
+        </div>
+        <div class="delta-line" id="gearComparisonDelta"></div>
+        <div class="modal-actions">
+          <button id="gearEquipBtn" class="primary" type="button">즉시 착용</button>
+          <button id="gearSpareBtn" type="button">예비 보관</button>
+          <button id="gearDiscardBtn" class="danger" type="button">버리기</button>
+        </div>
+      </div>
+      <div id="characterLegendaryModal" class="legendary-modal" role="dialog" aria-modal="true" aria-labelledby="characterLegendaryTitle">
+        <h3 id="characterLegendaryTitle">전설 캐릭터 획득!</h3>
+        <div class="character-compare">
+          <div class="char-card">
+            <div class="label">새 캐릭터</div>
+            <div class="char-header">
+              <img id="characterNewImage" alt="새 캐릭터" />
+              <div>
+                <div id="characterNewName" class="char-name">-</div>
+                <div id="characterNewTier" class="char-tier">-</div>
+                <div id="characterNewClass" class="char-class">-</div>
+                <div id="characterNewCount" class="char-count">보유: 0</div>
+              </div>
+            </div>
+            <div class="char-stats" id="characterNewStats"></div>
+          </div>
+          <div class="char-card">
+            <div class="label">현재 대표 캐릭터</div>
+            <div class="char-header">
+              <img id="characterCurrentImage" alt="현재 캐릭터" />
+              <div>
+                <div id="characterCurrentName" class="char-name">-</div>
+                <div id="characterCurrentTier" class="char-tier">-</div>
+                <div id="characterCurrentClass" class="char-class">-</div>
+                <div id="characterCurrentCount" class="char-count">보유: 0</div>
+              </div>
+            </div>
+            <div class="char-stats" id="characterCurrentStats"></div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button id="characterLegendaryClose" class="primary" type="button">확인</button>
+        </div>
       </div>
     </div>
 

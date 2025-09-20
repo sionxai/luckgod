@@ -94,6 +94,7 @@ const els = {
   autoHyperToggle: qs('#autoHyperToggle'),
   battleResCount: qs('#battleResCount'),
   battleResInline: qs('#battleResInline'),
+  holyWaterStock: qs('#holyWaterStock'),
   speedStatus: qs('#speedStatus'),
   autoStatsPanel: qs('#autoStatsPanel'),
   autoStatsDuration: qs('#autoStatsDuration'),
@@ -105,6 +106,14 @@ const els = {
   autoStatsHyperPotion: qs('#autoStatsHyperPotion'),
   autoStatsProtect: qs('#autoStatsProtect'),
   autoStatsBattleRes: qs('#autoStatsBattleRes'),
+  difficultyButtons: qs('#difficultyButtons'),
+  difficultyStatus: qs('#difficultyStatus'),
+  autoTimerStatus: qs('#autoTimerStatus'),
+  hellStatus: qs('#hellStatus'),
+  holyWaterPreloadStatus: qs('#holyWaterPreloadStatus'),
+  timeAccelStatus: qs('#timeAccelStatus'),
+  useHolyWaterBtn: qs('#useHolyWaterBtn'),
+  adminTimeAccelBtn: qs('#adminTimeAccelBtn'),
   bossList: qs('#bossList'),
   startBossBtn: qs('#startBossBtn'),
   resetBossSelection: qs('#resetBossSelection'),
@@ -153,6 +162,18 @@ const AUTO_DROP_LABELS = {
   protect: '보호권',
   battleRes: '전투부활권'
 };
+
+const DIFFICULTY_ORDER = ['easy', 'normal', 'hard'];
+const DIFFICULTY_CONFIG = {
+  easy: { id: 'easy', label: '이지', difficultyMultiplier: 1, rewardMultiplier: 1 },
+  normal: { id: 'normal', label: '노멀', difficultyMultiplier: 2, rewardMultiplier: 3 },
+  hard: { id: 'hard', label: '하드', difficultyMultiplier: 4, rewardMultiplier: 5 }
+};
+
+const AUTO_BASE_THRESHOLD_MS = 3 * 60 * 60 * 1000; // 3 hours
+const AUTO_HELL_DURATION_MS = 10 * 60 * 1000; // 10 minutes
+const HOLY_WATER_EXTENSION_MS = 60 * 60 * 1000; // 1 hour per item
+const HOLY_WATER_MAX_PRELOAD = 2;
 const AUTO_STOP_REASON_LABELS = {
   manual: '사용자 중지',
   defeat: '패배',
@@ -378,8 +399,11 @@ const state = {
     drops: { enhance: 0, potion: 0, hyperPotion: 0, protect: 0, battleRes: 0 },
     startTime: 0
   },
+  timeAccel: { multiplier: 1, until: 0 },
   bossProgress: sanitizeBossProgress(null),
   battleProgress: sanitizeBattleProgress(null),
+  difficultyState: sanitizeDifficultyState(null),
+  autoSession: sanitizeAutoSession(null),
   pets: createDefaultPetState(),
   characters: createDefaultCharacterState(),
   selectedBossId: null,
@@ -533,6 +557,67 @@ function sanitizeBattleProgress(raw) {
   return progress;
 }
 
+function createDefaultDifficultyState() {
+  const progress = {};
+  DIFFICULTY_ORDER.forEach((id) => {
+    progress[id] = { highest: 1 };
+  });
+  return {
+    unlocked: { easy: true, normal: false, hard: false },
+    manualSelection: 'easy',
+    progress
+  };
+}
+
+function sanitizeDifficultyState(raw) {
+  const defaults = createDefaultDifficultyState();
+  if (!raw || typeof raw !== 'object') {
+    return defaults;
+  }
+  const unlocked = { ...defaults.unlocked };
+  DIFFICULTY_ORDER.forEach((id) => {
+    unlocked[id] = raw.unlocked && typeof raw.unlocked === 'object' ? !!raw.unlocked[id] : unlocked[id];
+  });
+  const manual = typeof raw.manualSelection === 'string' && DIFFICULTY_ORDER.includes(raw.manualSelection)
+    ? raw.manualSelection
+    : defaults.manualSelection;
+  const progress = {};
+  DIFFICULTY_ORDER.forEach((id) => {
+    const source = raw.progress && raw.progress[id];
+    const highest = clampNumber(source?.highest, 1, MAX_LEVEL, defaults.progress[id].highest);
+    progress[id] = { highest };
+  });
+  return { unlocked, manualSelection: manual, progress };
+}
+
+function createDefaultAutoSession() {
+  return {
+    accumulatedMs: 0,
+    lastUpdate: 0,
+    preloaded: 0,
+    hellActive: false,
+    hellStartedAt: 0,
+    hellEndsAt: 0,
+    forcedDifficulty: null
+  };
+}
+
+function sanitizeAutoSession(raw) {
+  const defaults = createDefaultAutoSession();
+  if (!raw || typeof raw !== 'object') {
+    return defaults;
+  }
+  return {
+    accumulatedMs: clampNumber(raw.accumulatedMs, 0, Number.MAX_SAFE_INTEGER, defaults.accumulatedMs),
+    lastUpdate: clampNumber(raw.lastUpdate, 0, Number.MAX_SAFE_INTEGER, defaults.lastUpdate),
+    preloaded: clampNumber(raw.preloaded, 0, HOLY_WATER_MAX_PRELOAD, defaults.preloaded),
+    hellActive: !!raw.hellActive,
+    hellStartedAt: clampNumber(raw.hellStartedAt, 0, Number.MAX_SAFE_INTEGER, defaults.hellStartedAt),
+    hellEndsAt: clampNumber(raw.hellEndsAt, 0, Number.MAX_SAFE_INTEGER, defaults.hellEndsAt),
+    forcedDifficulty: DIFFICULTY_ORDER.includes(raw.forcedDifficulty) ? raw.forcedDifficulty : null
+  };
+}
+
 function setLastNormalLevel(level, options = {}) {
   const lvl = clampMonsterLevel(level);
   if (!state.battleProgress) {
@@ -567,6 +652,84 @@ function registerLevelClear(level) {
   }
   queueProfileUpdate({ battleProgress: { ...state.battleProgress } });
   updateBossUi();
+}
+
+function difficultyConfig(id) {
+  return DIFFICULTY_CONFIG[id] || DIFFICULTY_CONFIG.easy;
+}
+
+function difficultyLabel(id) {
+  return difficultyConfig(id).label || id;
+}
+
+function getManualDifficulty() {
+  if (state.user?.role === 'admin') return state.difficultyState?.manualSelection || 'easy';
+  return state.difficultyState?.manualSelection || 'easy';
+}
+
+function isDifficultyUnlocked(id) {
+  if (state.user?.role === 'admin') return true;
+  return !!(state.difficultyState?.unlocked?.[id]);
+}
+
+function getActiveDifficulty() {
+  const forced = state.autoSession?.hellActive && state.autoSession?.forcedDifficulty;
+  return forced || getManualDifficulty();
+}
+
+function computeNextDifficulty(current) {
+  const idx = DIFFICULTY_ORDER.indexOf(current);
+  if (idx < 0) return 'normal';
+  const nextIdx = Math.min(DIFFICULTY_ORDER.length - 1, idx + 1);
+  return DIFFICULTY_ORDER[nextIdx] || 'hard';
+}
+
+function setManualDifficulty(id, { silent } = {}) {
+  if (!DIFFICULTY_ORDER.includes(id)) return;
+  if (!isDifficultyUnlocked(id)) {
+    if (!silent) addBattleLog(`[난이도] ${difficultyLabel(id)} 난이도는 아직 해금되지 않았습니다.`, 'warn');
+    updateDifficultyUi();
+    return;
+  }
+  if (!state.difficultyState) state.difficultyState = sanitizeDifficultyState(null);
+  if (state.difficultyState.manualSelection === id) {
+    updateDifficultyUi();
+    return;
+  }
+  state.difficultyState.manualSelection = id;
+  persistDifficultyState();
+  addBattleLog(`[난이도] ${difficultyLabel(id)} 난이도로 전환합니다.`, 'warn');
+  updateDifficultyUi();
+  updateEnemyStats(gameState.enemy.level || 1);
+  updateAutoSessionUi();
+}
+
+function unlockDifficulty(id) {
+  if (!state.difficultyState) state.difficultyState = sanitizeDifficultyState(null);
+  if (!DIFFICULTY_ORDER.includes(id)) return;
+  if (state.difficultyState.unlocked[id]) return;
+  state.difficultyState.unlocked[id] = true;
+  persistDifficultyState();
+  addBattleLog(`[난이도] ${difficultyLabel(id)} 난이도가 해금되었습니다!`, 'heal');
+  updateDifficultyUi();
+}
+
+function recordDifficultyProgress(difficultyId, level) {
+  if (!state.difficultyState) state.difficultyState = sanitizeDifficultyState(null);
+  if (!DIFFICULTY_ORDER.includes(difficultyId)) return;
+  const progress = state.difficultyState.progress[difficultyId] || { highest: 1 };
+  if (level > (progress.highest || 1)) {
+    progress.highest = level;
+    state.difficultyState.progress[difficultyId] = progress;
+    persistDifficultyState();
+  }
+  if (level >= 999) {
+    if (difficultyId === 'easy') {
+      unlockDifficulty('normal');
+    } else if (difficultyId === 'normal') {
+      unlockDifficulty('hard');
+    }
+  }
 }
 
 function bossUnlockRequirement(bossId) {
@@ -1594,6 +1757,10 @@ function updateResourceSummary() {
   if (els.petTickets) els.petTickets.textContent = state.user?.role === 'admin' ? '∞' : formatNum(state.items?.petTicket || 0);
   if (els.potionStock) els.potionStock.textContent = formatNum(state.items?.potion || 0);
   if (els.hyperPotionStock) els.hyperPotionStock.textContent = formatNum(state.items?.hyperPotion || 0);
+  if (els.holyWaterStock) {
+    const holyWaterDisplay = state.user?.role === 'admin' ? '∞' : formatNum(state.items?.holyWater || 0);
+    els.holyWaterStock.textContent = holyWaterDisplay;
+  }
   updateBattleResUi();
   updateAutoConsumableUi();
   updateSpeedStatus();
@@ -1638,6 +1805,7 @@ function snapshotItems() {
     enhance: state.items?.enhance || 0,
     revive: state.items?.revive || 0,
     battleRes: state.items?.battleRes || 0,
+    holyWater: state.items?.holyWater || 0,
     petTicket: state.items?.petTicket || 0
   };
 }
@@ -1657,6 +1825,49 @@ function persistCombatPreferences() {
   };
   state.profile.combat = { ...combatPayload };
   queueProfileUpdate({ combat: combatPayload });
+}
+
+function persistDifficultyState() {
+  if (!state.difficultyState) {
+    state.difficultyState = sanitizeDifficultyState(null);
+  }
+  const payload = {
+    unlocked: { ...state.difficultyState.unlocked },
+    manualSelection: state.difficultyState.manualSelection,
+    progress: {}
+  };
+  DIFFICULTY_ORDER.forEach((id) => {
+    payload.progress[id] = { highest: state.difficultyState.progress?.[id]?.highest || 1 };
+  });
+  if (state.profile) {
+    state.profile.difficultyState = {
+      unlocked: { ...payload.unlocked },
+      manualSelection: payload.manualSelection,
+      progress: { ...payload.progress }
+    };
+  }
+  queueProfileUpdate({ difficultyState: payload });
+}
+
+function persistAutoSession(options = {}) {
+  if (!state.autoSession) {
+    state.autoSession = sanitizeAutoSession(null);
+  }
+  const payload = {
+    accumulatedMs: Math.max(0, Math.round(state.autoSession.accumulatedMs || 0)),
+    lastUpdate: Math.max(0, Math.round(state.autoSession.lastUpdate || 0)),
+    preloaded: clampNumber(state.autoSession.preloaded, 0, HOLY_WATER_MAX_PRELOAD, 0),
+    hellActive: !!state.autoSession.hellActive,
+    hellStartedAt: Math.max(0, Math.round(state.autoSession.hellStartedAt || 0)),
+    hellEndsAt: Math.max(0, Math.round(state.autoSession.hellEndsAt || 0)),
+    forcedDifficulty: DIFFICULTY_ORDER.includes(state.autoSession.forcedDifficulty) ? state.autoSession.forcedDifficulty : null
+  };
+  if (state.profile) {
+    state.profile.autoSession = { ...payload };
+  }
+  if (options.persist !== false) {
+    queueProfileUpdate({ autoSession: payload });
+  }
 }
 
 function buildEquipmentList() {
@@ -1795,8 +2006,11 @@ function updateSpeedStatus() {
 function startBuffTicker() {
   if (state.buffTicker) clearInterval(state.buffTicker);
   const tick = () => {
+    const now = Date.now();
     updateSpeedStatus();
     updateAutoStatsDuration();
+    updateAutoSession(now);
+    updateAutoSessionUi();
   };
   tick();
   state.buffTicker = setInterval(tick, 500);
@@ -1901,6 +2115,254 @@ function updateAutoStatsDuration() {
   els.autoStatsDuration.textContent = `경과 시간: ${formatAutoDuration(elapsed)}`;
 }
 
+function computeAutoThresholdMs(session = state.autoSession) {
+  const base = AUTO_BASE_THRESHOLD_MS;
+  const preloaded = clampNumber(session?.preloaded, 0, HOLY_WATER_MAX_PRELOAD, 0);
+  return base + preloaded * HOLY_WATER_EXTENSION_MS;
+}
+
+function formatTimePair(elapsed, total) {
+  return `${formatAutoDuration(elapsed)} / ${formatAutoDuration(total)}`;
+}
+
+function ensureDifficultyButtons() {
+  if (!els.difficultyButtons || els.difficultyButtons.dataset.initialized) return;
+  const fragment = document.createDocumentFragment();
+  DIFFICULTY_ORDER.forEach((id) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'difficulty-btn';
+    btn.dataset.difficulty = id;
+    btn.textContent = difficultyLabel(id);
+    fragment.appendChild(btn);
+  });
+  els.difficultyButtons.appendChild(fragment);
+  els.difficultyButtons.dataset.initialized = '1';
+  els.difficultyButtons.addEventListener('click', (event) => {
+    const target = event.target instanceof HTMLElement ? event.target.closest('.difficulty-btn') : null;
+    if (!target) return;
+    const id = target.dataset.difficulty;
+    if (!id) return;
+    setManualDifficulty(id);
+  });
+}
+
+function applyDifficultyTheme(id) {
+  const difficultyId = DIFFICULTY_ORDER.includes(id) ? id : 'easy';
+  if (els.monsterSprite) {
+    els.monsterSprite.dataset.difficulty = difficultyId;
+  }
+  document.body.dataset.difficulty = difficultyId;
+}
+
+function ensureTimeAccel(now = Date.now()) {
+  if (!state.timeAccel) {
+    state.timeAccel = { multiplier: 1, until: 0 };
+  }
+  if (state.timeAccel.multiplier > 1 && state.timeAccel.until <= now) {
+    state.timeAccel.multiplier = 1;
+    state.timeAccel.until = 0;
+  }
+  return state.timeAccel;
+}
+
+function currentTimeAccelMultiplier(now = Date.now()) {
+  return ensureTimeAccel(now).multiplier || 1;
+}
+
+function timeAccelRemaining(now = Date.now()) {
+  const accel = ensureTimeAccel(now);
+  return Math.max(0, (accel.until || 0) - now);
+}
+
+function applyTimeAccel(multiplier, durationMs) {
+  if (state.user?.role !== 'admin') return;
+  const safeMultiplier = Math.max(1, multiplier || 1);
+  const safeDuration = Math.max(1, durationMs || 0);
+  const now = Date.now();
+  ensureTimeAccel(now);
+  if (!state.timeAccel) state.timeAccel = { multiplier: 1, until: 0 };
+  state.timeAccel.multiplier = safeMultiplier;
+  state.timeAccel.until = now + safeDuration;
+  addBattleLog(`[시간 가속] ${safeMultiplier}배 속도로 ${formatAutoDuration(safeDuration)} 동안 진행됩니다.`, 'heal');
+  updateAutoSessionUi();
+}
+
+function updateAutoSessionUi() {
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  const session = state.autoSession;
+  const now = Date.now();
+  const threshold = computeAutoThresholdMs(session);
+  const accumulated = Math.max(0, Math.min(session.accumulatedMs || 0, threshold + AUTO_HELL_DURATION_MS));
+  ensureDifficultyButtons();
+  if (els.autoTimerStatus) {
+    if (session.hellActive) {
+      const remain = Math.max(0, (session.hellEndsAt || now) - now);
+      els.autoTimerStatus.textContent = `지옥 개방 진행 중 · 남은 시간 ${formatAutoDuration(remain)}`;
+    } else {
+      els.autoTimerStatus.textContent = `평화 구간 경과: ${formatTimePair(accumulated, threshold)}`;
+    }
+  }
+  if (els.hellStatus) {
+    if (session.hellActive) {
+      const forced = session.forcedDifficulty || getManualDifficulty();
+      const remain = Math.max(0, (session.hellEndsAt || now) - now);
+      els.hellStatus.textContent = `지옥문 개방 — 강제 난이도 ${difficultyLabel(forced)} · 남은 ${formatAutoDuration(remain)}`;
+    } else {
+      els.hellStatus.textContent = '지옥문 닫힘 (평화 상태)';
+    }
+  }
+  if (els.holyWaterPreloadStatus) {
+    const preloaded = clampNumber(session.preloaded, 0, HOLY_WATER_MAX_PRELOAD, 0);
+    els.holyWaterPreloadStatus.textContent = `사전 성수 사용: ${preloaded}/${HOLY_WATER_MAX_PRELOAD}`;
+  }
+  if (els.useHolyWaterBtn) {
+    const hasStock = state.user?.role === 'admin' || (state.items?.holyWater || 0) > 0;
+    els.useHolyWaterBtn.disabled = !hasStock;
+    els.useHolyWaterBtn.title = hasStock ? '' : '성수가 부족합니다.';
+  }
+  if (els.adminTimeAccelBtn) {
+    els.adminTimeAccelBtn.style.display = state.user?.role === 'admin' ? '' : 'none';
+  }
+  if (els.timeAccelStatus) {
+    const multiplier = currentTimeAccelMultiplier(now);
+    if (multiplier > 1) {
+      const remain = timeAccelRemaining(now);
+      els.timeAccelStatus.textContent = `시간 가속: x${multiplier} (남은 ${formatAutoDuration(remain)})`;
+    } else {
+      els.timeAccelStatus.textContent = '시간 가속: 없음';
+    }
+  }
+  updateDifficultyUi();
+}
+
+function updateAutoSession(now = Date.now()) {
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  const session = state.autoSession;
+  if (!session.lastUpdate) {
+    session.lastUpdate = now;
+  }
+  let delta = now - session.lastUpdate;
+  if (!Number.isFinite(delta) || delta < 0) {
+    delta = 0;
+  }
+  session.lastUpdate = now;
+
+  if (session.hellActive) {
+    if (session.hellEndsAt && now >= session.hellEndsAt) {
+      closeHell('duration');
+      updateAutoSessionUi();
+      return;
+    }
+  }
+
+  if (gameState.battle.autoPlay) {
+    const accelMultiplier = currentTimeAccelMultiplier(now);
+    session.accumulatedMs = Math.max(0, (session.accumulatedMs || 0) + delta * accelMultiplier);
+  } else if (session.accumulatedMs > 0) {
+    ensureTimeAccel(now);
+    session.accumulatedMs = Math.max(0, session.accumulatedMs - delta);
+    if (!session.hellActive && session.accumulatedMs === 0 && session.preloaded > 0) {
+      session.preloaded = 0;
+      persistAutoSession();
+    }
+  } else {
+    ensureTimeAccel(now);
+  }
+
+  if (session.hellActive) {
+    if (session.accumulatedMs <= 0) {
+      closeHell('cooldown');
+      updateAutoSessionUi();
+    }
+    return;
+  }
+
+  const threshold = computeAutoThresholdMs(session);
+  if (threshold > 0 && session.accumulatedMs >= threshold) {
+    openHell('threshold');
+  }
+}
+
+function openHell(reason = 'threshold') {
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  const session = state.autoSession;
+  if (session.hellActive) return;
+  const now = Date.now();
+  const manual = getManualDifficulty();
+  const forced = computeNextDifficulty(manual);
+  session.hellActive = true;
+  session.hellStartedAt = now;
+  session.hellEndsAt = now + AUTO_HELL_DURATION_MS;
+  session.forcedDifficulty = forced;
+  session.preloaded = 0;
+  session.accumulatedMs = computeAutoThresholdMs(session);
+  session.lastUpdate = now;
+  const label = forced === manual ? difficultyLabel(forced) : `${difficultyLabel(forced)} (기존 ${difficultyLabel(manual)})`;
+  addBattleLog(`[지옥문 개방] ${label} 난이도가 강제 적용됩니다.`, 'damage');
+  persistAutoSession();
+  updateAutoSessionUi();
+  updateEnemyStats(gameState.enemy.level || 1);
+}
+
+function closeHell(reason = 'duration') {
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  const session = state.autoSession;
+  if (!session.hellActive) return;
+  session.hellActive = false;
+  session.forcedDifficulty = null;
+  session.hellStartedAt = 0;
+  session.hellEndsAt = 0;
+  session.accumulatedMs = 0;
+  session.preloaded = 0;
+  session.lastUpdate = Date.now();
+  const reasonLabel = reason === 'duration'
+    ? '지정된 시간이 경과했습니다.'
+    : reason === 'cooldown'
+      ? '자동 전투가 멈추어 열기가 식었습니다.'
+      : reason === 'holyWater'
+        ? '성수의 힘으로 지옥문이 닫혔습니다.'
+        : '조건이 해소되었습니다.';
+  addBattleLog(`[지옥문 종료] ${reasonLabel}`, 'warn');
+  persistAutoSession();
+  updateAutoSessionUi();
+  updateEnemyStats(gameState.enemy.level || 1);
+}
+
+function updateDifficultyUi() {
+  if (!state.difficultyState) state.difficultyState = sanitizeDifficultyState(null);
+  const manual = getManualDifficulty();
+  const active = getActiveDifficulty();
+  ensureDifficultyButtons();
+  if (els.difficultyButtons) {
+    const forced = state.autoSession?.hellActive && state.autoSession?.forcedDifficulty;
+    const isAdmin = state.user?.role === 'admin';
+    const buttons = els.difficultyButtons.querySelectorAll('.difficulty-btn');
+    buttons.forEach((btn) => {
+      const id = btn.dataset.difficulty;
+      const unlocked = isDifficultyUnlocked(id) || isAdmin;
+      btn.textContent = difficultyLabel(id);
+      btn.disabled = !unlocked;
+      const isActiveManual = id === manual;
+      const isForcedActive = forced && id === active;
+      btn.classList.toggle('active', isActiveManual);
+      btn.classList.toggle('forced', !!isForcedActive);
+    });
+    if (!isAdmin && state.autoSession?.hellActive) {
+      buttons.forEach((btn) => {
+        btn.disabled = btn.dataset.difficulty !== active;
+      });
+    }
+  }
+  if (els.difficultyStatus) {
+    const display = state.autoSession?.hellActive && state.autoSession?.forcedDifficulty
+      ? `${difficultyLabel(active)} (강제)`
+      : difficultyLabel(active);
+    els.difficultyStatus.textContent = `현재 난이도: ${display}`;
+  }
+  applyDifficultyTheme(active);
+}
+
 function startAutoStatsSession() {
   if (state.autoStats.active) return;
   resetAutoStatsValues();
@@ -1908,6 +2370,23 @@ function startAutoStatsSession() {
   state.autoStats.startTime = Date.now();
   updateAutoStatsDuration();
   updateAutoStatsUi();
+}
+
+function onAutoPlayStarted() {
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  state.autoSession.lastUpdate = Date.now();
+  persistAutoSession();
+  updateAutoSessionUi();
+}
+
+function onAutoPlayStopped(reason = 'manual') {
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  state.autoSession.lastUpdate = Date.now();
+  persistAutoSession();
+  if (reason === 'manual' && state.autoSession.hellActive) {
+    addBattleLog('자동 전투를 중지했습니다. 지옥문이 서서히 닫힙니다.', 'warn');
+  }
+  updateAutoSessionUi();
 }
 
 function recordAutoStats(rewards = {}) {
@@ -1934,6 +2413,7 @@ function endAutoStatsSession(reason = 'manual') {
     startTime: state.autoStats.startTime
   };
   state.autoStats.active = false;
+  onAutoPlayStopped(reason);
   const durationMs = summary.startTime ? Date.now() - summary.startTime : 0;
   const durationSec = durationMs > 0 ? Math.round(durationMs / 1000) : 0;
   const reasonLabel = AUTO_STOP_REASON_LABELS[reason] || AUTO_STOP_REASON_LABELS.other;
@@ -2043,6 +2523,7 @@ function updateAutoPlayUi() {
   if (!els.autoPlayBtn) return;
   els.autoPlayBtn.textContent = gameState.battle.autoPlay ? '자동 전투 ON' : '자동 전투 OFF';
   els.autoPlayBtn.classList.toggle('ok', gameState.battle.autoPlay);
+  updateAutoSessionUi();
 }
 
 function addBattleLog(message, type = '') {
@@ -2188,7 +2669,8 @@ function updateEnemyStats(level) {
   const lvl = updateMonsterLevelUI(level);
   gameState.enemy.level = lvl;
   const scaling = normalizeMonsterScaling(state.config?.monsterScaling);
-  const difficulty = scaling.difficultyMultiplier || 1;
+  const activeDifficulty = difficultyConfig(getActiveDifficulty());
+  const difficulty = (scaling.difficultyMultiplier || 1) * (activeDifficulty.difficultyMultiplier || 1);
   const norm = Math.min(1, Math.max(0, (lvl - 1) / (MAX_LEVEL - 1 || 1)));
   const basePower = Math.max(1, scaling.basePower || DEFAULT_MONSTER_SCALING.basePower);
   const maxPower = Math.max(basePower, scaling.maxPower || DEFAULT_MONSTER_SCALING.maxPower);
@@ -2227,6 +2709,7 @@ function updateEnemyStats(level) {
   if (els.enemyLevel) els.enemyLevel.textContent = String(lvl);
   updateMonsterImage(lvl);
   updateHpBars();
+  applyDifficultyTheme(getActiveDifficulty());
 }
 
 function damageEquipmentAfterDefeat() {
@@ -2379,31 +2862,44 @@ function startNewBattle() {
 
 function applyRewards(level, rng = Math.random) {
   if (state.user?.role === 'admin') return;
-  const points = levelReward(level);
-  const gold = calcGoldReward(level, rng);
+  const difficultyId = getActiveDifficulty();
+  const diffCfg = difficultyConfig(difficultyId);
+  const rewardMultiplier = Math.max(1, diffCfg.rewardMultiplier || 1);
+  const points = Math.max(1, Math.round(levelReward(level) * rewardMultiplier));
+  const gold = Math.max(1, Math.round(calcGoldReward(level, rng) * rewardMultiplier));
   state.wallet += points;
   state.gold += gold;
   const drops = [];
   const dropCounts = { enhance: 0, potion: 0, hyperPotion: 0, protect: 0, battleRes: 0 };
-  if (maybeDropItem('enhance', level)) {
-    drops.push('강화권 +1');
-    dropCounts.enhance += 1;
+  const iterations = Math.max(1, Math.floor(rewardMultiplier));
+  const extraChance = Math.max(0, rewardMultiplier - iterations);
+  const applyDropRolls = () => {
+    if (maybeDropItem('enhance', level, rng)) {
+      drops.push('강화권 +1');
+      dropCounts.enhance += 1;
+    }
+    if (maybeDropItem('potion', level, rng)) {
+      drops.push('가속 물약 +1');
+      dropCounts.potion += 1;
+    }
+    if (maybeDropItem('hyperPotion', level, rng)) {
+      drops.push('초 가속 물약 +1');
+      dropCounts.hyperPotion += 1;
+    }
+    if (maybeDropItem('protect', level, rng)) {
+      drops.push('보호권 +1');
+      dropCounts.protect += 1;
+    }
+    if (maybeDropItem('battleRes', level, rng)) {
+      drops.push('전투부활권 +1');
+      dropCounts.battleRes += 1;
+    }
+  };
+  for (let i = 0; i < iterations; i += 1) {
+    applyDropRolls();
   }
-  if (maybeDropItem('potion', level)) {
-    drops.push('가속 물약 +1');
-    dropCounts.potion += 1;
-  }
-  if (maybeDropItem('hyperPotion', level)) {
-    drops.push('초 가속 물약 +1');
-    dropCounts.hyperPotion += 1;
-  }
-  if (maybeDropItem('protect', level)) {
-    drops.push('보호권 +1');
-    dropCounts.protect += 1;
-  }
-  if (maybeDropItem('battleRes', level)) {
-    drops.push('전투부활권 +1');
-    dropCounts.battleRes += 1;
+  if (extraChance > 0 && rng() < extraChance) {
+    applyDropRolls();
   }
   state.profile.wallet = state.wallet;
   state.profile.gold = state.gold;
@@ -2413,9 +2909,9 @@ function applyRewards(level, rng = Math.random) {
   return { points, gold, drops, dropCounts };
 }
 
-function maybeDropItem(type, level) {
+function maybeDropItem(type, level, rng = Math.random) {
   const rate = dropRateForLevel(type, level);
-  if (Math.random() < rate) {
+  if (rng() < rate) {
     state.items[type] = (state.items[type] || 0) + 1;
     return true;
   }
@@ -2463,6 +2959,68 @@ function consumeHyperPotion() {
   return true;
 }
 
+function hasHolyWaterStock() {
+  if (state.user?.role === 'admin') return true;
+  return (state.items?.holyWater || 0) > 0;
+}
+
+function adjustHolyWaterStock(delta) {
+  if (state.user?.role === 'admin') return true;
+  const current = state.items?.holyWater || 0;
+  if (current + delta < 0) return false;
+  state.items.holyWater = current + delta;
+  if (state.items.holyWater < 0) state.items.holyWater = 0;
+  return true;
+}
+
+function useHolyWater() {
+  if (!hasHolyWaterStock()) {
+    addBattleLog('성수가 부족합니다.', 'warn');
+    return;
+  }
+  if (!state.autoSession) state.autoSession = sanitizeAutoSession(null);
+  const session = state.autoSession;
+  const now = Date.now();
+  if (!session.hellActive) {
+    if (session.preloaded >= HOLY_WATER_MAX_PRELOAD) {
+      addBattleLog('성수는 최대 2개까지만 사전 사용이 가능합니다.', 'warn');
+      return;
+    }
+    if (!adjustHolyWaterStock(-1)) {
+      addBattleLog('성수를 사용할 수 없습니다.', 'warn');
+      return;
+    }
+    session.preloaded = clampNumber((session.preloaded || 0) + 1, 0, HOLY_WATER_MAX_PRELOAD, session.preloaded || 0);
+    session.lastUpdate = now;
+    persistItems();
+    persistAutoSession();
+    updateResourceSummary();
+    updateAutoSessionUi();
+    addBattleLog(`[성수] 평화 구간을 ${formatAutoDuration(HOLY_WATER_EXTENSION_MS)} 연장했습니다.`, 'heal');
+    return;
+  }
+  // hell active: reduce accumulated time and remaining duration
+  if (!adjustHolyWaterStock(-1)) {
+    addBattleLog('성수를 사용할 수 없습니다.', 'warn');
+    return;
+  }
+  session.accumulatedMs = Math.max(0, (session.accumulatedMs || 0) - HOLY_WATER_EXTENSION_MS);
+  if (session.hellEndsAt) {
+    session.hellEndsAt = Math.max(now, session.hellEndsAt - HOLY_WATER_EXTENSION_MS);
+  }
+  session.lastUpdate = now;
+  persistItems();
+  persistAutoSession();
+  updateResourceSummary();
+  updateAutoSessionUi();
+  addBattleLog('[성수] 지옥문이 진정되었습니다. 지속 시간이 단축됩니다.', 'heal');
+  if (session.hellEndsAt && now >= session.hellEndsAt) {
+    closeHell('holyWater');
+  } else if (session.accumulatedMs <= 0) {
+    closeHell('holyWater');
+  }
+}
+
 function useBattleResTicket(level, context) {
   if (!state.combat.useBattleRes) return false;
   const isAdmin = state.user?.role === 'admin';
@@ -2488,6 +3046,7 @@ function handleVictory(level) {
   const rewards = applyRewards(level, rng);
   const bossRewards = bossContext ? applyBossRewards(bossContext, rng) : null;
   registerLevelClear(level);
+  recordDifficultyProgress(getActiveDifficulty(), level);
   triggerDeathAnimation('monster');
   addBattleLog('=== 승리! ===', 'heal');
   if (rewards) {
@@ -2744,6 +3303,7 @@ function initEventListeners() {
     updateAutoPlayUi();
     if (gameState.battle.autoPlay) {
       startAutoStatsSession();
+      onAutoPlayStarted();
       if (gameState.battle.ongoing && gameState.battle.isPlayerTurn) {
         queueAutoPlayerAction(450);
       } else if (!gameState.battle.ongoing) {
@@ -2770,6 +3330,14 @@ function initEventListeners() {
     state.combat.autoHyper = !!e.target.checked;
     persistCombatPreferences();
     updateAutoConsumableUi();
+  });
+  els.useHolyWaterBtn?.addEventListener('click', () => {
+    useHolyWater();
+  });
+  els.adminTimeAccelBtn?.addEventListener('click', () => {
+    if (state.user?.role === 'admin') {
+      applyTimeAccel(100, 5 * 60 * 1000);
+    }
   });
   els.bossList?.addEventListener('click', (event) => {
     const target = event.target instanceof HTMLElement ? event.target.closest('.boss-btn') : null;
@@ -2893,11 +3461,14 @@ async function hydrateProfile(firebaseUser) {
     role,
     email: firebaseUser.email || ''
   };
+  document.body.dataset.role = role;
   state.items = sanitizeItems(rawProfile.items);
   state.equip = sanitizeEquipMap(rawProfile.equip);
   state.enhance = sanitizeEnhanceConfig(rawProfile.enhance);
   state.bossProgress = sanitizeBossProgress(rawProfile.bossProgress);
   state.battleProgress = sanitizeBattleProgress(rawProfile.battleProgress);
+  state.difficultyState = sanitizeDifficultyState(rawProfile.difficultyState);
+  state.autoSession = sanitizeAutoSession(rawProfile.autoSession);
   state.pets = sanitizePetState(rawProfile.pets);
   state.characters = sanitizeCharacterState(rawProfile.characters);
   ensureCharacterState();
@@ -2913,6 +3484,7 @@ async function hydrateProfile(firebaseUser) {
     state.combat.useBattleRes = false;
   }
   state.buffs = { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 };
+  state.timeAccel = { multiplier: 1, until: 0 };
   state.profile = {
     ...rawProfile,
     username: fallbackName,
@@ -2926,7 +3498,9 @@ async function hydrateProfile(firebaseUser) {
     pets: state.pets,
     characters: state.characters,
     bossProgress: state.bossProgress,
-    battleProgress: state.battleProgress
+    battleProgress: state.battleProgress,
+    difficultyState: state.difficultyState,
+    autoSession: state.autoSession
   };
   const personalConfig = sanitizeConfig(rawProfile.config);
   state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
@@ -2939,6 +3513,7 @@ async function hydrateProfile(firebaseUser) {
   updateResourceSummary();
   updateBattleResUi();
   updateAutoPlayUi();
+  updateAutoSessionUi();
   startBuffTicker();
   if (els.whoami) els.whoami.textContent = `${fallbackName} (${role === 'admin' ? '관리자' : '회원'})`;
   updateBossUi();

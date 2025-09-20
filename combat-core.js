@@ -418,7 +418,7 @@ TIERS.forEach((tier) => {
 });
 
 export function sanitizeItems(raw) {
-  const template = { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, petTicket: 0 };
+  const template = { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, holyWater: 0, petTicket: 0 };
   const result = { ...template };
   if (raw && typeof raw === 'object') {
     Object.keys(template).forEach((key) => {
