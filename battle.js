@@ -132,7 +132,9 @@ const els = {
   ultimateOverlay: qs('#ultimateOverlay'),
   ultimateTitle: qs('#ultimateTitle'),
   ultimateGifWrap: qs('#ultimateGifWrap'),
-  ultimateGif: qs('#ultimateGif')
+  ultimateGif: qs('#ultimateGif'),
+  characterGifToggle: qs('#battleCharacterGifToggle'),
+  petGifToggle: qs('#battlePetGifToggle')
 };
 
 const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
@@ -2585,6 +2587,56 @@ function persistCombatPreferences() {
   queueProfileUpdate({ combat: combatPayload });
 }
 
+function persistUserSettings() {
+  const payload = sanitizeUserSettings(state.settings);
+  state.settings = payload;
+  if (state.profile) {
+    state.profile.settings = payload;
+  }
+  queueProfileUpdate({ settings: payload });
+}
+
+function syncGifToggleControls() {
+  const effects = state.settings?.effects || {};
+  if (els.characterGifToggle) {
+    els.characterGifToggle.checked = effects.characterUltimateGif !== false;
+  }
+  if (els.petGifToggle) {
+    els.petGifToggle.checked = effects.petUltimateGif !== false;
+  }
+}
+
+function setGifPreference(kind, enabled) {
+  const current = sanitizeUserSettings(state.settings);
+  current.effects = { ...current.effects };
+  const currentEnabled = kind === 'character'
+    ? current.effects.characterUltimateGif !== false
+    : current.effects.petUltimateGif !== false;
+  if (enabled === currentEnabled) {
+    syncGifToggleControls();
+    return;
+  }
+  if (kind === 'character') {
+    if (enabled) {
+      delete current.effects.characterUltimateGif;
+    } else {
+      current.effects.characterUltimateGif = false;
+    }
+  } else if (kind === 'pet') {
+    if (enabled) {
+      delete current.effects.petUltimateGif;
+    } else {
+      current.effects.petUltimateGif = false;
+    }
+  }
+  state.settings = current;
+  if (state.profile) {
+    state.profile.settings = current;
+  }
+  persistUserSettings();
+  syncGifToggleControls();
+}
+
 function persistDifficultyState() {
   if (!state.difficultyState) {
     state.difficultyState = sanitizeDifficultyState(null);
@@ -4208,6 +4260,14 @@ function enemyAction() {
 
 function initEventListeners() {
   updateBossUi();
+  els.characterGifToggle?.addEventListener('change', (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    setGifPreference('character', !!event.target.checked);
+  });
+  els.petGifToggle?.addEventListener('change', (event) => {
+    if (!(event.target instanceof HTMLInputElement)) return;
+    setGifPreference('pet', !!event.target.checked);
+  });
   els.attackBtn?.addEventListener('click', () => playerAction('attack'));
   els.defendBtn?.addEventListener('click', () => playerAction('defend'));
   els.skillBtn?.addEventListener('click', () => playerAction('skill'));
@@ -4469,6 +4529,7 @@ async function hydrateProfile(firebaseUser) {
   const effectiveConfig = globalConfig || personalConfig;
   state.config = effectiveConfig;
   state.profile.config = effectiveConfig;
+  syncGifToggleControls();
   state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
   ensurePlayerReady();
   gameState.player.status = {};
