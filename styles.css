@@ -77,7 +77,12 @@
       .row > * { margin: 4px 0; }
       .gacha-type-row { margin: 8px 0; }
       .preset-admin-row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
-      .preset-admin-row label { gap:8px; }
+.preset-admin-row label { gap:8px; }
+.balance-snapshot-class { margin-top:10px; }
+.balance-snapshot-header { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--muted); }
+.balance-snapshot-header strong { color:var(--text); font-size:13px; }
+.balance-snapshot-table { margin-top:4px; }
+.balance-snapshot-table td { white-space:nowrap; }
       .preset-user-row { display:flex; gap:8px; flex-wrap: wrap; align-items:center; margin-bottom:8px; }
       .preset-user-row label { gap:6px; }
       label { display:flex; align-items:center; gap: 6px; color: var(--muted); }

@@ -30,7 +30,10 @@ import {
   getCharacterDefinition,
   getCharacterImageVariants,
   characterBaseStats,
-  sanitizeUserSettings
+  sanitizeUserSettings,
+  sanitizeCharacterBalance,
+  DEFAULT_CHARACTER_BALANCE,
+  CHARACTER_CLASS_IDS
 } from './combat-core.js';
 
 const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
@@ -227,12 +230,33 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         characterCurrentClass: $('#characterCurrentClass'),
         characterCurrentCount: $('#characterCurrentCount'),
         characterCurrentStats: $('#characterCurrentStats'),
-        characterLegendaryClose: $('#characterLegendaryClose')
+        characterLegendaryClose: $('#characterLegendaryClose'),
+        characterBalanceTable: $('#characterBalanceTable'),
+        characterBalanceOffsetTable: $('#characterBalanceOffsetTable'),
+        characterBalanceMsg: $('#characterBalanceMsg'),
+        characterBalanceSnapshot: $('#characterBalanceSnapshot')
       };
 
       // Config and state
       const defaultWeights = {"SSS+":0.5, "SS+":1.5, "S+":8, "S":30, "A":60, "B":150, "C":300, "D":450};
       const cfgVersion = 'v1';
+      const CLASS_LABELS = {
+        warrior: '전사',
+        mage: '마법사',
+        archer: '궁수',
+        rogue: '도적',
+        goddess: '여신'
+      };
+      const CHARACTER_BALANCE_FIELDS = [
+        { key: 'skill', label: '스킬 배율' },
+        { key: 'hp', label: 'HP' },
+        { key: 'atk', label: 'ATK' },
+        { key: 'def', label: 'DEF' },
+        { key: 'speed', label: '속도' },
+        { key: 'critRate', label: '치명타율' },
+        { key: 'critDmg', label: '치명 피해' },
+        { key: 'dodge', label: '회피율' }
+      ];
 
       let currentFirebaseUser = null;
       let userProfile = null;
@@ -257,7 +281,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           hyperPotionSettings: { ...DEFAULT_HYPER_POTION_SETTINGS },
           monsterScaling: { ...DEFAULT_MONSTER_SCALING },
           petWeights: sanitizePetWeights(null),
-          rareAnimations: normalizeRareAnimations(DEFAULT_RARE_ANIMATIONS)
+          rareAnimations: normalizeRareAnimations(DEFAULT_RARE_ANIMATIONS),
+          characterBalance: sanitizeCharacterBalance(null)
         },
         session: { draws:0, counts: Object.fromEntries(TIERS.map(t=>[t,0])), history: [] },
         global: loadGlobal(),
@@ -301,6 +326,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       state.config.potionSettings = normalizePotionSettings(state.config.potionSettings, DEFAULT_POTION_SETTINGS);
       state.config.hyperPotionSettings = normalizePotionSettings(state.config.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS);
       state.config.rareAnimations = normalizeRareAnimations(state.config.rareAnimations);
+      state.config.characterBalance = sanitizeCharacterBalance(state.config.characterBalance);
 
       function deriveUsernameFromUser(firebaseUser){
         if(!firebaseUser) return '';
@@ -456,7 +482,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           hyperPotionSettings: normalizePotionSettings(raw && raw.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS),
           monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling),
           petWeights,
-          rareAnimations: normalizeRareAnimations(raw && raw.rareAnimations)
+          rareAnimations: normalizeRareAnimations(raw && raw.rareAnimations),
+          characterBalance: sanitizeCharacterBalance(raw && raw.characterBalance)
         };
       }
 
@@ -484,6 +511,225 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           });
         }
         return result;
+      }
+
+      function ensureCharacterBalanceConfig(){
+        const sanitized = sanitizeCharacterBalance(state.config.characterBalance);
+        state.config.characterBalance = sanitized;
+        if(userProfile?.config){
+          userProfile.config.characterBalance = sanitized;
+        }
+        return sanitized;
+      }
+
+      function setCharacterBalanceMsg(message, tone){
+        if(!els.characterBalanceMsg) return;
+        els.characterBalanceMsg.textContent = message || '';
+        els.characterBalanceMsg.classList.remove('ok','warn','danger');
+        if(tone === 'ok') els.characterBalanceMsg.classList.add('ok');
+        else if(tone === 'warn') els.characterBalanceMsg.classList.add('warn');
+        else if(tone === 'danger') els.characterBalanceMsg.classList.add('danger');
+      }
+
+      function updateCharacterBalanceInputs(){
+        if(!els.characterBalanceTable) return;
+        const balance = ensureCharacterBalanceConfig();
+        els.characterBalanceTable.querySelectorAll('input[data-class][data-field]').forEach((input)=>{
+          const classId = input.dataset.class;
+          const field = input.dataset.field;
+          const entry = balance[classId] || DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+          let value = 1;
+          if(field === 'skill'){
+            value = entry.skill ?? 1;
+          } else if(entry.stats && field in entry.stats){
+            value = entry.stats[field];
+          }
+          input.value = formatMultiplier(value ?? 1);
+          input.placeholder = formatMultiplier(value ?? 1);
+        });
+        if(els.characterBalanceOffsetTable){
+          els.characterBalanceOffsetTable.querySelectorAll('input[data-class][data-field]').forEach((input)=>{
+            const classId = input.dataset.class;
+            const field = input.dataset.field;
+            const entry = balance[classId] || DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+            const offsets = entry.offsets || {};
+            let value = offsets[field];
+            if(!Number.isFinite(value)) value = 0;
+            input.value = value;
+            input.placeholder = formatOffsetDisplay(field, value);
+          });
+        }
+        renderCharacterBalanceSnapshot();
+      }
+
+      function renderCharacterBalanceSnapshot(){
+        if(!els.characterBalanceSnapshot) return;
+        const balance = ensureCharacterBalanceConfig();
+        const content = CHARACTER_CLASS_IDS.map((classId) => {
+          const entry = balance[classId] || DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+          const skillMultiplier = formatMultiplier(entry.skill ?? 1);
+          const statMultipliers = entry.stats || {};
+          const statOffsets = entry.offsets || {};
+          const rows = TIERS.map((tier) => {
+            const def = findCharacterDefinitionForSnapshot(classId, tier);
+            if(!def) return '';
+            const baseStats = def.stats || {};
+            return `<tr>
+              <td>${tier}</td>
+              ${CHARACTER_SNAPSHOT_FIELDS.map((field) => `<td>${formatSnapshotCell(baseStats[field.key], Number(statMultipliers[field.key] ?? 1), Number(statOffsets[field.key] ?? 0), field.type)}</td>`).join('')}
+            </tr>`;
+          }).filter(Boolean).join('');
+          if(!rows) return '';
+          const classLabel = CLASS_LABELS[classId] || classId;
+          return `
+            <div class="balance-snapshot-class">
+              <div class="balance-snapshot-header"><strong>${classLabel}</strong><span>스킬 배율 ${skillMultiplier}×</span></div>
+              <table class="stats balance-snapshot-table">
+                <thead>
+                  <tr><th>티어</th>${CHARACTER_SNAPSHOT_FIELDS.map((field) => `<th>${field.label}</th>`).join('')}</tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `;
+        }).filter(Boolean).join('');
+        els.characterBalanceSnapshot.innerHTML = content || '<p class="muted">표시할 캐릭터 정보가 없습니다.</p>';
+      }
+
+      const CHARACTER_SNAPSHOT_FIELDS = [
+        { key: 'hp', label: 'HP', type: 'flat' },
+        { key: 'atk', label: 'ATK', type: 'flat' },
+        { key: 'def', label: 'DEF', type: 'flat' },
+        { key: 'speed', label: 'SPD', type: 'flat' },
+        { key: 'critRate', label: 'CRI', type: 'percent' },
+        { key: 'critDmg', label: 'CRIT DMG', type: 'percent' },
+        { key: 'dodge', label: 'DODGE', type: 'percent' }
+      ];
+
+      function formatOffsetDisplay(field, value){
+        if(!Number.isFinite(value)) return '0';
+        if(value === 0){
+          if(field === 'critRate' || field === 'critDmg' || field === 'dodge') return '0%p';
+          return '0';
+        }
+        const sign = value > 0 ? '+' : '-';
+        const absValue = Math.abs(value);
+        if(field === 'critRate' || field === 'critDmg' || field === 'dodge'){
+          const rounded = Math.round(absValue * 10) / 10;
+          return `${sign}${rounded}%p`;
+        }
+        const absText = absValue.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+        return `${sign}${absText}`;
+      }
+
+      function findCharacterDefinitionForSnapshot(classId, tier){
+        const ids = CHARACTER_IDS_BY_TIER[tier] || [];
+        for(const id of ids){
+          const def = getCharacterDefinition(id);
+          if(def?.classId === classId){
+            return def;
+          }
+        }
+        return null;
+      }
+
+      function formatSnapshotCell(baseValue, multiplier, offset, type){
+        if(!(typeof baseValue === 'number' && isFinite(baseValue))) return '-';
+        const safeMultiplier = typeof multiplier === 'number' && isFinite(multiplier) && multiplier >= 0 ? multiplier : 1;
+        const safeOffset = typeof offset === 'number' && isFinite(offset) ? offset : 0;
+        const adjusted = baseValue * safeMultiplier + safeOffset;
+        if(type === 'percent'){
+          const baseText = `${Math.round(baseValue * 10) / 10}%`;
+          const adjustedText = `${Math.round(adjusted * 10) / 10}%`;
+          if(Math.abs(adjusted - baseValue) < 0.001) return baseText;
+          const delta = adjusted - baseValue;
+          const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}%)`;
+          return `${baseText} → ${adjustedText}${deltaText}`;
+        }
+        const baseText = baseValue.toLocaleString('ko-KR');
+        const adjustedText = adjusted.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+        if(Math.abs(adjusted - baseValue) < 0.001) return baseText;
+        const delta = adjusted - baseValue;
+        const deltaAbs = Math.abs(delta).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+        const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${deltaAbs})`;
+        return `${baseText} → ${adjustedText}${deltaText}`;
+      }
+
+      function refreshCharacterBalanceEffects(){
+        updateInventoryView();
+        updateCharacterList();
+        renderCharacterStats();
+        syncStats();
+        drawChart();
+        updateWinProbView();
+      }
+
+      function handleCharacterBalanceInput(event){
+        const target = event.target;
+        if(!(target instanceof HTMLInputElement)) return;
+        const classId = target.dataset.class;
+        const field = target.dataset.field;
+        if(!classId || !field) return;
+        if(state.config.locked || !isAdmin()){
+          updateCharacterBalanceInputs();
+          setCharacterBalanceMsg('설정이 잠겨 있어 수정할 수 없습니다.', 'warn');
+          return;
+        }
+        let value = parseFloat(target.value);
+        if(!Number.isFinite(value)) value = 1;
+        if(value < 0) value = 0;
+        const balance = ensureCharacterBalanceConfig();
+        const entry = balance[classId] || (balance[classId] = JSON.parse(JSON.stringify(DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior)));
+        if(field === 'skill'){
+          entry.skill = value;
+        } else if(entry.stats && field in entry.stats){
+          entry.stats[field] = value;
+        }
+        state.config.characterBalance = balance;
+        if(userProfile?.config){
+          userProfile.config.characterBalance = balance;
+        }
+        if(isAdmin()){
+          persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
+        }
+        updateCharacterBalanceInputs();
+        const label = CLASS_LABELS[classId] || classId;
+        const fieldLabel = (CHARACTER_BALANCE_FIELDS.find((f)=>f.key === field)?.label) || field.toUpperCase();
+        setCharacterBalanceMsg(`${label} ${fieldLabel} 배율을 ${formatMultiplier(value)}로 설정했습니다.`, 'ok');
+        markProfileDirty();
+        refreshCharacterBalanceEffects();
+      }
+
+      function handleCharacterBalanceOffsetInput(event){
+        const target = event.target;
+        if(!(target instanceof HTMLInputElement)) return;
+        const classId = target.dataset.class;
+        const field = target.dataset.field;
+        if(!classId || !field) return;
+        if(state.config.locked || !isAdmin()){
+          updateCharacterBalanceInputs();
+          setCharacterBalanceMsg('설정이 잠겨 있어 수정할 수 없습니다.', 'warn');
+          return;
+        }
+        let value = parseFloat(target.value);
+        if(!Number.isFinite(value)) value = 0;
+        const balance = ensureCharacterBalanceConfig();
+        const entry = balance[classId] || (balance[classId] = JSON.parse(JSON.stringify(DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior)));
+        if(!entry.offsets) entry.offsets = JSON.parse(JSON.stringify(DEFAULT_CHARACTER_BALANCE[classId].offsets));
+        entry.offsets[field] = value;
+        state.config.characterBalance = balance;
+        if(userProfile?.config){
+          userProfile.config.characterBalance = balance;
+        }
+        if(isAdmin()){
+          persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
+        }
+        updateCharacterBalanceInputs();
+        const label = CLASS_LABELS[classId] || classId;
+        const fieldLabel = (CHARACTER_BALANCE_FIELDS.find((f)=>f.key === field)?.label) || field.toUpperCase();
+        setCharacterBalanceMsg(`${label} ${fieldLabel} 보정을 ${formatOffsetDisplay(field, value)}로 설정했습니다.`, 'ok');
+        markProfileDirty();
+        refreshCharacterBalanceEffects();
       }
 
       function sanitizeItems(raw){
@@ -1332,6 +1578,14 @@ ${parts.join(', ')}`;
         els.weightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; updateWeightsInputs(); });
         if(els.characterWeightsTable){ els.characterWeightsTable.addEventListener('input', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(!e.target.dataset.charTier) return; if(state.config.locked || !isAdmin()) return; applyCharacterInputsToConfig(); refreshCharacterProbCells(); markProfileDirty(); });
           els.characterWeightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(!e.target.dataset.charTier) return; if(state.config.locked || !isAdmin()) return; updateCharacterWeightsInputs(); }); }
+        if(els.characterBalanceTable){
+          els.characterBalanceTable.addEventListener('input', handleCharacterBalanceInput);
+          els.characterBalanceTable.addEventListener('change', ()=> updateCharacterBalanceInputs());
+        }
+        if(els.characterBalanceOffsetTable){
+          els.characterBalanceOffsetTable.addEventListener('input', handleCharacterBalanceOffsetInput);
+          els.characterBalanceOffsetTable.addEventListener('change', ()=> updateCharacterBalanceInputs());
+        }
         els.seed.addEventListener('input', ()=>{ state.config.seed = els.seed.value.trim(); markProfileDirty(); });
         if(els.gachaModeGearConfig) els.gachaModeGearConfig.addEventListener('click', ()=> updateGachaModeView('gear'));
         if(els.gachaModePetConfig) els.gachaModePetConfig.addEventListener('click', ()=> updateGachaModeView('pet'));
@@ -1577,7 +1831,7 @@ ${parts.join(', ')}`;
         if(els.spareList){ els.spareList.addEventListener('click', onSpareListClick); }
       }
 
-      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); if(els.characterWeightsBody){ els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ input.disabled = disabled; }); }
+      function toggleConfigDisabled(){ const admin = isAdmin(); const disabled = state.config.locked || (!admin && !state.ui.userEditEnabled); const fields = [els.mode, els.seed, els.pityEnabled, els.pityFloor, els.pitySpan, els.g10Enabled, els.g10Tier]; fields.forEach(x=>{ if(x){ x.disabled = disabled; } }); $$('.winput').forEach(i=> i.disabled = disabled); if(els.characterWeightsBody){ els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ input.disabled = disabled; }); } if(els.characterBalanceTable){ els.characterBalanceTable.querySelectorAll('input[data-class][data-field]').forEach((input)=>{ input.disabled = disabled; }); } if(els.characterBalanceOffsetTable){ els.characterBalanceOffsetTable.querySelectorAll('input[data-class][data-field]').forEach((input)=>{ input.disabled = disabled; }); }
         [els.potionDuration, els.potionManualCd, els.potionAutoCd, els.potionSpeedMult, els.hyperDuration, els.hyperManualCd, els.hyperAutoCd, els.hyperSpeedMult, els.monsterBasePower, els.monsterMaxPower, els.monsterCurve, els.monsterDifficultyInput].forEach(function(el){ if(el) el.disabled = disabled; }); if(els.monsterDifficultyMinus) els.monsterDifficultyMinus.disabled = disabled; if(els.monsterDifficultyPlus) els.monsterDifficultyPlus.disabled = disabled; if(els.globalPresetSelect) els.globalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; if(els.personalPresetSelect) els.personalPresetSelect.disabled = admin ? false : state.ui.userEditEnabled; updatePetWeightInputs(); updateCharacterWeightsInputs(); }
 
       // Draw engine with pity
@@ -2643,21 +2897,26 @@ ${parts.join(', ')}`;
         const characters = ensureCharacterState();
         const owned = characters.owned?.[def.id] || 0;
         const stats = def.stats || {};
+        const balance = ensureCharacterBalanceConfig()[def.classId] || DEFAULT_CHARACTER_BALANCE[def.classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+        const statMultipliers = balance.stats || {};
+        const statOffsets = balance.offsets || {};
         const skillInfo = getCharacterSkillInfo(def);
         const ultimateDef = getCharacterUltimateDefinition(def);
         const ultimateInfo = getCharacterUltimateInfo(ultimateDef);
         const statEntries = [
-          { key:'hp', label:'HP', format:(v)=>formatNum(Math.round(v||0)) },
-          { key:'atk', label:'공격력', format:(v)=>formatNum(Math.round(v||0)) },
-          { key:'def', label:'방어력', format:(v)=>formatNum(Math.round(v||0)) },
-          { key:'critRate', label:'치명타율', format:(v)=>`${Math.round(v||0)}%` },
-          { key:'critDmg', label:'치명타 피해', format:(v)=>`${Math.round(v||0)}%` },
-          { key:'dodge', label:'회피율', format:(v)=>`${Math.round(v||0)}%` },
-          { key:'speed', label:'속도', format:(v)=>formatNum(Math.round(v||0)) }
+          { key:'hp', label:'HP', type:'flat' },
+          { key:'atk', label:'공격력', type:'flat' },
+          { key:'def', label:'방어력', type:'flat' },
+          { key:'critRate', label:'치명타율', type:'percent' },
+          { key:'critDmg', label:'치명타 피해', type:'percent' },
+          { key:'dodge', label:'회피율', type:'percent' },
+          { key:'speed', label:'속도', type:'flat' }
         ];
-        const statHtml = statEntries.map(({ key, label, format }) => {
-          const value = stats[key];
-          const text = format ? format(value || 0) : formatNum(Math.round(value || 0));
+        const statHtml = statEntries.map(({ key, label, type }) => {
+          const baseValue = stats[key] || 0;
+          const multiplier = Number(statMultipliers[key] ?? 1);
+          const offset = Number(statOffsets[key] ?? 0);
+          const text = formatSnapshotCell(baseValue, multiplier, offset, type);
           return `<span><span class="stat-label">${label}</span>${text}</span>`;
         }).join('');
         const ownedText = isAdmin() ? '∞' : formatNum(owned);
@@ -2891,7 +3150,10 @@ ${parts.join(', ')}`;
         if(els.monsterMaxPower) els.monsterMaxPower.value = monsterCfg.maxPower;
         if(els.monsterCurve) els.monsterCurve.value = monsterCfg.curve;
         if(els.monsterDifficultyInput) els.monsterDifficultyInput.value = formatMultiplier(monsterCfg.difficultyMultiplier ?? 1);
-        updateWeightsInputs(); toggleConfigDisabled(); updateCombatView(); updateInventoryView(); updateShopButtons(); setShopMessage('', null); updateGachaModeView(); }
+        updateWeightsInputs();
+        updateCharacterBalanceInputs();
+        toggleConfigDisabled();
+        updateCombatView(); updateInventoryView(); updateShopButtons(); setShopMessage('', null); updateGachaModeView(); }
       function updateViewMode(){ const admin = isAdmin(); if(els.whoami){ els.whoami.textContent = state.user? `${state.user.username} (${admin? '관리자':'회원'})` : ''; }
         if(els.adminPanel){ els.adminPanel.style.display = (admin && state.ui.adminView) ? '' : 'none'; if(!admin){ state.ui.adminView = false; } }
         const configPanel = document.querySelector('#configPanel'); if(configPanel){ configPanel.style.opacity = admin? '1' : '0.92'; }
@@ -3449,7 +3711,20 @@ ${parts.join(', ')}`;
       function setActiveCharacter(characterId){ if(!CHARACTER_IDS.includes(characterId)) return; const characters = ensureCharacterState(); if(!isAdmin() && (characters.owned?.[characterId] || 0) <= 0){ alert('해당 캐릭터를 보유하고 있지 않습니다.'); return; } if(characters.active === characterId) return; characters.active = characterId; state.characters = characters; if(userProfile) userProfile.characters = characters; state.ui.selectedCharacterDetail = characterId; updateInventoryView(); markProfileDirty(); }
       function getTotals(){
         const baseStats = getActiveCharacterBaseStats();
-        const derived = deriveCombatStats(state.equip, state.enhance, baseStats, state.pets?.active || null);
+        const activeId = getActiveCharacterId();
+        const activeDef = getCharacterDefinition(activeId);
+        const derived = deriveCombatStats(
+          state.equip,
+          state.enhance,
+          baseStats,
+          state.pets?.active || null,
+          {
+            balance: state.config?.characterBalance,
+            characterId: activeId,
+            classId: activeDef?.classId,
+            character: activeDef || null
+          }
+        );
         const stats = derived.stats || { atk: 0, def: 0 };
         return { atk: Math.round(stats.atk || 0), def: Math.round(stats.def || 0), raw: stats };
       }

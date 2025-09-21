@@ -451,6 +451,7 @@ const gameState = {
     totalStats: {},
     defending: false,
     skillCooldown: 0,
+    skillMultiplier: 1,
     classId: 'warrior',
     character: null,
     activePet: null,
@@ -1634,7 +1635,8 @@ function skipUltimateOverlay() {
 }
 
 function dealUltimateDamage(amount, message = null) {
-  const dmg = Math.max(0, Math.round(amount || 0));
+  const scaled = scaleSkillDamage(amount);
+  const dmg = Math.max(0, Math.round(scaled || 0));
   if (dmg <= 0) return 0;
   return applyDamageToEnemy(dmg, message);
 }
@@ -1815,7 +1817,7 @@ function applyUltimateEffect(def) {
         total += dealUltimateDamage(dmg, null);
       }
       addBattleLog(`[필살기] ${def.name}! 총 ${formatNum(total)} 피해`, 'critical');
-      const bleedDamage = Math.max(1, Math.round(offensive.atk * 1.2));
+      const bleedDamage = Math.max(1, Math.round(scaleSkillDamage(offensive.atk * 1.2)));
       applyEnemyBleed(bleedDamage, 4, `출혈 피해! {dmg}`);
       applyPlayerDodgeBuff(0.25, 2);
       applyPlayerSpeedBuff(15, 2);
@@ -1824,7 +1826,7 @@ function applyUltimateEffect(def) {
     case 'rogue-ssplus': {
       const damage = Math.round(offensive.atk * 3.0);
       dealUltimateDamage(damage, `[필살기] ${def.name}! {dmg} 피해`);
-      const bleedDamage = Math.max(1, Math.round(offensive.atk * 0.9));
+      const bleedDamage = Math.max(1, Math.round(scaleSkillDamage(offensive.atk * 0.9)));
       applyEnemyBleed(bleedDamage, 3, `출혈 피해! {dmg}`);
       applyPlayerDodgeBuff(0.2, 1);
       break;
@@ -1939,6 +1941,17 @@ function updatePetCompanion() {
     els.petCompanionImg.alt = activePet?.name || '호랭찡';
   }
   els.petCompanion.classList.add('show');
+}
+
+function getPlayerSkillMultiplier() {
+  const value = gameState.player?.skillMultiplier;
+  return typeof value === 'number' && isFinite(value) && value > 0 ? value : 1;
+}
+
+function scaleSkillDamage(value, multiplier = getPlayerSkillMultiplier()) {
+  if (!(typeof value === 'number' && isFinite(value))) return 0;
+  const mult = typeof multiplier === 'number' && isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
+  return value * mult;
 }
 
 function getPlayerOffensiveStats() {
@@ -2189,11 +2202,12 @@ function getClassSkillCooldown(classId = 'warrior') {
 
 function performClassSkill(classId = 'warrior') {
   const offensive = getPlayerOffensiveStats();
+  const skillMultiplier = getPlayerSkillMultiplier();
   let cooldown = getClassSkillCooldown(classId);
   switch (classId) {
     case 'warrior': {
       const result = calculateDamage(offensive, gameState.enemy, true);
-      const damage = Math.max(1, Math.round(result.damage * 1.5));
+      const damage = Math.max(1, Math.round(scaleSkillDamage(result.damage * 1.5, skillMultiplier)));
       const dealt = applyDamageToEnemy(damage, `강철의 격타! {dmg} 피해`);
       const shield = Math.max(1, Math.round((gameState.player.totalStats.def || 0) * 2.4));
       gameState.player.petShield = (gameState.player.petShield || 0) + shield;
@@ -2205,7 +2219,8 @@ function performClassSkill(classId = 'warrior') {
       break;
     }
     case 'mage': {
-      const burstDamage = Math.max(1, Math.round((offensive.atk || 0) * 1.6 + (offensive.critDmg || 0) * 25));
+      const rawBurst = (offensive.atk || 0) * 1.6 + (offensive.critDmg || 0) * 25;
+      const burstDamage = Math.max(1, Math.round(scaleSkillDamage(rawBurst, skillMultiplier)));
       const dealt = applyDamageToEnemy(burstDamage, `마나 폭발! {dmg} 피해`);
       if (dealt > 0) {
         const healAmount = Math.max(1, Math.round(dealt * 0.35));
@@ -2234,7 +2249,7 @@ function performClassSkill(classId = 'warrior') {
           misses += 1;
           continue;
         }
-        const damage = Math.max(1, Math.round(result.damage * 0.75));
+        const damage = Math.max(1, Math.round(scaleSkillDamage(result.damage * 0.75, skillMultiplier)));
         const dealt = applyDamageToEnemy(damage, null);
         if (dealt > 0) {
           total += dealt;
@@ -2253,9 +2268,9 @@ function performClassSkill(classId = 'warrior') {
     }
     case 'rogue': {
       const result = calculateDamage(offensive, gameState.enemy, true);
-      const damage = Math.max(1, Math.round(result.damage * 1.1));
+      const damage = Math.max(1, Math.round(scaleSkillDamage(result.damage * 1.1, skillMultiplier)));
       applyDamageToEnemy(damage, `그림자 일격! {dmg} 피해`);
-      const bleedDamage = Math.max(1, Math.round((gameState.player.totalStats.atk || 0) * 0.5));
+      const bleedDamage = Math.max(1, Math.round(scaleSkillDamage((gameState.player.totalStats.atk || 0) * 0.5, skillMultiplier)));
       const status = ensureEnemyStatus();
       status.bleed = { turns: 3, damage: bleedDamage, message: `출혈 피해! {dmg}` };
       addBattleLog(`적이 깊은 출혈을 입었습니다! 3턴 동안 매턴 ${formatNum(bleedDamage)} 피해`, 'warn');
@@ -2263,7 +2278,8 @@ function performClassSkill(classId = 'warrior') {
       break;
     }
     case 'goddess': {
-      const holyDamage = Math.max(1, Math.round((offensive.atk || 0) * 1.05 + (gameState.player.totalStats.def || 0) * 1.35));
+      const rawHoly = (offensive.atk || 0) * 1.05 + (gameState.player.totalStats.def || 0) * 1.35;
+      const holyDamage = Math.max(1, Math.round(scaleSkillDamage(rawHoly, skillMultiplier)));
       applyDamageToEnemy(holyDamage, `여신의 심판! {dmg} 피해`);
       const healAmount = Math.max(1, Math.round(gameState.player.maxHp * 0.28));
       const healed = healPlayer(healAmount, `여신의 은총! 체력 {heal} 회복`);
@@ -2278,7 +2294,8 @@ function performClassSkill(classId = 'warrior') {
     }
     default: {
       const result = calculateDamage(offensive, gameState.enemy, true);
-      applyDamageToEnemy(result.damage, `필살기! {dmg} 피해`);
+      const damage = Math.max(0, Math.round(scaleSkillDamage(result.damage, skillMultiplier)));
+      applyDamageToEnemy(damage, `필살기! {dmg} 피해`);
       cooldown = 3;
       break;
     }
@@ -2383,13 +2400,29 @@ function computePlayerStats() {
   const petDef = activePetDefinition();
   const charDef = getActiveCharacterDefinition();
   const baseStats = charDef?.stats ? { ...charDef.stats } : getActiveCharacterBaseStats();
-  const { stats, equipment } = derivePlayerStats(state.equip || {}, state.enhance, baseStats, petDef);
+  const derived = derivePlayerStats(
+    state.equip || {},
+    state.enhance,
+    baseStats,
+    petDef,
+    {
+      balance: state.config?.characterBalance,
+      characterId: charDef?.id || getActiveCharacterId(),
+      classId: charDef?.classId,
+      character: charDef || null
+    }
+  );
+  const { stats, equipment, skillMultiplier } = derived;
   const previousHp = gameState.player.hp;
   gameState.player.equipment = equipment;
   gameState.player.character = charDef || null;
   gameState.player.classId = charDef?.classId || 'warrior';
   const prevPetId = gameState.player.activePet?.id || null;
   gameState.player.totalStats = stats;
+  const resolvedMultiplier = typeof skillMultiplier === 'number' && isFinite(skillMultiplier) && skillMultiplier > 0
+    ? skillMultiplier
+    : 1;
+  gameState.player.skillMultiplier = resolvedMultiplier;
   if ((petDef?.id || null) !== prevPetId) {
     resetPetCombatState();
   }
@@ -4433,7 +4466,9 @@ async function hydrateProfile(firebaseUser) {
     settings: state.settings
   };
   const personalConfig = sanitizeConfig(rawProfile.config);
-  state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
+  const effectiveConfig = globalConfig || personalConfig;
+  state.config = effectiveConfig;
+  state.profile.config = effectiveConfig;
   state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
   ensurePlayerReady();
   gameState.player.status = {};

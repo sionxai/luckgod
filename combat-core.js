@@ -317,6 +317,57 @@ const CHARACTER_CLASS_INFO = Object.freeze({
   goddess: { code: 'go', name: '여신', assetDir: 'goddess', assetPrefix: 'god' }
 });
 
+export const CHARACTER_CLASS_IDS = Object.freeze(Object.keys(CHARACTER_CLASS_INFO));
+
+const BALANCE_STAT_KEYS = Object.freeze(['hp', 'atk', 'def', 'critRate', 'critDmg', 'dodge', 'speed']);
+
+export const DEFAULT_CHARACTER_BALANCE = CHARACTER_CLASS_IDS.reduce((acc, classId) => {
+  acc[classId] = {
+    skill: 1,
+    stats: BALANCE_STAT_KEYS.reduce((statsAcc, key) => {
+      statsAcc[key] = 1;
+      return statsAcc;
+    }, {}),
+    offsets: BALANCE_STAT_KEYS.reduce((offsetAcc, key) => {
+      offsetAcc[key] = 0;
+      return offsetAcc;
+    }, {})
+  };
+  return acc;
+}, {});
+
+export function sanitizeCharacterBalance(raw) {
+  const result = JSON.parse(JSON.stringify(DEFAULT_CHARACTER_BALANCE));
+  if (!raw || typeof raw !== 'object') {
+    return result;
+  }
+  CHARACTER_CLASS_IDS.forEach((classId) => {
+    const entry = raw[classId];
+    if (!entry || typeof entry !== 'object') return;
+    const safe = result[classId];
+    if (typeof entry.skill === 'number' && isFinite(entry.skill) && entry.skill >= 0) {
+      safe.skill = entry.skill;
+    }
+    if (entry.stats && typeof entry.stats === 'object') {
+      BALANCE_STAT_KEYS.forEach((key) => {
+        const value = entry.stats[key];
+        if (typeof value === 'number' && isFinite(value) && value >= 0) {
+          safe.stats[key] = value;
+        }
+      });
+    }
+    if (entry.offsets && typeof entry.offsets === 'object') {
+      BALANCE_STAT_KEYS.forEach((key) => {
+        const value = entry.offsets[key];
+        if (typeof value === 'number' && isFinite(value)) {
+          safe.offsets[key] = value;
+        }
+      });
+    }
+  });
+  return result;
+}
+
 const CHARACTER_TIER_POWER_BONUS = Object.freeze({
   D: 0,
   C: 40000,
@@ -753,6 +804,7 @@ export function sanitizeConfig(raw) {
     monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling)
   };
   config.petWeights = sanitizePetWeights(raw && raw.petWeights);
+  config.characterBalance = sanitizeCharacterBalance(raw && raw.characterBalance);
   return config;
 }
 
@@ -841,7 +893,7 @@ function applyPetPassive(stats, passive) {
   });
 }
 
-export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}, activePet = null) {
+export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}, activePet = null, options = {}) {
   const stats = {
     atk: 0,
     def: 0,
@@ -878,14 +930,51 @@ export function computePlayerStats(equipMap, enhanceConfig, baseStats = {}, acti
   if (petDef?.passive) {
     applyPetPassive(stats, petDef.passive);
   }
+
+  const balance = options.balance && typeof options.balance === 'object'
+    ? options.balance
+    : DEFAULT_CHARACTER_BALANCE;
+  let classId = options.classId || null;
+  if (!classId && options.characterId) {
+    const def = getCharacterDefinition(options.characterId);
+    classId = def?.classId || null;
+  }
+  if (!classId && options.character) {
+    classId = options.character.classId || null;
+  }
+  if (!classId) {
+    classId = 'warrior';
+  }
+  const classBalance = balance[classId] || DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+  const statBalance = classBalance.stats || {};
+  const statOffsets = classBalance.offsets || {};
+  const applyStatMultiplier = (key) => {
+    const mult = Number(statBalance[key]);
+    if (typeof mult === 'number' && isFinite(mult) && mult > 0 && mult !== 1) {
+      stats[key] = stats[key] * mult;
+    }
+  };
+  BALANCE_STAT_KEYS.forEach(applyStatMultiplier);
+  BALANCE_STAT_KEYS.forEach((key) => {
+    const offset = Number(statOffsets[key]);
+    if (typeof offset === 'number' && isFinite(offset) && offset !== 0) {
+      stats[key] = (stats[key] || 0) + offset;
+    }
+  });
+
+  const rawSkillMultiplier = Number(classBalance?.skill);
+  const skillMultiplier = typeof rawSkillMultiplier === 'number' && isFinite(rawSkillMultiplier) && rawSkillMultiplier > 0
+    ? rawSkillMultiplier
+    : 1;
+
   stats.critRate = Math.min(90, stats.critRate);
   stats.critDmg = Math.min(400, stats.critDmg);
   stats.dodge = Math.min(60, stats.dodge);
-  stats.hp = Math.max(1, stats.hp);
-  stats.speed = Math.max(1, stats.speed);
-  stats.atk = Math.max(1, stats.atk);
-  stats.def = Math.max(0, stats.def);
-  return { stats, equipment, pet: petDef || null };
+  stats.hp = Math.max(1, Math.round(stats.hp));
+  stats.speed = Math.max(1, Math.round(stats.speed));
+  stats.atk = Math.max(1, Math.round(stats.atk));
+  stats.def = Math.max(0, Math.round(stats.def));
+  return { stats, equipment, pet: petDef || null, skillMultiplier };
 }
 
 export function combatPower(stats) {

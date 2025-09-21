@@ -90,6 +90,8 @@ const stageEls = {
   }
 };
 
+const GLOBAL_CONFIG_PATH = 'config/global';
+
 const state = {
   user: null,
   profile: null,
@@ -114,7 +116,8 @@ const state = {
     endedAt: null,
     lastSeason: null
   },
-  seasonListener: null
+  seasonListener: null,
+  globalConfigListener: null
 };
 
 const CHARACTER_IMAGE_PLACEHOLDER =
@@ -124,6 +127,23 @@ const MAX_BATTLE_LOG_ENTRIES = 120;
 
 function createEmptyPvpStats() {
   return { wins: 0, losses: 0, draws: 0, history: [] };
+}
+
+async function fetchGlobalConfig() {
+  try {
+    const snapshot = await get(ref(db, GLOBAL_CONFIG_PATH));
+    if (!snapshot.exists()) return null;
+    const raw = snapshot.val();
+    if (raw && typeof raw === 'object') {
+      if (raw.config && typeof raw.config === 'object') {
+        return sanitizeConfig(raw.config);
+      }
+      return sanitizeConfig(raw);
+    }
+  } catch (error) {
+    console.error('전역 설정을 불러오지 못했습니다.', error);
+  }
+  return null;
 }
 
 function ensureNumber(value) {
@@ -872,7 +892,10 @@ function buildRegistrationSnapshot() {
     petId: state.profile?.pets?.active || null,
     petName: state.playerStats.pet?.name || null,
     petIcon: state.playerStats.pet?.icon || null,
-    version: 1
+    version: 1,
+    skillMultiplier: typeof state.playerStats.skillMultiplier === 'number' && isFinite(state.playerStats.skillMultiplier) && state.playerStats.skillMultiplier > 0
+      ? state.playerStats.skillMultiplier
+      : 1
   };
 }
 
@@ -984,6 +1007,8 @@ function normalizeRegistration(raw, uid, fallbackName) {
   }
   const characterTier = raw.characterTier || characterDef?.tier || null;
   const characterClass = raw.characterClass || characterDef?.classId || null;
+  const rawMultiplier = Number(raw.skillMultiplier);
+  const skillMultiplier = Number.isFinite(rawMultiplier) && rawMultiplier > 0 ? rawMultiplier : 1;
   return {
     uid,
     displayName: raw.displayName || fallbackName,
@@ -1000,12 +1025,14 @@ function normalizeRegistration(raw, uid, fallbackName) {
     petId: raw.petId || null,
     petName: raw.petName || null,
     petIcon: raw.petIcon || null,
-    version: raw.version || 1
+    version: raw.version || 1,
+    skillMultiplier
   };
 }
 
 function registrationToCombatant(reg, fallbackName) {
   if (!reg) return null;
+  const regMultiplier = Number(reg.skillMultiplier);
   return {
     uid: reg.uid,
     displayName: reg.displayName || fallbackName || reg.characterName || 'Unknown',
@@ -1017,7 +1044,8 @@ function registrationToCombatant(reg, fallbackName) {
     characterClass: reg.characterClass || null,
     petId: reg.petId || null,
     petName: reg.petName || null,
-    petIcon: reg.petIcon || '🐾'
+    petIcon: reg.petIcon || '🐾',
+    skillMultiplier: Number.isFinite(regMultiplier) && regMultiplier > 0 ? regMultiplier : 1
   };
 }
 
@@ -1461,6 +1489,8 @@ async function hydrateProfile(firebaseUser) {
   const pets = sanitizePetState(profile.pets);
   const characters = sanitizeCharacterState(profile.characters);
   const config = sanitizeConfig(profile.config);
+  const globalConfig = await fetchGlobalConfig();
+  const effectiveConfig = globalConfig || config;
   const combatPrefs = {
     ...profile.combat,
     autoPotion: profile.combat?.autoPotion === true,
@@ -1470,7 +1500,19 @@ async function hydrateProfile(firebaseUser) {
   const activeCharacterId = characters?.active || defaultCharacters.active;
   const baseStats = characterBaseStats(activeCharacterId) || {};
   const activePetId = pets.active || null;
-  const derived = derivePlayerStats(equip, enhance, { ...baseStats }, activePetId);
+  const characterDef = getCharacterDefinition(activeCharacterId) || null;
+  const derived = derivePlayerStats(
+    equip,
+    enhance,
+    { ...baseStats },
+    activePetId,
+    {
+      balance: effectiveConfig.characterBalance,
+      characterId: activeCharacterId,
+      classId: characterDef?.classId,
+      character: characterDef
+    }
+  );
   const displayName = profile.username || firebaseUser.email || firebaseUser.uid;
   const roleValue = (profile.role || 'user').toLowerCase() === 'admin' ? 'admin' : (profile.role || 'user');
   state.user = {
@@ -1490,7 +1532,8 @@ async function hydrateProfile(firebaseUser) {
     role: roleValue,
     pvpStats: profile.pvpStats || createEmptyPvpStats()
   };
-  state.config = config;
+  state.profile.config = effectiveConfig;
+  state.config = effectiveConfig;
   state.playerStats = {
     stats: derived.stats,
     equipment: derived.equipment,
@@ -1498,8 +1541,11 @@ async function hydrateProfile(firebaseUser) {
     combat: combatPrefs,
     pet: derived.pet || null,
     characterId: activeCharacterId,
-    character: getCharacterDefinition(activeCharacterId) || null,
-    power: combatPower(derived.stats)
+    character: characterDef,
+    power: combatPower(derived.stats),
+    skillMultiplier: typeof derived.skillMultiplier === 'number' && isFinite(derived.skillMultiplier) && derived.skillMultiplier > 0
+      ? derived.skillMultiplier
+      : 1
   };
   renderEquipment(els.playerEquipment, state.playerStats.equipment);
   renderStats(els.playerStats, state.playerStats.stats);

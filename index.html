@@ -117,6 +117,134 @@
               </tr>
             </tbody>
           </table>
+          <div class="row" style="margin-top:14px">
+            <h3 class="muted" style="margin:0">캐릭터 밸런스 조정</h3>
+          </div>
+          <p class="muted small">배율 1.00이 기본값입니다. 스킬 배율은 클래스 스킬과 필살기 피해에 곱해집니다.</p>
+          <table class="stats" id="characterBalanceTable" aria-label="캐릭터 배율 조정">
+            <thead>
+              <tr><th>클래스</th><th>스킬 배율</th><th>HP</th><th>ATK</th><th>DEF</th><th>SPD</th><th>CRI</th><th>CRIT DMG</th><th>DODGE</th></tr>
+            </thead>
+            <tbody>
+              <tr data-class="warrior">
+                <td>전사</td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="skill" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="hp" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="atk" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="def" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="speed" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="critRate" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="critDmg" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="warrior" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="mage">
+                <td>마법사</td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="skill" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="hp" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="atk" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="def" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="speed" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="critRate" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="critDmg" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="mage" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="archer">
+                <td>궁수</td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="skill" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="hp" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="atk" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="def" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="speed" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="critRate" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="critDmg" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="archer" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="rogue">
+                <td>도적</td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="skill" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="hp" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="atk" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="def" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="speed" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="critRate" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="critDmg" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="rogue" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="goddess">
+                <td>여신</td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="skill" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="hp" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="atk" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="def" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="speed" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="critRate" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="critDmg" /></td>
+                <td><input type="number" step="0.05" min="0" data-class="goddess" data-field="dodge" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="characterBalanceMsg" class="muted small" aria-live="polite"></div>
+          <div class="row" style="margin-top:12px">
+            <h4 class="muted" style="margin:0">정수 보정</h4>
+          </div>
+          <table class="stats" id="characterBalanceOffsetTable" aria-label="캐릭터 정수 보정">
+            <thead>
+              <tr><th>클래스</th><th>HP</th><th>ATK</th><th>DEF</th><th>SPD</th><th>CRI</th><th>CRIT DMG</th><th>DODGE</th></tr>
+            </thead>
+            <tbody>
+              <tr data-class="warrior">
+                <td>전사</td>
+                <td><input type="number" step="1" data-class="warrior" data-field="hp" /></td>
+                <td><input type="number" step="1" data-class="warrior" data-field="atk" /></td>
+                <td><input type="number" step="1" data-class="warrior" data-field="def" /></td>
+                <td><input type="number" step="1" data-class="warrior" data-field="speed" /></td>
+                <td><input type="number" step="0.1" data-class="warrior" data-field="critRate" /></td>
+                <td><input type="number" step="0.1" data-class="warrior" data-field="critDmg" /></td>
+                <td><input type="number" step="0.1" data-class="warrior" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="mage">
+                <td>마법사</td>
+                <td><input type="number" step="1" data-class="mage" data-field="hp" /></td>
+                <td><input type="number" step="1" data-class="mage" data-field="atk" /></td>
+                <td><input type="number" step="1" data-class="mage" data-field="def" /></td>
+                <td><input type="number" step="1" data-class="mage" data-field="speed" /></td>
+                <td><input type="number" step="0.1" data-class="mage" data-field="critRate" /></td>
+                <td><input type="number" step="0.1" data-class="mage" data-field="critDmg" /></td>
+                <td><input type="number" step="0.1" data-class="mage" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="archer">
+                <td>궁수</td>
+                <td><input type="number" step="1" data-class="archer" data-field="hp" /></td>
+                <td><input type="number" step="1" data-class="archer" data-field="atk" /></td>
+                <td><input type="number" step="1" data-class="archer" data-field="def" /></td>
+                <td><input type="number" step="1" data-class="archer" data-field="speed" /></td>
+                <td><input type="number" step="0.1" data-class="archer" data-field="critRate" /></td>
+                <td><input type="number" step="0.1" data-class="archer" data-field="critDmg" /></td>
+                <td><input type="number" step="0.1" data-class="archer" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="rogue">
+                <td>도적</td>
+                <td><input type="number" step="1" data-class="rogue" data-field="hp" /></td>
+                <td><input type="number" step="1" data-class="rogue" data-field="atk" /></td>
+                <td><input type="number" step="1" data-class="rogue" data-field="def" /></td>
+                <td><input type="number" step="1" data-class="rogue" data-field="speed" /></td>
+                <td><input type="number" step="0.1" data-class="rogue" data-field="critRate" /></td>
+                <td><input type="number" step="0.1" data-class="rogue" data-field="critDmg" /></td>
+                <td><input type="number" step="0.1" data-class="rogue" data-field="dodge" /></td>
+              </tr>
+              <tr data-class="goddess">
+                <td>여신</td>
+                <td><input type="number" step="1" data-class="goddess" data-field="hp" /></td>
+                <td><input type="number" step="1" data-class="goddess" data-field="atk" /></td>
+                <td><input type="number" step="1" data-class="goddess" data-field="def" /></td>
+                <td><input type="number" step="1" data-class="goddess" data-field="speed" /></td>
+                <td><input type="number" step="0.1" data-class="goddess" data-field="critRate" /></td>
+                <td><input type="number" step="0.1" data-class="goddess" data-field="critDmg" /></td>
+                <td><input type="number" step="0.1" data-class="goddess" data-field="dodge" /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="characterBalanceSnapshot" class="muted small" aria-live="polite" style="margin-top:12px"></div>
           <div class="row" style="margin-top:10px">
             <h3 class="muted" style="margin:0">상점 가격 설정</h3>
           </div>

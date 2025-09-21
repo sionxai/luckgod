@@ -21,6 +21,17 @@ function sanitizeStats(stats = {}) {
   return out;
 }
 
+function getSkillMultiplier(entity) {
+  const value = entity?.skillMultiplier;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 1;
+}
+
+function scaleSkillDamage(value, entity) {
+  if (!(typeof value === 'number' && Number.isFinite(value))) return 0;
+  const multiplier = getSkillMultiplier(entity);
+  return value * multiplier;
+}
+
 function createEntity(payload = {}, side = 'left') {
   const stats = sanitizeStats(payload.stats || {});
   const baseStats = { ...stats };
@@ -29,6 +40,8 @@ function createEntity(payload = {}, side = 'left') {
   const tier = payload.characterTier || charDef?.tier || 'D';
   const characterName = charDef?.name || payload.characterName || `${tier} ${classId}`;
   const petDef = payload.petId ? getPetDefinition(payload.petId) : null;
+  const rawMultiplier = Number(payload.skillMultiplier);
+  const skillMultiplier = Number.isFinite(rawMultiplier) && rawMultiplier > 0 ? rawMultiplier : 1;
 
   return {
     side,
@@ -55,7 +68,8 @@ function createEntity(payload = {}, side = 'left') {
     skillCooldown: 0,
     ultimateUsed: false,
     statuses: {},
-    timelineTag: side
+    timelineTag: side,
+    skillMultiplier
   };
 }
 
@@ -544,13 +558,14 @@ function performSkill(state, attacker, defender) {
   const result = calculateAttack(state, attacker, defender, true);
   let damageApplied = false;
   const logPrefix = `${attacker.name}의 스킬`;
+  const skillMultiplier = getSkillMultiplier(attacker);
   switch (classId) {
     case 'warrior': {
       if (result.type === 'MISS') {
         addLog(state, `${logPrefix}이 빗나갔습니다.`, 'warn');
         break;
       }
-      const damage = Math.max(1, Math.round(result.damage * 1.5));
+      const damage = Math.max(1, Math.round(scaleSkillDamage(result.damage * 1.5, attacker)));
       applyDamage(state, attacker, defender, damage, {
         action: 'skill',
         outcome: result.type === 'CRITICAL' ? 'critical' : 'hit',
@@ -564,7 +579,8 @@ function performSkill(state, attacker, defender) {
     }
     case 'mage': {
       if (result.type !== 'MISS') {
-        const burst = Math.max(1, Math.round((offensive.atk || 0) * 1.6 + (offensive.critDmg || 0) * 25));
+        const rawBurst = (offensive.atk || 0) * 1.6 + (offensive.critDmg || 0) * 25;
+        const burst = Math.max(1, Math.round(scaleSkillDamage(rawBurst, attacker)));
         const dealt = applyDamage(state, attacker, defender, burst, {
           action: 'skill',
           outcome: result.type === 'CRITICAL' ? 'critical' : 'hit',
@@ -596,8 +612,9 @@ function performSkill(state, attacker, defender) {
           misses += 1;
           continue;
         }
-        const damage = Math.max(1, Math.round(volley.damage * 0.75));
-        total += applyDamage(state, attacker, defender, damage, {
+        const baseDamage = Math.max(1, Math.round(volley.damage * 0.75));
+        const scaledDamage = Math.max(1, Math.round(scaleSkillDamage(baseDamage, attacker)));
+        total += applyDamage(state, attacker, defender, scaledDamage, {
           action: 'skill',
           outcome: volley.type === 'CRITICAL' ? 'critical' : 'hit',
           logMessage: `${attacker.name}의 연속 사격! {dmg} 피해`,
@@ -620,21 +637,23 @@ function performSkill(state, attacker, defender) {
         addLog(state, `${logPrefix}이 빗나갔습니다.`, 'warn');
         break;
       }
-      const damage = Math.max(1, Math.round(result.damage * 1.1));
-      applyDamage(state, attacker, defender, damage, {
+      const baseDamage = Math.max(1, Math.round(result.damage * 1.1));
+      const scaledDamage = Math.max(1, Math.round(scaleSkillDamage(baseDamage, attacker)));
+      applyDamage(state, attacker, defender, scaledDamage, {
         action: 'skill',
         outcome: result.type === 'CRITICAL' ? 'critical' : 'hit',
         logMessage: `${attacker.name}의 그림자 일격! {dmg} 피해`,
         logTone: 'damage'
       });
-      const bleedDamage = Math.max(1, Math.round((attacker.baseStats.atk || 0) * 0.5));
+      const bleedDamage = Math.max(1, Math.round(scaleSkillDamage((attacker.baseStats.atk || 0) * 0.5, attacker)));
       applyBleed(state, defender, bleedDamage, 3, `출혈 피해! {dmg}`);
       damageApplied = true;
       break;
     }
     case 'goddess': {
       if (result.type !== 'MISS') {
-        const holyDamage = Math.max(1, Math.round((offensive.atk || 0) * 1.05 + (attacker.baseStats.def || 0) * 1.35));
+        const rawHoly = (offensive.atk || 0) * 1.05 + (attacker.baseStats.def || 0) * 1.35;
+        const holyDamage = Math.max(1, Math.round(scaleSkillDamage(rawHoly, attacker)));
         applyDamage(state, attacker, defender, holyDamage, {
           action: 'skill',
           outcome: result.type === 'CRITICAL' ? 'critical' : 'hit',
@@ -656,7 +675,8 @@ function performSkill(state, attacker, defender) {
         addLog(state, `${logPrefix}이 빗나갔습니다.`, 'warn');
         break;
       }
-      applyDamage(state, attacker, defender, result.damage, {
+      const scaledDamage = Math.max(0, Math.round(scaleSkillDamage(result.damage, attacker)));
+      applyDamage(state, attacker, defender, scaledDamage, {
         action: 'skill',
         outcome: result.type === 'CRITICAL' ? 'critical' : 'hit',
         logMessage: `${attacker.name}의 필살기! {dmg} 피해`,
@@ -671,9 +691,10 @@ function performSkill(state, attacker, defender) {
 function applyUltimate(state, attacker, defender, def) {
   const variant = def.variant || `${attacker.classId}-${attacker.tier}`;
   const offensive = getEffectiveStats(attacker);
+  const skillMultiplier = getSkillMultiplier(attacker);
   switch (variant) {
     case 'warrior-sssplus': {
-      const damage = Math.round(offensive.atk * 5.5);
+      const damage = Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 5.5, attacker)));
       applyDamage(state, attacker, defender, damage, {
         action: 'ultimate',
         outcome: 'hit',
@@ -686,7 +707,7 @@ function applyUltimate(state, attacker, defender, def) {
       break;
     }
     case 'warrior-ssplus': {
-      const damage = Math.round(offensive.atk * 4.2);
+      const damage = Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 4.2, attacker)));
       applyDamage(state, attacker, defender, damage, {
         action: 'ultimate',
         outcome: 'hit',
@@ -698,7 +719,8 @@ function applyUltimate(state, attacker, defender, def) {
       break;
     }
     case 'mage-sssplus': {
-      const damage = Math.round(offensive.atk * 5.2 + (offensive.critDmg || 0) * 30);
+      const rawDamage = offensive.atk * 5.2 + (offensive.critDmg || 0) * 30;
+      const damage = Math.max(0, Math.round(scaleSkillDamage(rawDamage, attacker)));
       const dealt = applyDamage(state, attacker, defender, damage, {
         action: 'ultimate',
         outcome: 'hit',
@@ -713,7 +735,8 @@ function applyUltimate(state, attacker, defender, def) {
       break;
     }
     case 'mage-ssplus': {
-      const damage = Math.round(offensive.atk * 4.4 + (offensive.critDmg || 0) * 18);
+      const rawDamage = offensive.atk * 4.4 + (offensive.critDmg || 0) * 18;
+      const damage = Math.max(0, Math.round(scaleSkillDamage(rawDamage, attacker)));
       applyDamage(state, attacker, defender, damage, {
         action: 'ultimate',
         outcome: 'hit',
@@ -732,7 +755,8 @@ function applyUltimate(state, attacker, defender, def) {
         if (isCrit) {
           dmg = Math.round(dmg * (offensive.critDmg || 150) / 100);
         }
-        total += applyDamage(state, attacker, defender, dmg, {
+        const scaled = Math.max(1, Math.round(scaleSkillDamage(dmg, attacker)));
+        total += applyDamage(state, attacker, defender, scaled, {
           action: 'ultimate',
           outcome: isCrit ? 'critical' : 'hit',
           logMessage: `[필살기] ${attacker.name}의 ${def.name}! {dmg} 피해`,
@@ -752,7 +776,8 @@ function applyUltimate(state, attacker, defender, def) {
           dmg = Math.round(dmg * (offensive.critDmg || 150) / 100);
           applyAccuracyDown(state, defender, 0.1, 1);
         }
-        total += applyDamage(state, attacker, defender, dmg, {
+        const scaled = Math.max(1, Math.round(scaleSkillDamage(dmg, attacker)));
+        total += applyDamage(state, attacker, defender, scaled, {
           action: 'ultimate',
           outcome: isCrit ? 'critical' : 'hit',
           logMessage: `[필살기] ${attacker.name}의 ${def.name}! {dmg} 피해`,
@@ -772,7 +797,8 @@ function applyUltimate(state, attacker, defender, def) {
         if (isCrit) {
           dmg = Math.round(dmg * (offensive.critDmg || 150) / 100);
         }
-        total += applyDamage(state, attacker, defender, dmg, {
+        const scaled = Math.max(1, Math.round(scaleSkillDamage(dmg, attacker)));
+        total += applyDamage(state, attacker, defender, scaled, {
           action: 'ultimate',
           outcome: isCrit ? 'critical' : 'hit',
           logMessage: `[필살기] ${attacker.name}의 ${def.name}! {dmg} 피해`,
@@ -781,27 +807,29 @@ function applyUltimate(state, attacker, defender, def) {
         });
       }
       addLog(state, `[필살기] ${attacker.name}이(가) 총 ${formatNum(total)} 피해를 입혔습니다.`, 'critical');
-      applyBleed(state, defender, Math.round(offensive.atk * 1.2), 4, `출혈 피해! {dmg}`);
+      const bleed = Math.max(1, Math.round(scaleSkillDamage(offensive.atk * 1.2, attacker)));
+      applyBleed(state, defender, bleed, 4, `출혈 피해! {dmg}`);
       applyDodgeBuff(state, attacker, 0.25, 2, { silent: true });
       applySpeedBuff(state, attacker, 15, 2, { silent: true });
       break;
     }
     case 'rogue-ssplus': {
-      const damage = Math.round(offensive.atk * 3.0);
+      const damage = Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 3.0, attacker)));
       applyDamage(state, attacker, defender, damage, {
         action: 'ultimate',
         outcome: 'hit',
         logMessage: `[필살기] ${attacker.name}의 ${def.name}! {dmg} 피해`,
         logTone: 'critical'
       });
-      applyBleed(state, defender, Math.round(offensive.atk * 0.9), 3, `출혈 피해! {dmg}`);
+      const bleed = Math.max(1, Math.round(scaleSkillDamage(offensive.atk * 0.9, attacker)));
+      applyBleed(state, defender, bleed, 3, `출혈 피해! {dmg}`);
       applyDodgeBuff(state, attacker, 0.2, 1, { silent: false });
       break;
     }
     case 'goddess-sssplus': {
       attacker.hp = attacker.maxHp;
       addLog(state, `[필살기] ${attacker.name}의 ${def.name}! 체력이 완전히 회복되었습니다.`, 'heal');
-      const damage = Math.round(offensive.atk * 6.5);
+      const damage = Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 6.5, attacker)));
       applyDamage(state, attacker, defender, damage, {
         action: 'ultimate',
         outcome: 'hit',
@@ -830,7 +858,7 @@ function applyUltimate(state, attacker, defender, def) {
       applyTimeStop(state, defender, 1);
       resetSkillCooldown(attacker);
       addLog(state, `${attacker.name}의 스킬 쿨다운이 초기화되었습니다.`, 'heal');
-      applyDamage(state, attacker, defender, Math.round(offensive.atk * 3.2), {
+      applyDamage(state, attacker, defender, Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 3.2, attacker))), {
         action: 'ultimate',
         outcome: 'hit',
         logMessage: `[필살기] ${def.name}! {dmg} 피해`,
@@ -843,7 +871,7 @@ function applyUltimate(state, attacker, defender, def) {
       applyAttackBuff(state, attacker, 0.25, 2, { silent: true });
       applyDefenseBuff(state, attacker, 0.25, 2, { silent: true });
       addLog(state, `[버프] 공격/방어 +25% (2턴)`, 'heal');
-      applyDamage(state, attacker, defender, Math.round(offensive.atk * 2.8), {
+      applyDamage(state, attacker, defender, Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 2.8, attacker))), {
         action: 'ultimate',
         outcome: 'hit',
         logMessage: `[필살기] ${def.name}! {dmg} 피해`,
@@ -852,7 +880,7 @@ function applyUltimate(state, attacker, defender, def) {
       break;
     }
     default: {
-      applyDamage(state, attacker, defender, Math.round(offensive.atk * 3.5), {
+      applyDamage(state, attacker, defender, Math.max(0, Math.round(scaleSkillDamage(offensive.atk * 3.5, attacker))), {
         action: 'ultimate',
         outcome: 'hit',
         logMessage: `[필살기] ${attacker.name}의 ${def.name}! {dmg} 피해`,
