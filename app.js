@@ -15,6 +15,7 @@ import {
 } from './firebase.js';
 import { onValue } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js';
 import { enqueueMail } from './mail-service.js';
+import { sendSystemMessage } from './chat.js';
 import {
   sanitizePetState,
   createDefaultPetState,
@@ -1522,6 +1523,23 @@ ${parts.join(', ')}`;
       const LEGENDARY_CHARACTER_FLOOR = 'S+';
       function isLegendaryGearTier(tier){ return !!tier && isAtLeast(tier, LEGENDARY_GEAR_FLOOR); }
       function isLegendaryCharacterTier(tier){ return !!tier && isAtLeast(tier, LEGENDARY_CHARACTER_FLOOR); }
+      function announceRareDrop(kind, tier, itemName){
+        if (!tier || !isAtLeast(tier, 'SS+')) return;
+        const user = state.user;
+        if (!user || !user.username) return;
+        const label = (itemName || '').trim();
+        if (!label) return;
+        const payload = {
+          kind,
+          tier,
+          item: label,
+          username: user.username
+        };
+        const message = `${user.username}님이 ${tier} ${label}를 뽑는데 성공했습니다!`;
+        sendSystemMessage(message, payload).catch((error) => {
+          console.warn('Rare drop chat broadcast failed', error);
+        });
+      }
       function rescaledPick(allowed, probs, rng){ const total = allowed.reduce((s,t)=>s+probs[t],0); let u = rng() * total, acc=0; for(const t of allowed){ acc += probs[t]; if(u < acc) return t; } return allowed[allowed.length-1]; }
 
       function expectedCounts(n, probs){ return Object.fromEntries(TIERS.map(t=>[t, n*probs[t]])); }
@@ -1878,6 +1896,10 @@ ${parts.join(', ')}`;
           decision = await showGearLegendaryModal(item, current);
         }
         applyEquipAndInventory(item, { decision });
+        if(isLegendaryGearTier(tier)){
+          const partName = getPartNameByKey(part) || part || '장비';
+          announceRareDrop('gear', tier, partName);
+        }
         // global
         state.global.draws++; state.global.counts[tier]++; saveGlobal(); if(!opts.skipLog) appendLog(rec); if(!opts.deferUI){ syncStats(); drawChart(); updateInventoryView(); }
         return item;
@@ -2650,6 +2672,7 @@ ${parts.join(', ')}`;
           if(def.image && !imageSources.includes(def.image)){ imageSources.unshift(def.image); }
           const cardPayload = { type: 'character', characterId: charId, tier, name: def.name || charId, image: imageSources[0] || '', imageSources, className: def.className || '' };
           results.push(cardPayload);
+          announceRareDrop('character', tier, cardPayload.name || cardPayload.characterId || '캐릭터');
           if(isLegendaryCharacterTier(tier)){
             const activeId = getActiveCharacterId();
             const activeDef = getCharacterDefinition(activeId) || getActiveCharacterDefinition();
