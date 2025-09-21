@@ -1095,7 +1095,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           const timeTd = document.createElement('td');
           timeTd.textContent = entry.snapshotAt ? formatDateTime(entry.snapshotAt) : '-';
           const noteTd = document.createElement('td');
-          noteTd.textContent = entry.note || '';
+          const extras = [];
+          if(typeof entry.equipCount === 'number'){ extras.push(`장비 ${formatNum(entry.equipCount)}개`); }
+          if(typeof entry.spareCount === 'number'){ extras.push(`예비 ${formatNum(entry.spareCount)}개`); }
+          noteTd.textContent = [entry.note || '', extras.join(' · ')].filter(Boolean).join(' / ');
           tr.appendChild(keyTd);
           tr.appendChild(timeTd);
           tr.appendChild(noteTd);
@@ -1139,10 +1142,18 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
               const snapshotAt = typeof entry.snapshotAt === 'number' ? entry.snapshotAt : 0;
               const note = typeof entry.note === 'string' ? entry.note : '';
               const labelTime = snapshotAt ? formatDateTime(snapshotAt) : '시간 정보 없음';
+              const equipCount = (entry.equip && typeof entry.equip === 'object')
+                ? Object.values(entry.equip).filter(Boolean).length
+                : 0;
+              const spareCount = (entry.spares && typeof entry.spares === 'object')
+                ? Object.values(entry.spares).filter(Boolean).length
+                : 0;
               snapshotEntries.push({
                 key,
                 snapshotAt,
                 note,
+                equipCount,
+                spareCount,
                 label: `${key} · ${labelTime}`
               });
             });
@@ -1152,7 +1163,13 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           state.backups.snapshots = snapshotEntries;
           renderAdminSnapshotList();
           if(mirror && mirror.mirroredAt){
-            setBackupMsg(`미러 복제본 기준 ${formatDateTime(mirror.mirroredAt)} 저장됨`, 'ok');
+            const equipCount = (mirror.equip && typeof mirror.equip === 'object')
+              ? Object.values(mirror.equip).filter(Boolean).length
+              : 0;
+            const spareCount = (mirror.spares && typeof mirror.spares === 'object')
+              ? Object.values(mirror.spares).filter(Boolean).length
+              : 0;
+            setBackupMsg(`미러 복제본 기준 ${formatDateTime(mirror.mirroredAt)} 저장됨 · 장비 ${formatNum(equipCount)}개 / 예비 ${formatNum(spareCount)}개`, 'ok');
           } else {
             setBackupMsg('미러 데이터가 없습니다.', 'warn');
           }
@@ -1320,12 +1337,30 @@ ${parts.join(', ')}`;
         }
       }
 
+      function sameEquipMap(a, b){
+        return JSON.stringify(a) === JSON.stringify(b);
+      }
+
       function attachProfileListener(uid){ if(!uid) return; detachProfileListener(); const userRef = ref(db, `users/${uid}`); state.profileListener = onValue(userRef, (snapshot)=>{
           if(!snapshot.exists()) return;
           if(!state.user || state.user.uid !== uid) return;
           const data = snapshot.val() || {};
           const role = data.role === 'admin' ? 'admin' : 'user';
           if(state.user.role !== role){ state.user.role = role; }
+          const nextEquip = sanitizeEquipMap(data.equip);
+          const nextSpares = sanitizeEquipMap(data.spares);
+          if(!sameEquipMap(nextEquip, state.equip) || !sameEquipMap(nextSpares, state.spares)){
+            state.equip = nextEquip;
+            state.spares = nextSpares;
+            if(userProfile){
+              userProfile.equip = nextEquip;
+              userProfile.spares = nextSpares;
+            }
+            refreshInventoryCache();
+            updateInventoryView();
+            buildForgeTargetOptions();
+            updateForgeInfo();
+          }
           const incomingSettings = sanitizeUserSettings(data.settings);
           const currentEffects = state.settings?.effects || {};
           const nextEffects = incomingSettings.effects || {};
@@ -1350,6 +1385,30 @@ ${parts.join(', ')}`;
               renderCharacterStats();
             }
           }
+          const items = sanitizeItems(data.items);
+          const prevItems = state.items || {};
+          let itemsChanged = false;
+          Object.keys(items).forEach(function(key){ const next = items[key]; if((prevItems[key] || 0) !== next){ itemsChanged = true; } });
+          if(itemsChanged){ state.items = { ...prevItems, ...items }; if(userProfile){ if(!userProfile.items || typeof userProfile.items !== 'object'){ userProfile.items = {}; } Object.assign(userProfile.items, items); }
+            if(state.profile){ if(!state.profile.items || typeof state.profile.items !== 'object'){ state.profile.items = {}; } Object.assign(state.profile.items, items); }
+            updateItemCountsView();
+            updateBattleResControls();
+          }
+
+          const nextPets = sanitizePetState(data.pets);
+          if(JSON.stringify(nextPets) !== JSON.stringify(state.pets)){
+            state.pets = nextPets;
+            if(userProfile) userProfile.pets = nextPets;
+            updatePetList();
+          }
+
+          const nextCharacters = sanitizeCharacterState(data.characters);
+          if(JSON.stringify(nextCharacters) !== JSON.stringify(state.characters)){
+            state.characters = nextCharacters;
+            if(userProfile) userProfile.characters = nextCharacters;
+            updateCharacterList();
+          }
+
           if(role === 'admin'){ return; }
           if(typeof data.wallet === 'number' && isFinite(data.wallet)){
             const walletVal = clampNumber(data.wallet, 0, Number.MAX_SAFE_INTEGER, data.wallet);
@@ -1362,15 +1421,6 @@ ${parts.join(', ')}`;
           if(typeof data.diamonds === 'number' && isFinite(data.diamonds)){
             const diamondsVal = clampNumber(data.diamonds, 0, Number.MAX_SAFE_INTEGER, data.diamonds);
             if(diamondsVal !== state.diamonds){ state.diamonds = diamondsVal; if(userProfile) userProfile.diamonds = diamondsVal; if(state.profile) state.profile.diamonds = diamondsVal; updateDiamondsView(); }
-          }
-          const items = sanitizeItems(data.items);
-          const prevItems = state.items || {};
-          let itemsChanged = false;
-          Object.keys(items).forEach(function(key){ const next = items[key]; if((prevItems[key] || 0) !== next){ itemsChanged = true; } });
-          if(itemsChanged){ state.items = { ...prevItems, ...items }; if(userProfile){ if(!userProfile.items || typeof userProfile.items !== 'object'){ userProfile.items = {}; } Object.assign(userProfile.items, items); }
-            if(state.profile){ if(!state.profile.items || typeof state.profile.items !== 'object'){ state.profile.items = {}; } Object.assign(state.profile.items, items); }
-            updateItemCountsView();
-            updateBattleResControls();
           }
         }, (error)=>{
           console.error('프로필 실시간 수신 실패', error);
