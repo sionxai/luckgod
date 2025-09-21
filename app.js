@@ -633,7 +633,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         return null;
       }
 
-      function formatSnapshotCell(baseValue, multiplier, offset, type){
+      function formatSnapshotCell(baseValue, multiplier, offset, type, showDetails = true){
         if(!(typeof baseValue === 'number' && isFinite(baseValue))) return '-';
         const safeMultiplier = typeof multiplier === 'number' && isFinite(multiplier) && multiplier >= 0 ? multiplier : 1;
         const safeOffset = typeof offset === 'number' && isFinite(offset) ? offset : 0;
@@ -643,14 +643,18 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           const adjustedRounded = Math.round(adjusted * 10) / 10;
           const baseText = `${baseRounded}%`;
           const adjustedText = `${adjustedRounded}%`;
-          if(Math.abs(adjusted - baseValue) < 0.001) return adjustedText;
+          if(!showDetails || Math.abs(adjusted - baseValue) < 0.001){
+            return adjustedText;
+          }
           const delta = adjustedRounded - baseRounded;
           const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}%p)`;
           return `${adjustedText} <span class="muted">(기본 ${baseText}${deltaText})</span>`;
         }
         const baseText = baseValue.toLocaleString('ko-KR');
         const adjustedText = adjusted.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
-        if(Math.abs(adjusted - baseValue) < 0.001) return adjustedText;
+        if(!showDetails || Math.abs(adjusted - baseValue) < 0.001){
+          return adjustedText;
+        }
         const delta = adjusted - baseValue;
         const deltaAbs = Math.abs(delta).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
         const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${deltaAbs})`;
@@ -2214,6 +2218,7 @@ ${parts.join(', ')}`;
           ['dodge', '회피', true],
           ['speed', '속도', false]
         ];
+        const showDetails = isAdmin();
         let statMultipliers = null;
         let statOffsets = null;
         if(classId){
@@ -2226,23 +2231,12 @@ ${parts.join(', ')}`;
           if(value === null){
             return `<div>${label}: <b>-</b></div>`;
           }
-          if(statMultipliers){
-            const multiplier = Number(statMultipliers[key] ?? 1);
-            const offset = Number(statOffsets?.[key] ?? 0);
-            const adjusted = value * multiplier + offset;
-            const same = Math.abs(adjusted - value) < 0.001;
-            if(!same){
-              if(percent){
-                const baseText = `${Math.round(value * 10) / 10}%`;
-                const adjText = `${Math.round(adjusted * 10) / 10}%`;
-                return `<div>${label}: <b>${baseText}</b><span class="muted"> → ${adjText}</span></div>`;
-              }
-              const baseText = formatNum(Math.round(value));
-              const adjText = adjusted.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
-              return `<div>${label}: <b>${baseText}</b><span class="muted"> → ${adjText}</span></div>`;
-            }
-          }
-          return `<div>${label}: <b>${percent ? `${value}%` : formatNum(value)}</b></div>`;
+          const multiplier = Number(statMultipliers?.[key] ?? 1);
+          const offset = Number(statOffsets?.[key] ?? 0);
+          const type = percent ? 'percent' : 'flat';
+          const text = formatSnapshotCell(value, multiplier, offset, type, showDetails);
+          const display = showDetails ? text : `<b>${text}</b>`;
+          return `<div>${label}: ${display}</div>`;
         }).join('');
         target.innerHTML = html;
       }
@@ -2927,6 +2921,7 @@ ${parts.join(', ')}`;
         const balance = ensureCharacterBalanceConfig()[def.classId] || DEFAULT_CHARACTER_BALANCE[def.classId] || DEFAULT_CHARACTER_BALANCE.warrior;
         const statMultipliers = balance.stats || {};
         const statOffsets = balance.offsets || {};
+        const showDetails = isAdmin();
         const skillInfo = getCharacterSkillInfo(def);
         const ultimateDef = getCharacterUltimateDefinition(def);
         const ultimateInfo = getCharacterUltimateInfo(ultimateDef);
@@ -2943,7 +2938,7 @@ ${parts.join(', ')}`;
           const baseValue = stats[key] || 0;
           const multiplier = Number(statMultipliers[key] ?? 1);
           const offset = Number(statOffsets[key] ?? 0);
-          const text = formatSnapshotCell(baseValue, multiplier, offset, type);
+          const text = formatSnapshotCell(baseValue, multiplier, offset, type, showDetails);
           return `<span><span class="stat-label">${label}</span>${text}</span>`;
         }).join('');
         const ownedText = isAdmin() ? '∞' : formatNum(owned);
@@ -3657,6 +3652,7 @@ ${parts.join(', ')}`;
           state.ui.selectedCharacterDetail = activeId;
         }
         const balanceConfig = ensureCharacterBalanceConfig();
+        const showDetails = isAdmin();
         let appended = 0;
         entries.forEach(({ id, def, count, isActive }) => {
           const card = document.createElement('div');
@@ -3688,9 +3684,9 @@ ${parts.join(', ')}`;
           const statOffsets = balance.offsets || {};
           const statsEl = document.createElement('div');
           statsEl.className = 'stats muted small';
-          const hpText = formatSnapshotCell(stats.hp || 0, Number(statMultipliers.hp ?? 1), Number(statOffsets.hp ?? 0), 'flat');
-          const atkText = formatSnapshotCell(stats.atk || 0, Number(statMultipliers.atk ?? 1), Number(statOffsets.atk ?? 0), 'flat');
-          const defText = formatSnapshotCell(stats.def || 0, Number(statMultipliers.def ?? 1), Number(statOffsets.def ?? 0), 'flat');
+          const hpText = formatSnapshotCell(stats.hp || 0, Number(statMultipliers.hp ?? 1), Number(statOffsets.hp ?? 0), 'flat', showDetails);
+          const atkText = formatSnapshotCell(stats.atk || 0, Number(statMultipliers.atk ?? 1), Number(statOffsets.atk ?? 0), 'flat', showDetails);
+          const defText = formatSnapshotCell(stats.def || 0, Number(statMultipliers.def ?? 1), Number(statOffsets.def ?? 0), 'flat', showDetails);
           statsEl.innerHTML = `HP ${hpText} · ATK ${atkText} · DEF ${defText}`;
           textWrap.appendChild(statsEl);
           const skillDesc = getCharacterSkillDescription(def);
