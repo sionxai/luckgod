@@ -19,6 +19,28 @@
       body.modal-open { overflow: hidden; }
       .legendary-overlay { position: fixed; inset: 0; background: rgba(4, 8, 14, 0.8); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 10000; }
       .legendary-overlay.visible { display: flex; }
+      .rare-animation-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 8, 14, 0.85); opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 9500; padding: 24px; }
+      .rare-animation-overlay.visible { opacity: 1; pointer-events: auto; }
+      .rare-animation-content { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: min(540px, 90vw); text-align: center; }
+      .rare-animation-content img { width: min(100%, 420px); max-height: min(70vh, 420px); object-fit: contain; border-radius: 12px; box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55); background: rgba(12, 16, 25, 0.6); border: 1px solid rgba(142, 238, 255, 0.38); padding: 8px; transition: opacity 0.25s ease, transform 0.25s ease; }
+      .rare-animation-message { font-size: 15px; color: var(--accent); letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(106,169,255,0.65); animation: rarePulse 1.4s ease-in-out infinite; min-height: 22px; display: none; }
+      .rare-animation-tier { font-size: 18px; font-weight: 600; color: var(--accent); text-shadow: 0 0 18px rgba(106, 169, 255, 0.9); letter-spacing: 0.03em; }
+      .rare-animation-skip { background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(142, 238, 255, 0.35); color: var(--muted); padding: 6px 16px; border-radius: 999px; font-size: 12px; transition: background 0.2s ease, color 0.2s ease; }
+      .rare-animation-skip:hover { background: rgba(142, 238, 255, 0.12); color: var(--text); }
+      .rare-animation-overlay.preface-active img { opacity: 0; transform: scale(0.94); transition: opacity 0.25s ease, transform 0.25s ease; }
+      .rare-animation-overlay.preface-active .rare-animation-message { opacity: 1; }
+      @keyframes rarePulse {
+        0%, 100% { opacity: 0.6; }
+        50% { opacity: 1; }
+      }
+      .user-options-modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(4, 8, 14, 0.72); opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 9700; padding: 16px; }
+      .user-options-modal.show { opacity: 1; pointer-events: auto; }
+      .user-options-panel { width: min(320px, 92vw); background: var(--panel); border: 1px solid rgba(142, 238, 255, 0.25); border-radius: 12px; box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45); padding: 20px 22px; display: flex; flex-direction: column; gap: 18px; }
+      .user-options-panel h3 { margin: 0; font-size: 16px; color: var(--accent); }
+      .user-options-options { display: flex; flex-direction: column; gap: 10px; }
+      .user-options-options label { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; }
+      .user-options-options input[type="checkbox"] { transform: scale(1.05); }
+      .user-options-actions { display: flex; justify-content: flex-end; gap: 10px; }
       .legendary-modal { display: none; width: min(520px, 95%); max-height: 90vh; overflow-y: auto; background: var(--panel); border: 1px solid rgba(142, 238, 255, 0.35); border-radius: 12px; padding: 18px 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45); }
       .legendary-modal h3 { margin: 0 0 12px; font-size: 18px; color: var(--accent); }
       .legendary-modal.active { display: block; }

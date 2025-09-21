@@ -27,6 +27,7 @@
         <button id="loadCfg">불러오기</button>
         <input id="cfgFile" type="file" accept="application/json" style="display:none" />
         <button id="shareLink">공유 링크</button>
+        <button id="userOptionsBtn" type="button">옵션</button>
       </header>
 
       <div class="grid" style="margin-top:10px">
@@ -486,8 +487,8 @@
             </table>
           </div>
           <div id="characterStatsWrap" style="display:none">
-            <table class="stats" id="characterStatsTable" aria-label="캐릭터 보유 현황 테이블">
-              <thead><tr><th>캐릭터</th><th>티어</th><th>클래스</th><th>보유 수량</th><th>기본 스탯(HP/ATK/DEF)</th></tr></thead>
+            <table class="stats" id="characterStatsTable" aria-label="캐릭터 뽑기 통계">
+              <thead><tr><th>티어</th><th>비율</th><th>기대</th><th>관측</th><th>델타</th><th>상대 오차</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -502,6 +503,29 @@
           </div>
           <div class="log" id="log"></div>
         </section>
+      </div>
+    </div>
+
+    <div id="userOptionsModal" class="user-options-modal" hidden>
+      <div class="user-options-panel" role="dialog" aria-modal="true" aria-labelledby="userOptionsTitle">
+        <h3 id="userOptionsTitle">연출 설정</h3>
+        <div class="user-options-options">
+          <label><input id="userOptionsCharacterGif" type="checkbox" /> 캐릭터 필살기 GIF</label>
+          <label><input id="userOptionsPetGif" type="checkbox" /> 펫 필살기 GIF</label>
+        </div>
+        <div class="user-options-actions">
+          <button id="userOptionsSave" type="button" class="primary">저장</button>
+          <button id="userOptionsClose" type="button">닫기</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="rareAnimationOverlay" class="rare-animation-overlay" hidden>
+      <div class="rare-animation-content">
+        <img id="rareAnimationImage" alt="희귀 장비 애니메이션" />
+        <div id="rareAnimationMessage" class="rare-animation-message"></div>
+        <div id="rareAnimationTier" class="rare-animation-tier"></div>
+        <button id="rareAnimationSkip" type="button" class="rare-animation-skip">건너뛰기</button>
       </div>
     </div>
 
@@ -577,5 +601,6 @@
 
     <script type="module" src="app.js"></script>
     <script type="module" src="navigation.js"></script>
+    <script type="module" src="mailbox.js"></script>
   </body>
 </html>

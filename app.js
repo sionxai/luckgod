@@ -14,6 +14,7 @@ import {
   httpsCallable
 } from './firebase.js';
 import { onValue } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js';
+import { enqueueMail } from './mail-service.js';
 import {
   sanitizePetState,
   createDefaultPetState,
@@ -28,7 +29,8 @@ import {
   sanitizeCharacterState,
   getCharacterDefinition,
   getCharacterImageVariants,
-  characterBaseStats
+  characterBaseStats,
+  sanitizeUserSettings
 } from './combat-core.js';
 
 const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
@@ -50,7 +52,28 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const DEFAULT_GOLD_SCALING = { minLow: 120, maxLow: 250, minHigh: 900, maxHigh: 1400 };
       const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, holyWater: 1000000, starterPack: 5000 };
       const DEFAULT_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 1000, autoCdMs: 2000, speedMultiplier: 2 };
-      const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
+const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
+const RARE_ANIMATION_DURATION_MS = 3600;
+const RARE_ANIMATION_FADE_MS = 220;
+// 기본 희귀 연출 매핑. 관리자가 전역 설정(config.rareAnimations)을 수정하면 이 값을 덮어쓴다.
+const DEFAULT_RARE_ANIMATIONS = {
+  gear: [
+    {
+      tier: 'SS+',
+      src: 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/Carss%2B.gif?alt=media&token=d668d79b-7740-4986-b32e-11027a0453ac',
+      label: 'SS+ 장비 획득!',
+      duration: RARE_ANIMATION_DURATION_MS
+    }
+  ],
+  character: [
+    {
+      tier: 'SS+',
+      src: 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/Carss%2B.gif?alt=media&token=d668d79b-7740-4986-b32e-11027a0453ac',
+      label: 'SS+ 캐릭터 획득!',
+      duration: RARE_ANIMATION_DURATION_MS
+    }
+  ]
+};
 const DEFAULT_MONSTER_SCALING = {
   basePower: 500,
   maxPower: 50000000,
@@ -162,6 +185,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         characterDetailBody: $('#characterDetailBody'),
         characterDetailClose: $('#characterDetailClose'),
         saveCfg: $('#saveCfg'), loadCfg: $('#loadCfg'), cfgFile: $('#cfgFile'), shareLink: $('#shareLink'), points: $('#points'), gold: $('#gold'), diamonds: $('#diamonds'), drawResults: $('#drawResults'), shopMsg: $('#shopMsg'),
+        userOptionsBtn: $('#userOptionsBtn'), userOptionsModal: $('#userOptionsModal'), userOptionsSave: $('#userOptionsSave'), userOptionsClose: $('#userOptionsClose'), userOptionsCharacterGif: $('#userOptionsCharacterGif'), userOptionsPetGif: $('#userOptionsPetGif'),
         adminPresetSelect: $('#adminPresetSelect'), adminPresetApply: $('#adminPresetApply'), adminPresetLoad: $('#adminPresetLoad'), adminPresetDelete: $('#adminPresetDelete'), adminPresetName: $('#adminPresetName'), adminPresetSave: $('#adminPresetSave'), presetAdminMsg: $('#presetAdminMsg'),
         adminUserSelect: $('#adminUserSelect'), adminUserStats: $('#adminUserStats'), adminGrantPoints: $('#adminGrantPoints'), adminGrantGold: $('#adminGrantGold'), adminGrantDiamonds: $('#adminGrantDiamonds'), adminGrantPetTickets: $('#adminGrantPetTickets'), adminGrantSubmit: $('#adminGrantSubmit'),
         adminBackupRefresh: $('#adminBackupRefresh'), adminRestoreFromMirror: $('#adminRestoreFromMirror'), adminRestoreFromSnapshot: $('#adminRestoreFromSnapshot'), adminSnapshotSelect: $('#adminSnapshotSelect'), adminBackupStatus: $('#adminBackupStatus'), adminSnapshotTableBody: $('#adminSnapshotTableBody'),
@@ -169,6 +193,11 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         petTicketInline: $('#petTicketInline'),
         holyWaterCount: $('#holyWaterCount'),
         priceHolyWater: $('#priceHolyWater'),
+        rareAnimationOverlay: $('#rareAnimationOverlay'),
+        rareAnimationImage: $('#rareAnimationImage'),
+        rareAnimationMessage: $('#rareAnimationMessage'),
+        rareAnimationTier: $('#rareAnimationTier'),
+        rareAnimationSkip: $('#rareAnimationSkip'),
         legendaryOverlay: $('#legendaryOverlay'),
         gearLegendaryModal: $('#gearLegendaryModal'),
         characterLegendaryModal: $('#characterLegendaryModal'),
@@ -227,7 +256,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           potionSettings: { ...DEFAULT_POTION_SETTINGS },
           hyperPotionSettings: { ...DEFAULT_HYPER_POTION_SETTINGS },
           monsterScaling: { ...DEFAULT_MONSTER_SCALING },
-          petWeights: sanitizePetWeights(null)
+          petWeights: sanitizePetWeights(null),
+          rareAnimations: normalizeRareAnimations(DEFAULT_RARE_ANIMATIONS)
         },
         session: { draws:0, counts: Object.fromEntries(TIERS.map(t=>[t,0])), history: [] },
         global: loadGlobal(),
@@ -241,7 +271,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         enhance: defaultEnhance(),
         forge: { protectEnabled: false, protectStock: 0, autoRunning: false },
         user: null,
-        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear', selectedCharacterDetail: null, characterDetailOpen: false },
+        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear', selectedCharacterDetail: null, characterDetailOpen: false, userOptionsOpen: false, rareAnimationBlocking: false },
         wallet: 0,
         gold: 0,
         diamonds: 0,
@@ -254,11 +284,14 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         items: { potion: 0, hyperPotion: 0, protect: 0, enhance: 0, revive: 0, battleRes: 0, holyWater: 0, petTicket: 0 },
         pets: createDefaultPetState(),
         characters: createDefaultCharacterState(),
+        characterStats: sanitizeCharacterDrawStats(null),
+        settings: sanitizeUserSettings(null),
         petGachaWeights: sanitizePetWeights(null),
         buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
         combat: { useBattleRes: true, prefBattleRes: true },
         profileListener: null,
         globalConfigListener: null,
+        rareAnimations: { queue: [], playing: false, timer: null, hideTimer: null, current: null, skippable: true },
       };
       state.config.petWeights = sanitizePetWeights(state.config.petWeights);
       state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
@@ -267,6 +300,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       state.config.shopPrices = normalizeShopPrices(state.config.shopPrices);
       state.config.potionSettings = normalizePotionSettings(state.config.potionSettings, DEFAULT_POTION_SETTINGS);
       state.config.hyperPotionSettings = normalizePotionSettings(state.config.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS);
+      state.config.rareAnimations = normalizeRareAnimations(state.config.rareAnimations);
 
       function deriveUsernameFromUser(firebaseUser){
         if(!firebaseUser) return '';
@@ -316,16 +350,76 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       }
 
       function sanitizeGlobalStats(raw){
-        const counts = Object.fromEntries(TIERS.map(t=>[t,0]));
+        const counts = Object.fromEntries(TIERS.map((tier)=> [tier, 0]));
         const result = { draws: 0, counts };
         if(raw && typeof raw === 'object'){
           result.draws = clampNumber(raw.draws, 0, Number.MAX_SAFE_INTEGER, 0);
           if(raw.counts && typeof raw.counts === 'object'){
-            TIERS.forEach(function(tier){
+            TIERS.forEach((tier)=>{
               counts[tier] = clampNumber(raw.counts[tier], 0, Number.MAX_SAFE_INTEGER, 0);
             });
           }
         }
+        return result;
+      }
+
+      function sanitizeCharacterDrawStats(raw){
+        const counts = Object.fromEntries(TIERS.map((tier)=> [tier, 0]));
+        let draws = 0;
+        if(raw && typeof raw === 'object'){
+          draws = clampNumber(raw.draws, 0, Number.MAX_SAFE_INTEGER, 0);
+          if(raw.counts && typeof raw.counts === 'object'){
+            TIERS.forEach((tier)=>{
+              counts[tier] = clampNumber(raw.counts[tier], 0, Number.MAX_SAFE_INTEGER, 0);
+            });
+          }
+        }
+        return { draws, counts };
+      }
+
+      function normalizeRareAnimationList(list, defaults){
+        const result = [];
+        const source = Array.isArray(list) ? list : [];
+        source.forEach((item)=>{
+          if(!item || typeof item !== 'object') return;
+          const tier = TIERS.includes(item.tier) ? item.tier : null;
+          const src = typeof item.src === 'string' && item.src.trim().length ? item.src.trim() : null;
+          if(!tier || !src) return;
+          const label = typeof item.label === 'string' && item.label.trim().length ? item.label.trim() : `${tier} 획득!`;
+          const duration = clampNumber(item.duration, 600, 20000, RARE_ANIMATION_DURATION_MS);
+          const id = typeof item.id === 'string' && item.id.trim().length ? item.id.trim() : null;
+          const entry = { tier, src, label, duration };
+          if(id) entry.id = id;
+          result.push(entry);
+        });
+        if(result.length === 0 && Array.isArray(defaults)){
+          defaults.forEach((item)=>{
+            if(!item || typeof item !== 'object') return;
+            const tier = TIERS.includes(item.tier) ? item.tier : null;
+            const src = typeof item.src === 'string' && item.src.trim().length ? item.src.trim() : null;
+            if(!tier || !src) return;
+            const label = typeof item.label === 'string' && item.label.trim().length ? item.label.trim() : `${tier} 획득!`;
+            const duration = clampNumber(item.duration, 600, 20000, RARE_ANIMATION_DURATION_MS);
+            const id = typeof item.id === 'string' && item.id.trim().length ? item.id.trim() : null;
+            const entry = { tier, src, label, duration };
+            if(id) entry.id = id;
+            result.push(entry);
+          });
+        }
+        return result;
+      }
+
+      function normalizeRareAnimations(raw){
+        const result = {};
+        const kinds = new Set(Object.keys(DEFAULT_RARE_ANIMATIONS));
+        if(raw && typeof raw === 'object'){
+          Object.keys(raw).forEach((kind)=> kinds.add(kind));
+        }
+        kinds.forEach((kind)=>{
+          const defaults = DEFAULT_RARE_ANIMATIONS[kind] || [];
+          const list = normalizeRareAnimationList(raw && raw[kind], defaults);
+          result[kind] = list;
+        });
         return result;
       }
 
@@ -361,7 +455,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           potionSettings: normalizePotionSettings(raw && raw.potionSettings, DEFAULT_POTION_SETTINGS),
           hyperPotionSettings: normalizePotionSettings(raw && raw.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS),
           monsterScaling: normalizeMonsterScaling(raw && raw.monsterScaling),
-          petWeights
+          petWeights,
+          rareAnimations: normalizeRareAnimations(raw && raw.rareAnimations)
         };
       }
 
@@ -835,32 +930,43 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           if(els.adminGrantDiamonds) els.adminGrantDiamonds.value = '0';
           if(els.adminGrantPetTickets) els.adminGrantPetTickets.value = '0';
           await loadAdminUsers();
-          setAdminMsg('지급이 완료되었습니다.', 'ok');
+          setAdminMsg('지급 우편을 발송했습니다. 우편함에서 수령하세요.', 'ok');
         } catch (error) {
           console.error('지급 처리 실패', error);
           setAdminMsg('지급 처리에 실패했습니다.', 'error');
         }
       }
 
-      async function grantResourcesToUser(uid, deltas){ const userRef = ref(db, `users/${uid}`); const snapshot = await get(userRef); if(!snapshot.exists()) throw new Error('사용자를 찾을 수 없습니다.'); const data = snapshot.val() || {}; const updates = {}; const role = data.role === 'admin' ? 'admin' : 'user'; const canModifyEconomy = role !== 'admin';
-        if(typeof deltas.points === 'number' && deltas.points !== 0 && canModifyEconomy){ const baseWallet = typeof data.wallet === 'number' && isFinite(data.wallet) ? data.wallet : 0; updates.wallet = Math.max(0, baseWallet + deltas.points); }
-        if(typeof deltas.gold === 'number' && deltas.gold !== 0 && canModifyEconomy){ const baseGold = typeof data.gold === 'number' && isFinite(data.gold) ? data.gold : 0; updates.gold = Math.max(0, baseGold + deltas.gold); }
-        if(typeof deltas.diamonds === 'number' && deltas.diamonds !== 0){ const baseDiamonds = typeof data.diamonds === 'number' && isFinite(data.diamonds) ? data.diamonds : 0; updates.diamonds = Math.max(0, baseDiamonds + deltas.diamonds); }
-        if(typeof deltas.petTickets === 'number' && deltas.petTickets !== 0 && canModifyEconomy){ const items = sanitizeItems(data.items); const nextTickets = Math.max(0, (items.petTicket || 0) + deltas.petTickets); updates['items/petTicket'] = nextTickets; }
-        if(Object.keys(updates).length === 0) return false;
-        updates.updatedAt = Date.now();
-        await update(userRef, updates);
-        if(currentFirebaseUser && uid === currentFirebaseUser.uid){ if(Object.prototype.hasOwnProperty.call(updates, 'wallet')){ state.wallet = updates.wallet; if(userProfile) userProfile.wallet = updates.wallet; updatePointsView(); }
-          if(Object.prototype.hasOwnProperty.call(updates, 'gold')){ state.gold = updates.gold; if(userProfile) userProfile.gold = updates.gold; updateGoldView(); }
-          if(Object.prototype.hasOwnProperty.call(updates, 'diamonds')){ state.diamonds = updates.diamonds; if(userProfile) userProfile.diamonds = updates.diamonds; updateDiamondsView(); }
-          if(Object.prototype.hasOwnProperty.call(updates, 'items/petTicket')){
-            const nextTickets = updates['items/petTicket'];
-            state.items = state.items ? { ...state.items, petTicket: nextTickets } : sanitizeItems({ petTicket: nextTickets });
-            if(userProfile){ if(!userProfile.items || typeof userProfile.items !== 'object'){ userProfile.items = {}; } userProfile.items.petTicket = nextTickets; }
-            updateItemCountsView();
+      async function grantResourcesToUser(uid, deltas){
+        const userRef = ref(db, `users/${uid}`);
+        const snapshot = await get(userRef);
+        if(!snapshot.exists()) throw new Error('사용자를 찾을 수 없습니다.');
+        const data = snapshot.val() || {};
+        const role = data.role === 'admin' ? 'admin' : 'user';
+        const canModifyEconomy = role !== 'admin';
+        const rewards = {};
+        if(typeof deltas.points === 'number' && deltas.points > 0 && canModifyEconomy){ rewards.points = Math.trunc(deltas.points); }
+        if(typeof deltas.gold === 'number' && deltas.gold > 0 && canModifyEconomy){ rewards.gold = Math.trunc(deltas.gold); }
+        if(typeof deltas.diamonds === 'number' && deltas.diamonds > 0){ rewards.diamonds = Math.trunc(deltas.diamonds); }
+        if(typeof deltas.petTickets === 'number' && deltas.petTickets > 0 && canModifyEconomy){ rewards.petTickets = Math.trunc(deltas.petTickets); }
+        if(Object.keys(rewards).length === 0) return false;
+        const parts = [];
+        if(rewards.points) parts.push(`포인트 ${formatNum(rewards.points)}`);
+        if(rewards.gold) parts.push(`골드 ${formatNum(rewards.gold)}`);
+        if(rewards.diamonds) parts.push(`다이아 ${formatNum(rewards.diamonds)}`);
+        if(rewards.petTickets) parts.push(`펫 뽑기권 ${formatNum(rewards.petTickets)}`);
+        const message = `관리자가 다음 보상을 지급했습니다.
+${parts.join(', ')}`;
+        await enqueueMail(uid, {
+          title: '관리자 지급 보상',
+          message,
+          rewards,
+          type: 'admin_grant',
+          metadata: {
+            grantedBy: currentFirebaseUser?.uid || null,
+            grantedAt: Date.now()
           }
-          markProfileDirty();
-        }
+        });
         return true;
       }
 
@@ -895,6 +1001,30 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           const data = snapshot.val() || {};
           const role = data.role === 'admin' ? 'admin' : 'user';
           if(state.user.role !== role){ state.user.role = role; }
+          const incomingSettings = sanitizeUserSettings(data.settings);
+          const currentEffects = state.settings?.effects || {};
+          const nextEffects = incomingSettings.effects || {};
+          if(currentEffects.characterUltimateGif !== nextEffects.characterUltimateGif || currentEffects.petUltimateGif !== nextEffects.petUltimateGif){
+            state.settings = incomingSettings;
+            if(userProfile){ userProfile.settings = incomingSettings; }
+            if(isUserOptionsOpen()){ syncUserOptionsInputs(); }
+          }
+          const incomingCharacterStats = sanitizeCharacterDrawStats(data.characterStats);
+          const prevCharacterStats = sanitizeCharacterDrawStats(state.characterStats);
+          let statsChanged = incomingCharacterStats.draws !== prevCharacterStats.draws;
+          if(!statsChanged){
+            statsChanged = TIERS.some((tier)=> incomingCharacterStats.counts[tier] !== prevCharacterStats.counts[tier]);
+          }
+          const isOlderSnapshot =
+            incomingCharacterStats.draws < prevCharacterStats.draws ||
+            TIERS.some((tier) => incomingCharacterStats.counts[tier] < prevCharacterStats.counts[tier]);
+          if(statsChanged && !isOlderSnapshot){
+            state.characterStats = incomingCharacterStats;
+            if(userProfile){ userProfile.characterStats = incomingCharacterStats; }
+            if(state.ui.statsMode === 'character'){
+              renderCharacterStats();
+            }
+          }
           if(role === 'admin'){ return; }
           if(typeof data.wallet === 'number' && isFinite(data.wallet)){
             const walletVal = clampNumber(data.wallet, 0, Number.MAX_SAFE_INTEGER, data.wallet);
@@ -1209,6 +1339,19 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(els.gachaModeGearDraw) els.gachaModeGearDraw.addEventListener('click', ()=> updateGachaModeView('gear'));
         if(els.gachaModePetDraw) els.gachaModePetDraw.addEventListener('click', ()=> updateGachaModeView('pet'));
         if(els.gachaModeCharacterDraw) els.gachaModeCharacterDraw.addEventListener('click', ()=> updateGachaModeView('character'));
+        if(els.rareAnimationSkip){ els.rareAnimationSkip.addEventListener('click', (event)=>{
+          event.preventDefault();
+          event.stopPropagation();
+          skipRareAnimation();
+        }); setRareAnimationSkippable(true); }
+        if(els.rareAnimationOverlay){
+          els.rareAnimationOverlay.addEventListener('click', (event)=>{
+            if(event.target === els.rareAnimationOverlay){
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          });
+        }
         els.lock.addEventListener('change', ()=>{ state.config.locked = els.lock.checked; updateWeightsInputs(); toggleConfigDisabled(); markProfileDirty(); });
         els.pityEnabled.addEventListener('change', ()=>{ state.config.pity.enabled = els.pityEnabled.checked; markProfileDirty(); });
         els.pityFloor.addEventListener('change', ()=>{ state.config.pity.floorTier = els.pityFloor.value; markProfileDirty(); });
@@ -1255,6 +1398,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
             updateGachaModeView('gear');
           }
         });
+        if(els.userOptionsBtn) els.userOptionsBtn.addEventListener('click', openUserOptionsModal);
+        if(els.userOptionsClose) els.userOptionsClose.addEventListener('click', ()=> closeUserOptionsModal());
+        if(els.userOptionsSave) els.userOptionsSave.addEventListener('click', saveUserOptions);
+        if(els.userOptionsModal){ els.userOptionsModal.addEventListener('click', (event)=>{ if(event.target === els.userOptionsModal){ closeUserOptionsModal(); } }); }
         els.saveCfg.addEventListener('click', saveConfigFile);
         els.loadCfg.addEventListener('click', ()=> els.cfgFile.click());
         els.cfgFile.addEventListener('change', loadConfigFile);
@@ -1293,6 +1440,16 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(els.legendaryOverlay){ els.legendaryOverlay.addEventListener('click', (event)=>{ if(!isLegendaryVisible()) return; if(event.target === els.legendaryOverlay && activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); } else if(event.target === els.legendaryOverlay && activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); } }); }
         document.addEventListener('keydown', (event)=>{
           if(event.key === 'Escape'){
+            if(isUserOptionsOpen()){
+              event.preventDefault();
+              closeUserOptionsModal();
+              return;
+            }
+            if(els.rareAnimationOverlay && !els.rareAnimationOverlay.hidden && els.rareAnimationOverlay.classList.contains('visible')){
+              event.preventDefault();
+              skipRareAnimation();
+              return;
+            }
             if(isLegendaryVisible()){
               event.preventDefault();
               if(activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); }
@@ -1432,7 +1589,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const rng = getRng(); state.inRun = true; state.cancelFlag = false; els.cancel.disabled = false; els.draw1.disabled = els.draw10.disabled = els.draw100.disabled = els.draw1k.disabled = els.draw10k.disabled = true; const speed = parseInt(els.speed.value||'0'); let results = []; const cfgHash = await sha256Hex(JSON.stringify(compactConfig())); const runId = state.runId++;
         const shouldRender = (n===1 || n===10 || n===100);
         const collected = [];
-        const collectFn = shouldRender ? function(payload){ if(!payload) return; const partName = getPartNameByKey(payload.part) || ''; collected.push({ tier: payload.tier, part: payload.part, icon: iconForPart(payload.part), partName }); } : null;
+        const collectFn = shouldRender ? function(payload){ if(!payload) return; const partName = getPartNameByKey(payload.part) || ''; collected.push({ type: 'gear', tier: payload.tier, part: payload.part, icon: iconForPart(payload.part), partName }); } : null;
         const batch = n >= 200; const updateEvery = n>=10000? 200 : n>=1000? 50 : n>=200? 10 : 1;
         if(n===10 && state.config.minGuarantee10.enabled){ // 10-pull with minimum guarantee
           for(let i=0;i<9;i++){ if(state.cancelFlag) break; if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; break; } const t = drawOneWithPity(rng); results.push(t); await applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch && ((i+1)%updateEvery===0)) { syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); }
@@ -1488,7 +1645,310 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       let activeLegendaryType = null;
       function isLegendaryVisible(){ return !!(els.legendaryOverlay && !els.legendaryOverlay.hidden && els.legendaryOverlay.classList.contains('visible')); }
       function openLegendaryModal(type){ if(!els.legendaryOverlay) return; activeLegendaryType = type; els.legendaryOverlay.hidden = false; requestAnimationFrame(()=> els.legendaryOverlay.classList.add('visible')); if(els.gearLegendaryModal) els.gearLegendaryModal.classList.toggle('active', type === 'gear'); if(els.characterLegendaryModal) els.characterLegendaryModal.classList.toggle('active', type === 'character'); document.body.classList.add('modal-open'); }
-      function closeLegendaryModal(){ if(!els.legendaryOverlay) return; els.legendaryOverlay.classList.remove('visible'); els.legendaryOverlay.hidden = true; if(els.gearLegendaryModal) els.gearLegendaryModal.classList.remove('active'); if(els.characterLegendaryModal) els.characterLegendaryModal.classList.remove('active'); document.body.classList.remove('modal-open'); activeLegendaryType = null; }
+      function closeLegendaryModal(){ if(!els.legendaryOverlay) return; els.legendaryOverlay.classList.remove('visible'); els.legendaryOverlay.hidden = true; if(els.gearLegendaryModal) els.gearLegendaryModal.classList.remove('active'); if(els.characterLegendaryModal) els.characterLegendaryModal.classList.remove('active'); activeLegendaryType = null; if(!isUserOptionsOpen() && !state.ui.characterDetailOpen){ document.body.classList.remove('modal-open'); } }
+
+      // Rare animation overlay
+      function resolveRareAnimationAsset(kind, tier, targetId){
+        if(!kind || !tier) return null;
+        const config = state.config?.rareAnimations || {};
+        const entries = Array.isArray(config[kind]) && config[kind].length ? config[kind] : (DEFAULT_RARE_ANIMATIONS[kind] || []);
+        let best = null;
+        let bestPriority = -1;
+        let bestTierIndex = Number.POSITIVE_INFINITY;
+        entries.forEach((asset)=>{
+          if(!asset || typeof asset !== 'object') return;
+          const assetTier = TIERS.includes(asset.tier) ? asset.tier : null;
+          if(assetTier && !isAtLeast(tier, assetTier)) return;
+          if(asset.id){
+            if(!targetId || asset.id !== targetId) return;
+          }
+          const priority = asset.id ? 2 : 1;
+          const tierIndex = assetTier ? TIER_INDEX[assetTier] : Number.POSITIVE_INFINITY;
+          if(priority > bestPriority || (priority === bestPriority && tierIndex < bestTierIndex)){
+            best = asset;
+            bestPriority = priority;
+            bestTierIndex = tierIndex;
+          }
+        });
+        return best;
+      }
+
+      function hideRareAnimationOverlay(callback, options){
+        const overlay = els.rareAnimationOverlay;
+        if(!overlay){ if(typeof callback === 'function') callback(); return; }
+        const anim = state.rareAnimations || {};
+        const immediate = options && options.immediate;
+        overlay.classList.remove('visible');
+        overlay.classList.remove('preface-active');
+        if(els.rareAnimationMessage){ els.rareAnimationMessage.style.display = 'none'; }
+        setRareAnimationSkippable(true);
+        if(immediate){
+          overlay.hidden = true;
+          if(typeof callback === 'function') callback();
+          return;
+        }
+        if(anim.hideTimer){
+          clearTimeout(anim.hideTimer);
+          anim.hideTimer = null;
+        }
+        anim.hideTimer = setTimeout(()=>{
+          overlay.hidden = true;
+          anim.hideTimer = null;
+          if(typeof callback === 'function') callback();
+        }, RARE_ANIMATION_FADE_MS);
+        state.rareAnimations = anim;
+      }
+
+      function showRareAnimationOverlay(asset, payload){
+        const overlay = els.rareAnimationOverlay;
+        if(!overlay) return;
+        const img = els.rareAnimationImage;
+        const labelEl = els.rareAnimationTier;
+        const messageEl = els.rareAnimationMessage;
+        const messageText = payload && typeof payload.message === 'string' ? payload.message : '';
+        const sticky = !!(payload && payload.sticky === true);
+        if(img){
+          img.src = '';
+          void img.offsetWidth;
+          img.src = asset.src;
+          img.alt = asset.alt || (payload && payload.label) || (payload && payload.tier ? `${payload.tier} 등급 획득 애니메이션` : '희귀 장비 애니메이션');
+        }
+        if(messageEl){
+          messageEl.textContent = messageText;
+          messageEl.style.display = messageText ? '' : 'none';
+        }
+        if(labelEl){
+          const text = (payload && payload.label) || asset.label || (payload && payload.tier ? `${payload.tier} 획득!` : '희귀 장비 획득!');
+          labelEl.textContent = text;
+        }
+        const prefaceMs = clampNumber(payload && payload.prefaceDuration, 0, 10000, messageText ? 1200 : 0);
+        overlay.hidden = false;
+        if(prefaceMs > 0 && messageText){
+          overlay.classList.add('preface-active');
+          setRareAnimationSkippable(false);
+        } else {
+          overlay.classList.remove('preface-active');
+          if(messageEl){ messageEl.style.display = messageText ? '' : 'none'; }
+          setRareAnimationSkippable(!sticky);
+        }
+        requestAnimationFrame(()=> overlay.classList.add('visible'));
+        if(prefaceMs > 0 && messageText){
+          let fallbackTimer = null;
+          const endPreface = ()=>{
+            overlay.classList.remove('preface-active');
+            if(messageEl){ messageEl.style.display = 'none'; }
+            if(sticky){
+              setTimeout(()=> setRareAnimationSkippable(true), 800);
+            } else {
+              setRareAnimationSkippable(true);
+            }
+          };
+          const schedule = (delay)=>{
+            if(fallbackTimer){ clearTimeout(fallbackTimer); }
+            const ms = typeof delay === 'number' ? delay : prefaceMs;
+            fallbackTimer = setTimeout(endPreface, ms);
+          };
+          if(img){
+            if(img.complete && img.naturalWidth > 0){
+              schedule();
+            } else {
+              const onLoad = ()=>{
+                img.removeEventListener('load', onLoad);
+                schedule();
+              };
+              img.addEventListener('load', onLoad, { once: true });
+              const fallbackDelay = Math.max(prefaceMs, ((payload && payload.duration) || RARE_ANIMATION_DURATION_MS) - 500);
+              schedule(fallbackDelay);
+            }
+          } else {
+            schedule();
+          }
+        } else if(sticky){
+          setRareAnimationSkippable(false);
+          setTimeout(()=> setRareAnimationSkippable(true), 800);
+        } else {
+          setRareAnimationSkippable(true);
+        }
+      }
+
+      function clearRareAnimations(options){
+        const anim = state.rareAnimations;
+        if(!anim) return;
+        if(anim.timer){
+          clearTimeout(anim.timer);
+          anim.timer = null;
+        }
+        if(anim.hideTimer){
+          clearTimeout(anim.hideTimer);
+          anim.hideTimer = null;
+        }
+        const current = anim.current;
+        const queued = anim.queue.splice(0);
+        anim.playing = false;
+        anim.current = null;
+        hideRareAnimationOverlay(()=>{
+          if(current && typeof current.resolve === 'function') current.resolve();
+          queued.forEach((entry)=>{ if(entry && typeof entry.resolve === 'function') entry.resolve(); });
+        }, options);
+        if(els.rareAnimationImage){ els.rareAnimationImage.src = ''; }
+        if(els.rareAnimationTier){ els.rareAnimationTier.textContent = ''; }
+        if(els.rareAnimationMessage){ els.rareAnimationMessage.textContent = ''; els.rareAnimationMessage.style.display = 'none'; }
+      }
+
+      function playNextRareAnimation(){
+        const anim = state.rareAnimations;
+        if(!anim) return;
+        if(anim.timer){
+          clearTimeout(anim.timer);
+          anim.timer = null;
+        }
+        if(anim.queue.length === 0){
+          anim.playing = false;
+          anim.current = null;
+          hideRareAnimationOverlay(undefined);
+          return;
+        }
+        const next = anim.queue.shift();
+        if(!next || !next.asset){
+          if(next && typeof next.resolve === 'function') next.resolve();
+          playNextRareAnimation();
+          return;
+        }
+        anim.playing = true;
+        anim.current = next;
+        const payload = next.payload || {};
+        const duration = payload.duration || 0;
+        const sticky = payload.sticky === true;
+        showRareAnimationOverlay(next.asset, payload);
+        if(!sticky){
+          anim.timer = setTimeout(()=> finishCurrentRareAnimation(), duration || RARE_ANIMATION_DURATION_MS);
+        }
+      }
+
+      function finishCurrentRareAnimation(options){
+        const anim = state.rareAnimations;
+        if(!anim) return;
+        if(anim.timer){
+          clearTimeout(anim.timer);
+          anim.timer = null;
+        }
+        const current = anim.current;
+        hideRareAnimationOverlay(()=>{
+          anim.playing = false;
+          anim.current = null;
+          if(current && typeof current.resolve === 'function') current.resolve();
+          playNextRareAnimation();
+        }, options);
+      }
+
+      function enqueueRareAnimation(payload){
+        if(!payload || !payload.tier) return Promise.resolve();
+        if(!els.rareAnimationOverlay) return Promise.resolve();
+        const kind = payload.kind || 'gear';
+        const asset = resolveRareAnimationAsset(kind, payload.tier, payload.targetId || null);
+        if(!asset) return Promise.resolve();
+        const anim = state.rareAnimations;
+        if(!anim) return Promise.resolve();
+        const labelSource = typeof payload.label === 'string' && payload.label.trim().length ? payload.label.trim() : (asset.label || `${payload.tier} 획득!`);
+        const sticky = payload.sticky === true;
+        const baseDuration = payload.duration ?? asset.duration;
+        const duration = sticky ? 0 : clampNumber(baseDuration, 600, 20000, RARE_ANIMATION_DURATION_MS);
+        const prefaceDuration = clampNumber(payload.prefaceDuration, 0, 10000, payload.message ? 1200 : 0);
+        const entry = {
+          payload: {
+            kind,
+            tier: payload.tier,
+            label: labelSource,
+            duration: sticky ? 0 : Math.max(duration, prefaceDuration ? prefaceDuration + 1500 : duration),
+            targetId: payload.targetId || null,
+            message: payload.message || '',
+            prefaceDuration,
+            sticky
+          },
+          asset,
+          resolve: null,
+          reject: null
+        };
+        const promise = new Promise((resolve)=>{
+          entry.resolve = resolve;
+        });
+        anim.queue.push(entry);
+        if(!anim.playing){
+          playNextRareAnimation();
+        }
+        return promise;
+      }
+
+      function setRareAnimationSkippable(value){
+        if(state.rareAnimations){
+          state.rareAnimations.skippable = !!value;
+        }
+        if(els.rareAnimationSkip){
+          els.rareAnimationSkip.disabled = !value;
+        }
+      }
+
+      function skipRareAnimation(){
+        if(!state.rareAnimations?.skippable) return;
+        const anim = state.rareAnimations;
+        if(!anim) return;
+        const pending = anim.queue.splice(0);
+        pending.forEach((entry)=>{ if(entry && typeof entry.resolve === 'function') entry.resolve(); });
+        if(anim.playing){
+          finishCurrentRareAnimation({ immediate: true });
+        } else {
+          clearRareAnimations({ immediate: true });
+        }
+      }
+
+      function resetRareAnimationState(options){
+        clearRareAnimations({ immediate: !!(options && options.immediate) });
+      }
+
+      function playRareAnimation(payload){
+        try {
+          return enqueueRareAnimation(payload);
+        } catch (error) {
+          console.warn('희귀 연출 실행 실패', error);
+          return Promise.resolve();
+        }
+      }
+
+      async function withRareAnimationBlock(operation){
+        const alreadyBlocked = !!state.ui.rareAnimationBlocking;
+        if(!alreadyBlocked){
+          state.ui.rareAnimationBlocking = true;
+          updateDrawButtons();
+        }
+        try {
+          await operation();
+        } finally {
+          if(!alreadyBlocked){
+            state.ui.rareAnimationBlocking = false;
+            updateDrawButtons();
+          }
+        }
+      }
+
+      async function playCharacterDrawAnimation(entry){
+        if(!entry || !entry.tier) return;
+        const labelParts = [entry.tier];
+        if(entry.name){ labelParts.push(entry.name); }
+        const label = labelParts.join(' ');
+        const targetId = entry.characterId || entry.id || null;
+        resetRareAnimationState({ immediate: true });
+        await withRareAnimationBlock(()=> playRareAnimation({
+          kind: 'character',
+          tier: entry.tier,
+          label,
+          targetId,
+          duration: 0,
+          message: '강력한 힘이 느껴집니다',
+          prefaceDuration: 1500,
+          sticky: true
+        }));
+      }
+
       function fillCharacterStats(target, stats){ if(!target) return; const rows = [
           ['hp', 'HP', false],
           ['atk', 'ATK', false],
@@ -1696,7 +2156,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
 
       function createCharacterImageElement(name, sources){ const img = document.createElement('img'); img.alt = name || '캐릭터'; img.decoding = 'async'; img.loading = 'lazy'; applyCharacterImageFallback(img, sources); return img; }
 
-      function renderDrawResults(items, count){ if(!els.drawResults) return; const wrap = els.drawResults; const grid = wrap.querySelector('.draw-result-grid'); const title = wrap.querySelector('h3'); if(!items || !items.length){ wrap.style.display = 'none'; if(grid) grid.innerHTML=''; return; }
+      function renderDrawResults(items, count){ if(!els.drawResults) return; const wrap = els.drawResults; const grid = wrap.querySelector('.draw-result-grid'); const title = wrap.querySelector('h3'); if(!items || !items.length){ wrap.style.display = 'none'; if(grid) grid.innerHTML=''; resetRareAnimationState({ immediate: true }); return; }
         if(title){ title.textContent = `${count}회 뽑기 결과`; }
         if(grid){ const frag = document.createDocumentFragment(); items.forEach(function(entry){ const card = document.createElement('div'); card.className = 'draw-card'; if(entry.type === 'pet'){ card.classList.add('pet'); const icon = entry.icon || '🐾'; const name = entry.name || entry.petId || '펫'; card.innerHTML = `
                 <div class="draw-icon">${icon}</div>
@@ -1711,6 +2171,15 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           frag.appendChild(card);
         }); grid.innerHTML=''; grid.appendChild(frag); }
         wrap.style.display = '';
+        items.filter(function(entry){ const kind = entry.type || 'gear'; return kind === 'gear' && entry.tier; }).forEach(function(entry){
+          const kind = entry.type || 'gear';
+          const parts = [];
+          if(entry.tier) parts.push(entry.tier);
+          if(entry.partName) parts.push(entry.partName);
+          const label = parts.length ? `${parts.join(' ')} 획득!` : '희귀 획득!';
+          const targetId = entry.part || entry.partName || null;
+          playRareAnimation({ kind, tier: entry.tier, label, targetId });
+        });
       }
 
       function petWeightEntries(){
@@ -1735,22 +2204,36 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           tbody.appendChild(tr);
         }); }
 
-      function renderCharacterStats(){ if(!els.characterStatsTable) return; const tbody = els.characterStatsTable; tbody.innerHTML=''; const characters = ensureCharacterState(); const activeId = getActiveCharacterId(); const rows = CHARACTER_IDS.map((id) => ({ id, count: characters.owned?.[id] || 0 })).filter((row) => row.count > 0 || row.id === activeId);
-        if(rows.length === 0){ const tr = document.createElement('tr'); tr.innerHTML = `<td colspan="5" class="muted small">보유한 캐릭터가 없습니다.</td>`; tbody.appendChild(tr); return; }
-        rows.forEach((row) => {
-          const def = getCharacterDefinition(row.id) || { name: row.id, className: '', tier: '', stats: {} };
-          const stats = def.stats || {};
-          const statSummary = `HP ${formatNum(stats.hp || 0)}, ATK ${formatNum(stats.atk || 0)}, DEF ${formatNum(stats.def || 0)}`;
-          const activeTag = row.id === activeId ? '<span class="pill active-pill">사용중</span>' : '';
+      function updateCharacterStatsSummary(stats){
+        if(state.ui.statsMode !== 'character') return;
+        const snapshot = stats ? sanitizeCharacterDrawStats(stats) : sanitizeCharacterDrawStats(state.characterStats);
+        const observedTotal = Object.values(snapshot.counts || {}).reduce((sum, val)=> sum + (val || 0), 0);
+        const totalDraws = Math.max(0, snapshot.draws || 0, observedTotal);
+        if(els.nDraws){ els.nDraws.textContent = formatNum(totalDraws); }
+        if(els.pval){ els.pval.textContent = '–'; }
+      }
+
+      function renderCharacterStats(){ if(!els.characterStatsTable) return; const tbody = els.characterStatsTable; tbody.innerHTML=''; const stats = sanitizeCharacterDrawStats(state.characterStats); state.characterStats = stats; const observedTotal = Object.values(stats.counts || {}).reduce((sum, val)=> sum + (val || 0), 0); const totalDraws = Math.max(0, stats.draws || 0, observedTotal); const probs = state.config.characterProbs || state.config.probs || {}; const tiers = [...TIERS];
+        if(totalDraws === 0){ const tr = document.createElement('tr'); tr.innerHTML = `<td colspan="6" class="muted small">캐릭터 뽑기 기록이 없습니다.</td>`; tbody.appendChild(tr); updateCharacterStatsSummary(stats); return; }
+        tiers.sort((a,b)=> TIER_INDEX[a]-TIER_INDEX[b]);
+        tiers.forEach((tier)=>{
+          const prob = Math.max(0, probs[tier] || 0);
+          const count = Math.max(0, stats.counts?.[tier] || 0);
+          const expected = totalDraws * prob;
+          const ratio = totalDraws > 0 ? count / totalDraws : 0;
+          const delta = count - expected;
+          const relErrorText = expected > 0 ? `${((delta / expected) * 100).toFixed(2)}%` : (count > 0 ? '∞' : '–');
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${def.name || row.id} ${activeTag}</td>
-            <td>${def.tier || '-'}</td>
-            <td>${def.className || '-'}</td>
-            <td>${formatNum(row.count)}</td>
-            <td>${statSummary}</td>`;
+            <td class="tier ${tier}">${tier}</td>
+            <td>${(ratio * 100).toFixed(3)}%</td>
+            <td>${expected.toFixed(2)}</td>
+            <td>${formatNum(count)}</td>
+            <td>${delta >= 0 ? '+' : ''}${delta.toFixed(2)}</td>
+            <td>${relErrorText}</td>`;
           tbody.appendChild(tr);
         });
+        updateCharacterStatsSummary(stats);
       }
 
       function renderPetWeightTable(){ if(!els.petWeightTableBody) return; const tbody = els.petWeightTableBody; tbody.innerHTML = ''; PET_IDS.forEach((id) => {
@@ -1870,6 +2353,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(!admin && state.wallet < CHARACTER_DRAW_COST){ alert('포인트가 부족합니다.'); return; }
         ensureCharacterState();
         const characters = state.characters;
+        const charStats = sanitizeCharacterDrawStats(state.characterStats);
+        state.characterStats = charStats;
         state.inRun = true;
         updateDrawButtons();
         const rng = getRng();
@@ -1882,6 +2367,11 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           const charId = randomCharacterIdForTier(tier, rng) || DEFAULT_CHARACTER_ID;
           if(!charId) continue;
           characters.owned[charId] = (characters.owned[charId] || 0) + 1;
+          charStats.draws = clampNumber((charStats.draws || 0) + 1, 0, Number.MAX_SAFE_INTEGER, 0);
+          if(!Object.prototype.hasOwnProperty.call(charStats.counts, tier)){
+            charStats.counts[tier] = 0;
+          }
+          charStats.counts[tier] = clampNumber((charStats.counts[tier] || 0) + 1, 0, Number.MAX_SAFE_INTEGER, 0);
           const def = getCharacterDefinition(charId) || { name: charId, image: '', className: '' };
           const imageSources = getCharacterImageVariants(charId);
           if(def.image && !imageSources.includes(def.image)){ imageSources.unshift(def.image); }
@@ -1892,6 +2382,13 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
             const activeDef = getCharacterDefinition(activeId) || getActiveCharacterDefinition();
             const activeSources = getCharacterImageVariants(activeId);
             if(activeDef?.image && !activeSources.includes(activeDef.image)){ activeSources.unshift(activeDef.image); }
+            if(isAtLeast(tier, 'SS+')){
+              await playCharacterDrawAnimation({
+                tier,
+                name: cardPayload.name,
+                characterId: cardPayload.characterId
+              });
+            }
             await showCharacterLegendaryModal({
               name: def.name || charId,
               tier,
@@ -1912,10 +2409,12 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         ensureCharacterState();
         state.characters = characters;
         if(userProfile) userProfile.characters = characters;
+        userProfile.characterStats = charStats;
         state.inRun = false;
         updateInventoryView();
         updateDrawButtons();
         renderDrawResults(results, results.length);
+        renderCharacterStats();
         updateProgress(0, 100);
         markProfileDirty();
       }
@@ -1940,10 +2439,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       function resetGlobal(){ if(!confirm('전체(전역) 통계를 초기화할까요? 이 작업은 취소할 수 없습니다.')) return; state.global = { draws:0, counts:Object.fromEntries(TIERS.map(t=>[t,0])) }; saveGlobal(); if(els.scope.value==='global'){ syncStats(); drawChart(); } }
 
       // Save/Load/Share
-      function compactConfig(){ const {weights, probs, characterWeights, characterProbs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights} = state.config; return {weights, probs, characterWeights, characterProbs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights}; }
+      function compactConfig(){ const {weights, probs, characterWeights, characterProbs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights, rareAnimations} = state.config; return {weights, probs, characterWeights, characterProbs, pity, minGuarantee10, seed, locked, version, dropRates, shopPrices, goldScaling, potionSettings, hyperPotionSettings, monsterScaling, petWeights, rareAnimations}; }
       function saveConfigFile(){ const data = JSON.stringify(compactConfig(), null, 2); const blob = new Blob([data], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gacha-config.json'; a.click(); URL.revokeObjectURL(a.href); }
       function loadConfigFile(e){ const f = e.target.files[0]; if(!f) return; const rd = new FileReader(); rd.onload = ()=>{ try{ const cfg = JSON.parse(rd.result); applyLoadedConfig(cfg); } catch(err){ alert('불러오기 실패: '+err); } }; rd.readAsText(f); e.target.value=''; }
-      function applyLoadedConfig(cfg){ if(!cfg || !cfg.weights) { alert('형식이 올바르지 않습니다.'); return; } state.config.weights = {...defaultWeights, ...cfg.weights}; state.config.probs = normalize(state.config.weights); state.config.characterWeights = sanitizeWeights(cfg.characterWeights || cfg.characterGachaWeights || state.config.characterWeights); state.config.characterProbs = normalize(state.config.characterWeights); state.config.seed = cfg.seed||''; state.config.locked = !!cfg.locked; state.config.pity = cfg.pity||{enabled:false,floorTier:'S',span:90}; state.config.minGuarantee10 = cfg.minGuarantee10||{enabled:false,tier:'A'}; state.config.dropRates = migrateLegacyDropRates(cfg.dropRates); state.config.goldScaling = normalizeGoldScaling(cfg.goldScaling); state.config.shopPrices = normalizeShopPrices(cfg.shopPrices); state.config.potionSettings = normalizePotionSettings(cfg.potionSettings, DEFAULT_POTION_SETTINGS); state.config.hyperPotionSettings = normalizePotionSettings(cfg.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.monsterScaling = normalizeMonsterScaling(cfg.monsterScaling); state.config.petWeights = sanitizePetWeights(cfg.petWeights || cfg.petGachaWeights || state.config.petWeights); reflectConfig(); if(isAdmin()) clearActivePreset(); else clearSelectedPreset(); markProfileDirty(); }
+      function applyLoadedConfig(cfg){ if(!cfg || !cfg.weights) { alert('형식이 올바르지 않습니다.'); return; } state.config.weights = {...defaultWeights, ...cfg.weights}; state.config.probs = normalize(state.config.weights); state.config.characterWeights = sanitizeWeights(cfg.characterWeights || cfg.characterGachaWeights || state.config.characterWeights); state.config.characterProbs = normalize(state.config.characterWeights); state.config.seed = cfg.seed||''; state.config.locked = !!cfg.locked; state.config.pity = cfg.pity||{enabled:false,floorTier:'S',span:90}; state.config.minGuarantee10 = cfg.minGuarantee10||{enabled:false,tier:'A'}; state.config.dropRates = migrateLegacyDropRates(cfg.dropRates); state.config.goldScaling = normalizeGoldScaling(cfg.goldScaling); state.config.shopPrices = normalizeShopPrices(cfg.shopPrices); state.config.potionSettings = normalizePotionSettings(cfg.potionSettings, DEFAULT_POTION_SETTINGS); state.config.hyperPotionSettings = normalizePotionSettings(cfg.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.monsterScaling = normalizeMonsterScaling(cfg.monsterScaling); state.config.petWeights = sanitizePetWeights(cfg.petWeights || cfg.petGachaWeights || state.config.petWeights); state.config.rareAnimations = normalizeRareAnimations(cfg.rareAnimations); reflectConfig(); if(isAdmin()) clearActivePreset(); else clearSelectedPreset(); markProfileDirty(); }
       function shareLink(){ const cfg = compactConfig(); const json = JSON.stringify(cfg); const b = btoa(unescape(encodeURIComponent(json))).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_'); const url = location.origin + location.pathname + '?cfg='+b; if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(function(){ alert('링크가 클립보드에 복사되었습니다.'); }).catch(function(){ prompt('아래 링크를 복사하세요', url); }); } else { prompt('아래 링크를 복사하세요', url); } }
       function readLink(){ const m = location.search.match(/[?&]cfg=([^&]+)/); if(!m) return; try{ const b = m[1].replace(/-/g,'+').replace(/_/g,'/'); const json = decodeURIComponent(escape(atob(b))); const cfg = JSON.parse(json); applyLoadedConfig(cfg); } catch(e){ console.warn('링크 파싱 실패', e); }
       }
@@ -2244,19 +2743,19 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(!opts || !opts.silent) updatePointsView();
       }
       function updatePointsView(){ els.points.textContent = isAdmin()? '∞' : formatNum(state.wallet); updateDrawButtons(); updateReviveButton(); }
-      function updateDrawButtons(){ const running = !!state.inRun; const mode = state.ui.gachaMode || 'gear'; const wallet = isAdmin() ? Number.POSITIVE_INFINITY : (state.wallet || 0); const petTickets = state.items.petTicket || 0;
+      function updateDrawButtons(){ const running = !!state.inRun; const blocked = !!state.ui.rareAnimationBlocking; const mode = state.ui.gachaMode || 'gear'; const wallet = isAdmin() ? Number.POSITIVE_INFINITY : (state.wallet || 0); const petTickets = state.items.petTicket || 0;
         const enoughGear = isAdmin() || wallet >= 100;
         const enoughChar1 = isAdmin() || wallet >= CHARACTER_DRAW_COST;
         const enoughChar10 = isAdmin() || wallet >= CHARACTER_DRAW_COST * 10;
-        if(els.draw1) els.draw1.disabled = mode !== 'gear' || running || !enoughGear;
-        if(els.draw10) els.draw10.disabled = mode !== 'gear' || running || !enoughGear;
-        if(els.draw100) els.draw100.disabled = mode !== 'gear' || running || !enoughGear;
-        if(els.draw1k) els.draw1k.disabled = mode !== 'gear' || running || !enoughGear;
-        if(els.draw10k) els.draw10k.disabled = mode !== 'gear' || running || !enoughGear;
-        if(els.drawPet1) els.drawPet1.disabled = mode !== 'pet' || running || (!isAdmin() && petTickets < 1);
-        if(els.drawPet10) els.drawPet10.disabled = mode !== 'pet' || running || (!isAdmin() && petTickets < 10);
-        if(els.drawChar1) els.drawChar1.disabled = mode !== 'character' || running || !enoughChar1;
-        if(els.drawChar10) els.drawChar10.disabled = mode !== 'character' || running || !enoughChar10;
+        if(els.draw1) els.draw1.disabled = mode !== 'gear' || running || blocked || !enoughGear;
+        if(els.draw10) els.draw10.disabled = mode !== 'gear' || running || blocked || !enoughGear;
+        if(els.draw100) els.draw100.disabled = mode !== 'gear' || running || blocked || !enoughGear;
+        if(els.draw1k) els.draw1k.disabled = mode !== 'gear' || running || blocked || !enoughGear;
+        if(els.draw10k) els.draw10k.disabled = mode !== 'gear' || running || blocked || !enoughGear;
+        if(els.drawPet1) els.drawPet1.disabled = mode !== 'pet' || running || blocked || (!isAdmin() && petTickets < 1);
+        if(els.drawPet10) els.drawPet10.disabled = mode !== 'pet' || running || blocked || (!isAdmin() && petTickets < 10);
+        if(els.drawChar1) els.drawChar1.disabled = mode !== 'character' || running || blocked || !enoughChar1;
+        if(els.drawChar10) els.drawChar10.disabled = mode !== 'character' || running || blocked || !enoughChar10;
       }
       function canSpend(amt){ if(isAdmin()) return true; return state.wallet >= amt; }
       function spendPoints(amt){ if(isAdmin()) return true; if(state.wallet < amt) return false; state.wallet -= amt; saveWallet(); return true; }
@@ -2405,6 +2904,54 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         updatePetWeightInputs();
         updateGachaModeView();
       }
+
+      function isUserOptionsOpen(){ return !!state.ui.userOptionsOpen; }
+
+      function syncUserOptionsInputs(){
+        if(!els.userOptionsCharacterGif || !els.userOptionsPetGif) return;
+        const effects = state.settings?.effects || {};
+        els.userOptionsCharacterGif.checked = effects.characterUltimateGif !== false;
+        els.userOptionsPetGif.checked = effects.petUltimateGif !== false;
+      }
+
+      function openUserOptionsModal(){
+        if(!els.userOptionsModal) return;
+        syncUserOptionsInputs();
+        state.ui.userOptionsOpen = true;
+        els.userOptionsModal.hidden = false;
+        requestAnimationFrame(()=> els.userOptionsModal.classList.add('show'));
+        document.body.classList.add('modal-open');
+      }
+
+      function closeUserOptionsModal(options){
+        if(!els.userOptionsModal) return;
+        state.ui.userOptionsOpen = false;
+        els.userOptionsModal.classList.remove('show');
+        const delay = options && options.immediate ? 0 : 180;
+        setTimeout(()=>{
+          if(!state.ui.userOptionsOpen){ els.userOptionsModal.hidden = true; }
+        }, delay);
+        if(!isLegendaryVisible() && !state.ui.characterDetailOpen){ document.body.classList.remove('modal-open'); }
+      }
+
+      function saveUserOptions(){
+        if(!els.userOptionsCharacterGif || !els.userOptionsPetGif) return;
+        const next = sanitizeUserSettings({
+          effects: {
+            characterUltimateGif: !!els.userOptionsCharacterGif.checked,
+            petUltimateGif: !!els.userOptionsPetGif.checked
+          }
+        });
+        const current = state.settings || sanitizeUserSettings(null);
+        const changed = current.effects.characterUltimateGif !== next.effects.characterUltimateGif
+          || current.effects.petUltimateGif !== next.effects.petUltimateGif;
+        if(changed){
+          state.settings = next;
+          if(userProfile){ userProfile.settings = next; }
+          markProfileDirty();
+        }
+        closeUserOptionsModal();
+      }
       function hydrateSession(){ loadWallet(); loadGold(); loadDiamonds(); startUiTimer(); updateItemCountsView(); updateBuffInfo(); updateReviveButton(); updateShopButtons(); setShopMessage('', null); updatePetList(); updateGachaModeView(); updateViewMode(); }
 
       async function loadOrInitializeProfile(firebaseUser){
@@ -2456,6 +3003,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       async function applyProfileState(){
         if(!currentFirebaseUser || !userProfile) return;
         detachGlobalConfigListener();
+        resetRareAnimationState({ immediate: true });
         const uid = currentFirebaseUser.uid;
         const fallbackBase = `user-${uid.slice(0, 6)}`;
         const derivedName = sanitizeUsername(userProfile.username, deriveUsernameFromUser(currentFirebaseUser) || fallbackBase) || fallbackBase;
@@ -2538,6 +3086,12 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         userProfile.characters = state.characters;
         ensureCharacterState();
 
+        state.characterStats = sanitizeCharacterDrawStats(userProfile.characterStats);
+        userProfile.characterStats = state.characterStats;
+
+        state.settings = sanitizeUserSettings(userProfile.settings);
+        userProfile.settings = state.settings;
+
         state.equip = sanitizeEquipMap(userProfile.equip);
         userProfile.equip = state.equip;
 
@@ -2618,6 +3172,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         syncStats();
         drawChart();
         renderCharacterStats();
+        syncUserOptionsInputs();
       }
 
       function buildProfilePayload(){
@@ -2635,6 +3190,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           items: sanitizeItems(state.items),
           pets: sanitizePetState(state.pets),
           characters: sanitizeCharacterState(state.characters),
+          characterStats: sanitizeCharacterDrawStats(state.characterStats),
+          settings: sanitizeUserSettings(state.settings),
           petGachaWeights: sanitizePetWeights(state.petGachaWeights),
           session: (()=>{
             const snapshot = sanitizeSession(state.session);
@@ -2705,6 +3262,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           userProfile.items = state.items;
           userProfile.pets = state.pets;
           userProfile.characters = state.characters;
+          userProfile.characterStats = state.characterStats;
+          userProfile.settings = state.settings;
           userProfile.petGachaWeights = state.petGachaWeights;
           if('enhance' in userProfile){ delete userProfile.enhance; }
           userProfile.equip = state.equip;
@@ -3049,9 +3608,22 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(!admin){
           state.items.enhance = Math.max(0, (state.items.enhance || 0) - enhanceCost);
           state.gold = Math.max(0, (state.gold || 0) - expectedGold);
-          saveGold();
-          updateItemCountsView();
         }
+        updateItemCountsView();
+
+        const commitConsumables = () => {
+          if (admin) return;
+          const itemsSnapshot = sanitizeItems(state.items);
+          state.items = itemsSnapshot;
+          if (userProfile) {
+            userProfile.items = itemsSnapshot;
+          }
+          if (state.profile) {
+            state.profile.items = { ...itemsSnapshot };
+          }
+          saveGold({ extraUpdates: { items: itemsSnapshot } });
+          updateItemCountsView();
+        };
 
         const successProb = state.enhance.probs[nextLv] || 0;
         const rng = getRng();
@@ -3063,6 +3635,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           updateForgeInfo();
           setForgeMsg(`강화 성공! Lv.${lv} → Lv.${nextLv}`, 'ok');
           showForgeEffect('success');
+          commitConsumables();
           markProfileDirty();
           return {status:'success', level: nextLv};
         }
@@ -3077,6 +3650,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           updateForgeInfo();
           setForgeMsg('강화 실패! 보호권이 소모되어 장비가 보호되었습니다.', 'warn');
           showForgeEffect('protected');
+          commitConsumables();
           markProfileDirty();
           return {status:'protected'};
         }
@@ -3086,6 +3660,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         updateForgeInfo();
         setForgeMsg('강화 실패! 장비가 파괴되었습니다.', 'danger');
         showForgeEffect('destroyed');
+        commitConsumables();
+        markProfileDirty();
         return {status:'destroyed'};
       }
 
@@ -3381,6 +3957,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(!firebaseUser){
           detachProfileListener();
           detachGlobalConfigListener();
+          resetRareAnimationState({ immediate: true });
           window.location.href = 'login.html';
           return;
         }

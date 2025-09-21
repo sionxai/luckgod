@@ -39,6 +39,44 @@ export const DEFAULT_MONSTER_SCALING = {
   dodgeBase: 3,
   dodgeMax: 40
 };
+
+export const DEFAULT_USER_SETTINGS = {
+  effects: {
+    characterUltimateGif: true,
+    petUltimateGif: true
+  }
+};
+
+export function sanitizeUserSettings(raw) {
+  const result = {
+    effects: {
+      characterUltimateGif: DEFAULT_USER_SETTINGS.effects.characterUltimateGif,
+      petUltimateGif: DEFAULT_USER_SETTINGS.effects.petUltimateGif
+    }
+  };
+
+  if (raw && typeof raw === 'object') {
+    const sourceEffects = raw.effects && typeof raw.effects === 'object' ? raw.effects : raw;
+    if (Object.prototype.hasOwnProperty.call(sourceEffects, 'characterUltimateGif')) {
+      const value = sourceEffects.characterUltimateGif;
+      if (typeof value === 'boolean') {
+        result.effects.characterUltimateGif = value;
+      } else if (typeof value === 'string') {
+        result.effects.characterUltimateGif = value !== 'false';
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(sourceEffects, 'petUltimateGif')) {
+      const value = sourceEffects.petUltimateGif;
+      if (typeof value === 'boolean') {
+        result.effects.petUltimateGif = value;
+      } else if (typeof value === 'string') {
+        result.effects.petUltimateGif = value !== 'false';
+      }
+    }
+  }
+
+  return result;
+}
 export const DEFAULT_SHOP_PRICES = {
   potion: 500,
   hyperPotion: 2000,
@@ -916,41 +954,72 @@ export function simulateTurnBattle({ player, opponent, rng = Math.random, maxTur
   const actorA = createCombatant(player);
   const actorB = createCombatant(opponent);
   const logs = [];
+  const timeline = [];
   let attacker = actorA;
   let defender = actorB;
   let turn = 1;
 
   const runAction = (actor, target, action) => {
+    const event = {
+      turn,
+      action,
+      actor: { uid: actor.uid, name: actor.name },
+      target: target ? { uid: target.uid, name: target.name } : null,
+      outcome: 'none',
+      damage: 0,
+      targetHpBefore: target ? Math.max(0, Math.floor(target.hp)) : null,
+      targetHpAfter: target ? Math.max(0, Math.floor(target.hp)) : null,
+      log: ''
+    };
+
     switch (action) {
-      case 'defend':
+      case 'defend': {
         actor.defending = true;
-        logs.push(`[턴 ${turn}] ${actor.name}이(가) 방어 자세를 취했습니다.`);
+        event.outcome = 'defend';
+        event.log = `[턴 ${turn}] ${actor.name}이(가) 방어 자세를 취했습니다.`;
+        logs.push(event.log);
         break;
+      }
       case 'skill':
       case 'attack': {
         const isSkill = action === 'skill';
         const result = calculateDamage(actor.stats, target, isSkill, rng);
+        const label = isSkill ? '필살기! ' : '';
         if (result.type === 'MISS') {
-          logs.push(`[턴 ${turn}] ${actor.name}의 공격이 빗나갔습니다.`);
+          event.outcome = 'miss';
+          event.log = `[턴 ${turn}] ${actor.name}의 공격이 빗나갔습니다.`;
+          logs.push(event.log);
         } else {
-          target.hp -= result.damage;
-          const label = isSkill ? '필살기! ' : '';
+          const preHp = target.hp;
+          const appliedDamage = Math.min(result.damage, Math.max(0, target.hp));
+          target.hp -= appliedDamage;
           const critLabel = result.type === 'CRITICAL' ? ' 크리티컬!' : '';
-          logs.push(
-            `[턴 ${turn}] ${actor.name} ${label}-> ${target.name}: ${formatNum(result.damage)} 피해${critLabel}`
-          );
+          event.outcome = result.type === 'CRITICAL' ? 'critical' : 'hit';
+          event.damage = appliedDamage;
+          event.targetHpBefore = Math.max(0, Math.floor(preHp));
+          event.targetHpAfter = Math.max(0, Math.floor(target.hp));
+          event.log = `[턴 ${turn}] ${actor.name} ${label}-> ${target.name}: ${formatNum(appliedDamage)} 피해${critLabel}`;
+          event.defenderDefeated = target.hp <= 0;
+          logs.push(event.log);
         }
+        event.isSkill = isSkill;
         if (isSkill) {
           actor.skillCooldown = 3;
         }
         break;
       }
       default:
+        event.outcome = 'none';
         break;
     }
+
     if (actor.skillCooldown > 0) {
       actor.skillCooldown -= 1;
     }
+
+    event.actorHpAfter = Math.max(0, Math.floor(actor.hp));
+    timeline.push(event);
+    return event;
   };
 
   while (attacker.hp > 0 && defender.hp > 0 && turn <= maxTurns) {
@@ -963,22 +1032,41 @@ export function simulateTurnBattle({ player, opponent, rng = Math.random, maxTur
 
   let winner = null;
   let loser = null;
+  let outcomeLog = '';
   if (actorA.hp <= 0 && actorB.hp <= 0) {
-    logs.push('전투가 무승부로 종료되었습니다.');
+    outcomeLog = '전투가 무승부로 종료되었습니다.';
+    logs.push(outcomeLog);
   } else if (actorA.hp <= 0) {
     winner = actorB;
     loser = actorA;
-    logs.push(`${winner.name} 승리!`);
+    outcomeLog = `${winner.name} 승리!`;
+    logs.push(outcomeLog);
   } else if (actorB.hp <= 0) {
     winner = actorA;
     loser = actorB;
-    logs.push(`${winner.name} 승리!`);
+    outcomeLog = `${winner.name} 승리!`;
+    logs.push(outcomeLog);
   } else {
-    logs.push('턴 제한으로 전투가 무승부로 종료되었습니다.');
+    outcomeLog = '턴 제한으로 전투가 무승부로 종료되었습니다.';
+    logs.push(outcomeLog);
   }
+
+  timeline.push({
+    turn,
+    action: 'result',
+    actor: winner ? { uid: winner.uid, name: winner.name } : null,
+    target: loser ? { uid: loser.uid, name: loser.name } : null,
+    outcome: winner ? 'victory' : actorA.hp <= 0 && actorB.hp <= 0 ? 'draw' : 'timeout',
+    log: outcomeLog,
+    remaining: {
+      A: Math.max(0, Math.floor(actorA.hp)),
+      B: Math.max(0, Math.floor(actorB.hp))
+    }
+  });
 
   return {
     logs,
+    timeline,
     winner: winner
       ? { uid: winner.uid, name: winner.name, stats: { ...winner.stats }, remainingHp: Math.max(0, Math.floor(winner.hp)) }
       : null,

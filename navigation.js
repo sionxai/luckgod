@@ -1,3 +1,5 @@
+import { db, ref, onValue } from './firebase.js';
+
 const NAV_ITEMS = [
   { id: 'gacha', label: '뽑기', icon: '🎲', page: 'index', section: 'gacha', href: 'index.html' },
   { id: 'equipment', label: '장비', icon: '🛡️', page: 'index', section: 'equipment', href: 'index.html#equipment' },
@@ -60,6 +62,27 @@ const NAV_STYLE = `
   transform: translateY(-2px);
 }
 
+.bottom-nav__button.season-active {
+  color: var(--nav-accent);
+  animation: navPulse 1.4s ease-in-out infinite;
+}
+
+.bottom-nav__button.season-active .nav-icon {
+  animation: navGlow 1.4s ease-in-out infinite;
+}
+
+@keyframes navPulse {
+  0% { color: var(--nav-accent); }
+  50% { color: #ffffff; }
+  100% { color: var(--nav-accent); }
+}
+
+@keyframes navGlow {
+  0% { transform: translateY(-2px) scale(1); text-shadow: 0 0 0 rgba(106,169,255,0); }
+  50% { transform: translateY(-3px) scale(1.05); text-shadow: 0 0 8px rgba(106,169,255,0.65); }
+  100% { transform: translateY(-2px) scale(1); text-shadow: 0 0 0 rgba(106,169,255,0); }
+}
+
 body {
   padding-bottom: calc(var(--nav-height) + 12px);
 }
@@ -93,6 +116,7 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
   const nav = document.createElement('nav');
   nav.className = 'bottom-nav';
   const buttons = [];
+  let pvpButton = null;
 
   NAV_ITEMS.forEach((item) => {
     const btn = document.createElement('button');
@@ -105,6 +129,9 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
     btn.innerHTML = `<span class="nav-icon">${item.icon}</span><span>${item.label}</span>`;
     nav.appendChild(btn);
     buttons.push(btn);
+    if (item.id === 'pvp') {
+      pvpButton = btn;
+    }
   });
 
   document.body.appendChild(nav);
@@ -114,6 +141,11 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
       btn.classList.toggle('active', btn.dataset.navId === id);
     });
     body.dataset.activeNav = id;
+  }
+
+  function setPvpSeasonActive(active) {
+    if (!pvpButton) return;
+    pvpButton.classList.toggle('season-active', !!active);
   }
 
   function setActiveSection(section, scroll = true) {
@@ -168,5 +200,18 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
   const statsDetails = document.getElementById('statsDetails');
   if (statsDetails && window.matchMedia('(min-width: 1024px)').matches) {
     statsDetails.open = true;
+  }
+
+  try {
+    const seasonRef = ref(db, 'pvpSeason');
+    onValue(seasonRef, (snapshot) => {
+      const season = snapshot.exists() ? snapshot.val() : {};
+      const isActive = season && season.status === 'active';
+      setPvpSeasonActive(isActive);
+    }, (error) => {
+      console.warn('PVP season state unavailable', error);
+    });
+  } catch (error) {
+    console.warn('Failed to subscribe to PVP season state', error);
   }
 })();

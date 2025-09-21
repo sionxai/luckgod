@@ -37,7 +37,8 @@ import {
   getCharacterDefinition,
   getCharacterImageVariants,
   characterBaseStats,
-  CHARACTER_ULTIMATE_DEFS
+  CHARACTER_ULTIMATE_DEFS,
+  sanitizeUserSettings
 } from './combat-core.js';
 
 const qs = (selector) => document.querySelector(selector);
@@ -427,6 +428,7 @@ const state = {
   autoSession: sanitizeAutoSession(null),
   pets: createDefaultPetState(),
   characters: createDefaultCharacterState(),
+  settings: sanitizeUserSettings(null),
   selectedBossId: null,
   lastNormalLevel: 1,
   petEffectTimers: [],
@@ -1677,6 +1679,12 @@ function applyEnemyTimeStop(turns) {
 
 function triggerPlayerUltimate(def) {
   state.playerUltimateUsed = true;
+  if (!ultimateGifEnabled('character')) {
+    addBattleLog(`[필살기 준비] ${def.name}`, 'critical');
+    applyUltimateEffect(def);
+    finalizeUltimateTurn();
+    return;
+  }
   state.ultimateActive = true;
   state.ultimatePending = { def, resolved: false };
   gameState.battle.actionLock = true;
@@ -1884,6 +1892,7 @@ function maybeTriggerCharacterUltimate() {
 }
 
 function triggerPetAnimation(effect) {
+  if (!ultimateGifEnabled('pet')) return;
   const el = els.petCompanion;
   if (!el || !el.classList.contains('show')) return;
   const className = `effect-${effect}`;
@@ -2425,6 +2434,17 @@ function calcGoldReward(level, rng) {
 
 function levelReward(level) {
   return Math.max(1, 2 * level - 1);
+}
+
+function ultimateGifEnabled(kind) {
+  const effects = state.settings?.effects || {};
+  if (kind === 'character') {
+    return effects.characterUltimateGif !== false;
+  }
+  if (kind === 'pet') {
+    return effects.petUltimateGif !== false;
+  }
+  return true;
 }
 
 function queueProfileUpdate(partial) {
@@ -4376,6 +4396,11 @@ async function hydrateProfile(firebaseUser) {
   state.pets = sanitizePetState(rawProfile.pets);
   state.characters = sanitizeCharacterState(rawProfile.characters);
   ensureCharacterState();
+  state.settings = sanitizeUserSettings(rawProfile.settings);
+
+  if (!rawProfile.settings || typeof rawProfile.settings !== 'object') {
+    rawProfile.settings = state.settings;
+  }
   state.wallet = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.wallet, 0, Number.MAX_SAFE_INTEGER, 1000);
   state.gold = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.gold, 0, Number.MAX_SAFE_INTEGER, 10000);
   state.combat = {
@@ -4404,7 +4429,8 @@ async function hydrateProfile(firebaseUser) {
     bossProgress: state.bossProgress,
     battleProgress: state.battleProgress,
     difficultyState: state.difficultyState,
-    autoSession: state.autoSession
+    autoSession: state.autoSession,
+    settings: state.settings
   };
   const personalConfig = sanitizeConfig(rawProfile.config);
   state.config = role === 'admin' && globalConfig ? globalConfig : personalConfig;
