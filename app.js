@@ -639,20 +639,22 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         const safeOffset = typeof offset === 'number' && isFinite(offset) ? offset : 0;
         const adjusted = baseValue * safeMultiplier + safeOffset;
         if(type === 'percent'){
-          const baseText = `${Math.round(baseValue * 10) / 10}%`;
-          const adjustedText = `${Math.round(adjusted * 10) / 10}%`;
-          if(Math.abs(adjusted - baseValue) < 0.001) return baseText;
-          const delta = adjusted - baseValue;
-          const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}%)`;
-          return `${baseText} → ${adjustedText}${deltaText}`;
+          const baseRounded = Math.round(baseValue * 10) / 10;
+          const adjustedRounded = Math.round(adjusted * 10) / 10;
+          const baseText = `${baseRounded}%`;
+          const adjustedText = `${adjustedRounded}%`;
+          if(Math.abs(adjusted - baseValue) < 0.001) return adjustedText;
+          const delta = adjustedRounded - baseRounded;
+          const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}%p)`;
+          return `${adjustedText} <span class="muted">(기본 ${baseText}${deltaText})</span>`;
         }
         const baseText = baseValue.toLocaleString('ko-KR');
         const adjustedText = adjusted.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
-        if(Math.abs(adjusted - baseValue) < 0.001) return baseText;
+        if(Math.abs(adjusted - baseValue) < 0.001) return adjustedText;
         const delta = adjusted - baseValue;
         const deltaAbs = Math.abs(delta).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
         const deltaText = delta === 0 ? '' : ` (${delta > 0 ? '+' : ''}${deltaAbs})`;
-        return `${baseText} → ${adjustedText}${deltaText}`;
+        return `${adjustedText} <span class="muted">(기본 ${baseText}${deltaText})</span>`;
       }
 
       function refreshCharacterBalanceEffects(){
@@ -2203,7 +2205,7 @@ ${parts.join(', ')}`;
         }));
       }
 
-      function fillCharacterStats(target, stats){ if(!target) return; const rows = [
+      function fillCharacterStats(target, stats, classId){ if(!target) return; const rows = [
           ['hp', 'HP', false],
           ['atk', 'ATK', false],
           ['def', 'DEF', false],
@@ -2212,10 +2214,33 @@ ${parts.join(', ')}`;
           ['dodge', '회피', true],
           ['speed', '속도', false]
         ];
+        let statMultipliers = null;
+        let statOffsets = null;
+        if(classId){
+          const balance = ensureCharacterBalanceConfig()[classId] || DEFAULT_CHARACTER_BALANCE[classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+          statMultipliers = balance.stats || {};
+          statOffsets = balance.offsets || {};
+        }
         const html = rows.map(([key, label, percent]) => {
           const value = stats && typeof stats[key] === 'number' ? stats[key] : null;
           if(value === null){
             return `<div>${label}: <b>-</b></div>`;
+          }
+          if(statMultipliers){
+            const multiplier = Number(statMultipliers[key] ?? 1);
+            const offset = Number(statOffsets?.[key] ?? 0);
+            const adjusted = value * multiplier + offset;
+            const same = Math.abs(adjusted - value) < 0.001;
+            if(!same){
+              if(percent){
+                const baseText = `${Math.round(value * 10) / 10}%`;
+                const adjText = `${Math.round(adjusted * 10) / 10}%`;
+                return `<div>${label}: <b>${baseText}</b><span class="muted"> → ${adjText}</span></div>`;
+              }
+              const baseText = formatNum(Math.round(value));
+              const adjText = adjusted.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+              return `<div>${label}: <b>${baseText}</b><span class="muted"> → ${adjText}</span></div>`;
+            }
           }
           return `<div>${label}: <b>${percent ? `${value}%` : formatNum(value)}</b></div>`;
         }).join('');
@@ -2357,7 +2382,7 @@ ${parts.join(', ')}`;
           if(els.gearDiscardBtn) els.gearDiscardBtn.onclick = () => cleanup('discard');
         });
       }
-      function showCharacterLegendaryModal(payload){ if(!els.legendaryOverlay) return Promise.resolve(); const { name, tier, className, stats, count, image, imageSources, activeName, activeTier, activeClass, activeStats, activeCount, activeImage } = payload;
+      function showCharacterLegendaryModal(payload){ if(!els.legendaryOverlay) return Promise.resolve(); const { name, tier, className, classId, stats, count, image, imageSources, activeName, activeTier, activeClass, activeClassId, activeStats, activeCount, activeImage } = payload;
         openLegendaryModal('character');
         if(els.characterLegendaryTitle) els.characterLegendaryTitle.textContent = `${tier} ${name} 획득!`;
         if(els.characterNewName) els.characterNewName.textContent = name;
@@ -2366,14 +2391,14 @@ ${parts.join(', ')}`;
         if(els.characterNewCount) els.characterNewCount.textContent = `보유: ${formatNum(count || 0)}`;
         const newImageSrc = image || (imageSources && imageSources[0]) || CHARACTER_IMAGE_PLACEHOLDER;
         if(els.characterNewImage){ els.characterNewImage.src = newImageSrc; els.characterNewImage.alt = name || '새 캐릭터'; }
-        fillCharacterStats(els.characterNewStats, stats || {});
+        fillCharacterStats(els.characterNewStats, stats || {}, classId || null);
         if(els.characterCurrentName) els.characterCurrentName.textContent = activeName || '-';
         if(els.characterCurrentTier){ const tierLabel = activeTier || '-'; els.characterCurrentTier.className = `char-tier tier ${activeTier || ''}`; els.characterCurrentTier.textContent = tierLabel; }
         if(els.characterCurrentClass) els.characterCurrentClass.textContent = activeClass || '-';
         if(els.characterCurrentCount) els.characterCurrentCount.textContent = `보유: ${formatNum(activeCount || 0)}`;
         const activeImageSrc = activeImage || CHARACTER_IMAGE_PLACEHOLDER;
         if(els.characterCurrentImage){ els.characterCurrentImage.src = activeImageSrc; els.characterCurrentImage.alt = activeName || '현재 캐릭터'; }
-        fillCharacterStats(els.characterCurrentStats, activeStats || {});
+        fillCharacterStats(els.characterCurrentStats, activeStats || {}, activeClassId || null);
         return new Promise((resolve) => {
           const cleanup = () => { if(els.characterLegendaryClose) els.characterLegendaryClose.onclick = null; closeLegendaryModal(); resolve(); };
           if(els.characterLegendaryClose) els.characterLegendaryClose.onclick = cleanup;
@@ -2647,6 +2672,7 @@ ${parts.join(', ')}`;
               name: def.name || charId,
               tier,
               className: def.className || '',
+              classId: def.classId || null,
               stats: def.stats || {},
               count: characters.owned[charId] || 0,
               image: cardPayload.image,
@@ -2654,6 +2680,7 @@ ${parts.join(', ')}`;
               activeName: activeDef?.name || activeId,
               activeTier: activeDef?.tier || '-',
               activeClass: activeDef?.className || '-',
+              activeClassId: activeDef?.classId || null,
               activeStats: activeDef?.stats || {},
               activeCount: characters.owned?.[activeId] || 0,
               activeImage: activeSources[0] || CHARACTER_IMAGE_PLACEHOLDER
@@ -3629,6 +3656,7 @@ ${parts.join(', ')}`;
         if(!state.ui.selectedCharacterDetail || !entries.some((entry) => entry.id === state.ui.selectedCharacterDetail)){
           state.ui.selectedCharacterDetail = activeId;
         }
+        const balanceConfig = ensureCharacterBalanceConfig();
         let appended = 0;
         entries.forEach(({ id, def, count, isActive }) => {
           const card = document.createElement('div');
@@ -3655,9 +3683,15 @@ ${parts.join(', ')}`;
           countEl.textContent = `보유: ${formatNum(count)}`;
           textWrap.appendChild(countEl);
           const stats = def.stats || {};
+          const balance = balanceConfig[def.classId] || DEFAULT_CHARACTER_BALANCE[def.classId] || DEFAULT_CHARACTER_BALANCE.warrior;
+          const statMultipliers = balance.stats || {};
+          const statOffsets = balance.offsets || {};
           const statsEl = document.createElement('div');
           statsEl.className = 'stats muted small';
-          statsEl.textContent = `HP ${formatNum(stats.hp || 0)} · ATK ${formatNum(stats.atk || 0)} · DEF ${formatNum(stats.def || 0)}`;
+          const hpText = formatSnapshotCell(stats.hp || 0, Number(statMultipliers.hp ?? 1), Number(statOffsets.hp ?? 0), 'flat');
+          const atkText = formatSnapshotCell(stats.atk || 0, Number(statMultipliers.atk ?? 1), Number(statOffsets.atk ?? 0), 'flat');
+          const defText = formatSnapshotCell(stats.def || 0, Number(statMultipliers.def ?? 1), Number(statOffsets.def ?? 0), 'flat');
+          statsEl.innerHTML = `HP ${hpText} · ATK ${atkText} · DEF ${defText}`;
           textWrap.appendChild(statsEl);
           const skillDesc = getCharacterSkillDescription(def);
           if(skillDesc){
