@@ -1098,6 +1098,12 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           const extras = [];
           if(typeof entry.equipCount === 'number'){ extras.push(`장비 ${formatNum(entry.equipCount)}개`); }
           if(typeof entry.spareCount === 'number'){ extras.push(`예비 ${formatNum(entry.spareCount)}개`); }
+          if(entry.walletInfinite){ extras.push('포인트 ∞'); }
+          else if(typeof entry.walletValue === 'number'){ extras.push(`포인트 ${formatNum(entry.walletValue)}`); }
+          if(entry.goldInfinite){ extras.push('골드 ∞'); }
+          else if(typeof entry.goldValue === 'number'){ extras.push(`골드 ${formatNum(entry.goldValue)}`); }
+          if(entry.diamondsInfinite){ extras.push('다이아 ∞'); }
+          else if(typeof entry.diamondsValue === 'number'){ extras.push(`다이아 ${formatNum(entry.diamondsValue)}`); }
           noteTd.textContent = [entry.note || '', extras.join(' · ')].filter(Boolean).join(' / ');
           tr.appendChild(keyTd);
           tr.appendChild(timeTd);
@@ -1148,12 +1154,24 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
               const spareCount = (entry.spares && typeof entry.spares === 'object')
                 ? Object.values(entry.spares).filter(Boolean).length
                 : 0;
+              const walletValue = (typeof entry.wallet === 'number' && isFinite(entry.wallet)) ? entry.wallet : null;
+              const walletInfinite = entry.wallet === null;
+              const goldValue = (typeof entry.gold === 'number' && isFinite(entry.gold)) ? entry.gold : null;
+              const goldInfinite = entry.gold === null;
+              const diamondsValue = (typeof entry.diamonds === 'number' && isFinite(entry.diamonds)) ? entry.diamonds : null;
+              const diamondsInfinite = entry.diamonds === null;
               snapshotEntries.push({
                 key,
                 snapshotAt,
                 note,
                 equipCount,
                 spareCount,
+                walletValue,
+                walletInfinite,
+                goldValue,
+                goldInfinite,
+                diamondsValue,
+                diamondsInfinite,
                 label: `${key} · ${labelTime}`
               });
             });
@@ -1169,7 +1187,15 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
             const spareCount = (mirror.spares && typeof mirror.spares === 'object')
               ? Object.values(mirror.spares).filter(Boolean).length
               : 0;
-            setBackupMsg(`미러 복제본 기준 ${formatDateTime(mirror.mirroredAt)} 저장됨 · 장비 ${formatNum(equipCount)}개 / 예비 ${formatNum(spareCount)}개`, 'ok');
+            const walletText = mirror.wallet === null ? '∞' : (typeof mirror.wallet === 'number' && isFinite(mirror.wallet) ? formatNum(mirror.wallet) : null);
+            const goldText = mirror.gold === null ? '∞' : (typeof mirror.gold === 'number' && isFinite(mirror.gold) ? formatNum(mirror.gold) : null);
+            const diamondsText = mirror.diamonds === null ? '∞' : (typeof mirror.diamonds === 'number' && isFinite(mirror.diamonds) ? formatNum(mirror.diamonds) : null);
+            const resourceParts = [];
+            if(walletText) resourceParts.push(`포인트 ${walletText}`);
+            if(goldText) resourceParts.push(`골드 ${goldText}`);
+            if(diamondsText) resourceParts.push(`다이아 ${diamondsText}`);
+            const baseMsg = `미러 복제본 기준 ${formatDateTime(mirror.mirroredAt)} 저장됨 · 장비 ${formatNum(equipCount)}개 / 예비 ${formatNum(spareCount)}개`;
+            setBackupMsg(resourceParts.length ? `${baseMsg} / ${resourceParts.join(' · ')}` : baseMsg, 'ok');
           } else {
             setBackupMsg('미러 데이터가 없습니다.', 'warn');
           }
