@@ -57,6 +57,14 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, holyWater: 1000000, starterPack: 5000 };
       const DEFAULT_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 1000, autoCdMs: 2000, speedMultiplier: 2 };
 const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
+const DIAMOND_SHOP_PACKS = Object.freeze([
+  { id: 'diamondPack100', label: '소형 충전팩', bonus: '기본 제공', diamonds: 100, points: 1_000_000, gold: 1_000_000 },
+  { id: 'diamondPack250', label: '가성비 충전팩', bonus: '+10% 보너스', diamonds: 250, points: 2_800_000, gold: 2_800_000 },
+  { id: 'diamondPack500', label: '고급 충전팩', bonus: '+20% 보너스', diamonds: 500, points: 6_000_000, gold: 6_000_000 },
+  { id: 'diamondPack1000', label: '에픽 충전팩', bonus: '+35% 보너스', diamonds: 1_000, points: 13_500_000, gold: 13_500_000 },
+  { id: 'diamondPack2000', label: '전설 충전팩', bonus: '+50% 보너스', diamonds: 2_000, points: 30_000_000, gold: 30_000_000 }
+]);
+const DIAMOND_PACK_LOOKUP = Object.freeze(Object.fromEntries(DIAMOND_SHOP_PACKS.map((pack) => [pack.id, pack])));
 const RARE_ANIMATION_DURATION_MS = 3600;
 const RARE_ANIMATION_FADE_MS = 220;
 // 기본 희귀 연출 매핑. 관리자가 전역 설정(config.rareAnimations)을 수정하면 이 값을 덮어쓴다.
@@ -181,7 +189,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         invCount: $('#invCount'), equipGrid: $('#equipGrid'), spareList: $('#spareList'),
         forgeTarget: $('#forgeTarget'), forgeLv: $('#forgeLv'), forgeMul: $('#forgeMul'), forgeStageMul: $('#forgeStageMul'), forgeP: $('#forgeP'), forgePreview: $('#forgePreview'), forgeCostEnh: $('#forgeCostEnh'), forgeCostProtect: $('#forgeCostProtect'), forgeCostGold: $('#forgeCostGold'), forgeOnce: $('#forgeOnce'), forgeAuto: $('#forgeAuto'), forgeTableBody: $('#forgeTableBody'), forgeReset: $('#forgeReset'), forgeMsg: $('#forgeMsg'), forgeEffect: $('#forgeEffect'), forgeProtectUse: $('#forgeProtectUse'), protectCount: $('#protectCount'), enhanceCount: $('#enhanceCount'), reviveCount: $('#reviveCount'),
         pricePotion: $('#pricePotion'), priceHyper: $('#priceHyper'), priceProtect: $('#priceProtect'), priceEnhance: $('#priceEnhance'), priceBattleRes: $('#priceBattleRes'), priceStarter: $('#priceStarter'),
-        invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), invHolyWater: $('#invHolyWater'), shopPanel: $('#shop'),
+        invPotion: $('#invPotion'), invHyper: $('#invHyper'), invProtect: $('#invProtect'), invEnhance: $('#invEnhance'), invBattleRes: $('#invBattleRes'), invHolyWater: $('#invHolyWater'), shopPanel: $('#shop'), diamondShop: $('#diamondShop'), diamondShopGrid: $('#diamondShopGrid'),
         petList: $('#petList'),
         characterList: $('#characterList'),
         characterDetailHint: $('#characterDetailHint'),
@@ -3129,7 +3137,7 @@ ${parts.join(', ')}`;
         }
         if(!opts || !opts.silent) updateDiamondsView();
       }
-      function updateDiamondsView(){ if(els.diamonds){ els.diamonds.textContent = isAdmin()? '∞' : formatNum(state.diamonds||0); } }
+      function updateDiamondsView(){ if(els.diamonds){ els.diamonds.textContent = isAdmin()? '∞' : formatNum(state.diamonds||0); } updateShopButtons(); }
       function addDiamonds(amount){ amount = Math.floor(amount); if(!(amount>0)) return; if(isAdmin()) return; state.diamonds += amount; saveDiamonds(); }
       function spendDiamonds(amount){ amount = Math.floor(amount); if(!(amount>0)) return false; if(isAdmin()) return true; if((state.diamonds||0) < amount) return false; state.diamonds -= amount; saveDiamonds(); return true; }
 
@@ -4125,10 +4133,31 @@ ${parts.join(', ')}`;
         markProfileDirty();
         return true; }
         return false; }
+      function renderDiamondShop(){ if(!els.diamondShopGrid) return; const grid = els.diamondShopGrid; grid.textContent = ''; const frag = document.createDocumentFragment(); DIAMOND_SHOP_PACKS.forEach((pack)=>{ const card = document.createElement('div'); card.className = 'diamond-pack'; card.dataset.packId = pack.id; card.innerHTML = `
+          <div class="diamond-pack__title">${pack.label}</div>
+          <div class="diamond-pack__cost">💎 ${formatNum(pack.diamonds)}</div>
+          <div class="diamond-pack__reward">포인트 ${formatNum(pack.points)}</div>
+          <div class="diamond-pack__reward">골드 ${formatNum(pack.gold)}</div>
+          ${pack.bonus ? `<div class="diamond-pack__bonus">${pack.bonus}</div>` : ''}
+          <button type="button" class="diamond-pack__buy diamond-pack-buy" data-pack="${pack.id}">구매</button>`; frag.appendChild(card); }); grid.appendChild(frag); if(els.diamondShop){ els.diamondShop.hidden = DIAMOND_SHOP_PACKS.length === 0; } updateShopButtons(); }
+      function findDiamondPack(id){ return id ? (DIAMOND_PACK_LOOKUP[id] || null) : null; }
+      function buyDiamondPack(packId){ const pack = findDiamondPack(packId); if(!pack){ setShopMessage('알 수 없는 다이아 상품입니다.', 'warn'); return; } if(!spendDiamonds(pack.diamonds)){ setShopMessage('다이아가 부족합니다.', 'error'); updateShopButtons(); return; } if(pack.points > 0){ addPoints(pack.points); }
+        if(pack.gold > 0){ addGold(pack.gold); }
+        setShopMessage(`💎 ${formatNum(pack.diamonds)} 다이아 사용! 포인트 ${formatNum(pack.points)}, 골드 ${formatNum(pack.gold)}를 획득했습니다.`, 'ok');
+        updateShopButtons();
+        markProfileDirty();
+      }
       function shopPrice(type){ const prices = state.config.shopPrices || DEFAULT_SHOP_PRICES; const val = prices.hasOwnProperty(type) ? prices[type] : DEFAULT_SHOP_PRICES[type]; return Math.max(0, Math.floor(val)); }
-      function onShopClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(!target.classList.contains('shop-buy')) return; const item = target.dataset.item; const count = parseInt(target.dataset.count||'1',10) || 1; if(item) buyShopItem(item, count); }
+      function onShopClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(target.classList.contains('diamond-pack-buy')){ const packId = target.dataset.pack || target.closest('[data-pack-id]')?.dataset.packId; if(packId){ buyDiamondPack(packId); } return; } if(!target.classList.contains('shop-buy')) return; const item = target.dataset.item; const count = parseInt(target.dataset.count||'1',10) || 1; if(item) buyShopItem(item, count); }
       function setShopMessage(msg, status){ if(!els.shopMsg) return; els.shopMsg.textContent = msg || ''; els.shopMsg.classList.remove('ok','warn','error'); if(status){ els.shopMsg.classList.add(status); } }
-      function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceHolyWater) els.priceHolyWater.textContent = formatNum(shopPrice('holyWater')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack')); const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0); const buttons = els.shopPanel.querySelectorAll('.shop-buy'); buttons.forEach(function(btn){ const type = btn.dataset.item; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; }); }
+      function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceHolyWater) els.priceHolyWater.textContent = formatNum(shopPrice('holyWater')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack'));
+        const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0);
+        const buttons = els.shopPanel.querySelectorAll('.shop-buy');
+        buttons.forEach(function(btn){ const type = btn.dataset.item; if(!type) return; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; });
+        const diamondButtons = els.shopPanel.querySelectorAll('.diamond-pack-buy');
+        const diamonds = state.diamonds === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.diamonds || 0);
+        diamondButtons.forEach((btn)=>{ const packId = btn.dataset.pack || btn.closest('[data-pack-id]')?.dataset.packId; const pack = findDiamondPack(packId); if(!pack){ btn.disabled = true; return; } btn.disabled = diamonds !== Number.POSITIVE_INFINITY && pack.diamonds > diamonds; });
+      }
       function grantStarterPack(count){ count = Math.max(1, parseInt(count,10)||1); const rng = getRng(); for(let n=0;n<count;n++){ PART_DEFS.forEach(function(part){ const item = { id: state.itemSeq++, tier: 'B', part: part.key, base: rollStatFor('B', part.key, rng), lvl: 0, type: part.type }; applyEquipAndInventory(item); }); } updateInventoryView(); }
       function buyShopItem(type, count){
         count = Math.max(1, parseInt(count,10)||1);
@@ -4278,6 +4307,7 @@ ${parts.join(', ')}`;
       }
 
       // Bootstrap DOM
+      renderDiamondShop();
       buildWeightsTable(); buildCharacterWeightsTable(); renderPetWeightTable(); bind(); readLink(); reflectConfig(); buildForgeTable(); buildForgeTargetOptions(); updateForgeInfo();
 
       onAuthStateChanged(auth, async (firebaseUser)=>{

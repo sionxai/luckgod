@@ -61,6 +61,7 @@ const els = {
   seasonStartBtn: qs('#pvpSeasonStartBtn'),
   seasonEndBtn: qs('#pvpSeasonEndBtn'),
   seasonRewardGoldInput: qs('#pvpRewardGoldInput'),
+  seasonRewardDiamondsInput: qs('#pvpRewardDiamondsInput'),
   seasonRewardPointsInput: qs('#pvpRewardPointsInput'),
   seasonAdminMsg: qs('#pvpSeasonAdminMsg')
 };
@@ -111,6 +112,7 @@ const state = {
   season: {
     status: 'idle',
     rewardGold: 0,
+    rewardDiamonds: 0,
     rewardPoints: 0,
     startedAt: null,
     endedAt: null,
@@ -1056,8 +1058,9 @@ function renderSeasonHistory(history) {
   const header = document.createElement('div');
   header.className = 'winner-line';
   const rewardGold = ensureNonNegativeInt(history.rewardGold);
+  const rewardDiamonds = ensureNonNegativeInt(history.rewardDiamonds);
   const rewardPoints = ensureNonNegativeInt(history.rewardPoints);
-  header.innerHTML = `<span>종료: ${formatTime(history.endedAt)}</span><span class="muted">총 상금 · 골드 ${formatNum(rewardGold)} / 포인트 ${formatNum(rewardPoints)}</span>`;
+  header.innerHTML = `<span>종료: ${formatTime(history.endedAt)}</span><span class="muted">총 상금 · 골드 ${formatNum(rewardGold)} / 포인트 ${formatNum(rewardPoints)} / 다이아 ${formatNum(rewardDiamonds)}</span>`;
   container.appendChild(header);
   const winners = Array.isArray(history.winners) ? history.winners.slice(0, 2) : [];
   if (!winners.length) {
@@ -1076,7 +1079,7 @@ function renderSeasonHistory(history) {
     const draws = ensureNumber(winner.draws || 0);
     const recordParts = [`${wins}승`, `${losses}패`];
     if (draws > 0) recordParts.push(`${draws}무`);
-    line.innerHTML = `<strong>${placeLabel}</strong><span>${winner.displayName || '-'}</span><span class="muted">${recordParts.join(' ')}</span><span class="muted">골드 ${formatNum(ensureNonNegativeInt(winner.gold || 0))} · 포인트 ${formatNum(ensureNonNegativeInt(winner.points || 0))}</span>`;
+    line.innerHTML = `<strong>${placeLabel}</strong><span>${winner.displayName || '-'}</span><span class="muted">${recordParts.join(' ')}</span><span class="muted">골드 ${formatNum(ensureNonNegativeInt(winner.gold || 0))} · 포인트 ${formatNum(ensureNonNegativeInt(winner.points || 0))} · 다이아 ${formatNum(ensureNonNegativeInt(winner.diamonds || 0))}</span>`;
     container.appendChild(line);
   });
 }
@@ -1100,8 +1103,9 @@ function updateSeasonUI() {
   }
   if (els.seasonRewardSummary) {
     const gold = ensureNonNegativeInt(season.rewardGold);
+    const diamonds = ensureNonNegativeInt(season.rewardDiamonds);
     const points = ensureNonNegativeInt(season.rewardPoints);
-    els.seasonRewardSummary.textContent = `상금: 골드 ${formatNum(gold)} / 포인트 ${formatNum(points)}`;
+    els.seasonRewardSummary.textContent = `상금: 골드 ${formatNum(gold)} / 포인트 ${formatNum(points)} / 다이아 ${formatNum(diamonds)}`;
   }
   if (els.seasonTiming) {
     let timing = '-';
@@ -1118,6 +1122,9 @@ function updateSeasonUI() {
     if (isAdmin) {
       if (els.seasonRewardGoldInput && document.activeElement !== els.seasonRewardGoldInput) {
         els.seasonRewardGoldInput.value = String(ensureNonNegativeInt(season.rewardGold));
+      }
+      if (els.seasonRewardDiamondsInput && document.activeElement !== els.seasonRewardDiamondsInput) {
+        els.seasonRewardDiamondsInput.value = String(ensureNonNegativeInt(season.rewardDiamonds));
       }
       if (els.seasonRewardPointsInput && document.activeElement !== els.seasonRewardPointsInput) {
         els.seasonRewardPointsInput.value = String(ensureNonNegativeInt(season.rewardPoints));
@@ -1155,6 +1162,7 @@ function subscribeSeason() {
       state.season = {
         status: data?.status === 'active' ? 'active' : 'idle',
         rewardGold: ensureNonNegativeInt(data?.rewardGold),
+        rewardDiamonds: ensureNonNegativeInt(data?.rewardDiamonds),
         rewardPoints: ensureNonNegativeInt(data?.rewardPoints),
         startedAt: typeof data?.startedAt === 'number' ? data.startedAt : null,
         endedAt: typeof data?.endedAt === 'number' ? data.endedAt : null,
@@ -1171,9 +1179,10 @@ function subscribeSeason() {
 async function startPvpSeason() {
   if ((state.user?.role || '').toLowerCase() !== 'admin') return;
   const gold = ensureNonNegativeInt(els.seasonRewardGoldInput?.value || 0);
+  const diamonds = ensureNonNegativeInt(els.seasonRewardDiamondsInput?.value || 0);
   const points = ensureNonNegativeInt(els.seasonRewardPointsInput?.value || 0);
-  if (gold <= 0 && points <= 0) {
-    setSeasonAdminMessage('골드 또는 포인트 상금을 입력하세요.', 'warn');
+  if (gold <= 0 && points <= 0 && diamonds <= 0) {
+    setSeasonAdminMessage('골드, 포인트, 다이아 중 하나 이상의 상금을 입력하세요.', 'warn');
     return;
   }
   if (state.season.status === 'active') {
@@ -1191,6 +1200,7 @@ async function startPvpSeason() {
       'pvpSeason/startedAt': now,
       'pvpSeason/endedAt': null,
       'pvpSeason/rewardGold': gold,
+      'pvpSeason/rewardDiamonds': diamonds,
       'pvpSeason/rewardPoints': points
     };
     const emptyStats = createEmptyPvpStats();
@@ -1205,6 +1215,7 @@ async function startPvpSeason() {
     state.season.startedAt = now;
     state.season.endedAt = null;
     state.season.rewardGold = gold;
+    state.season.rewardDiamonds = diamonds;
     state.season.rewardPoints = points;
     setSeasonAdminMessage('PVP 시즌을 선포했습니다.', 'ok');
     updateSeasonUI();
@@ -1284,6 +1295,9 @@ async function endPvpSeason() {
         'pvpSeason/status': 'idle',
         'pvpSeason/endedAt': Date.now()
       };
+      updates['pvpSeason/rewardGold'] = ensureNonNegativeInt(state.season.rewardGold || 0);
+      updates['pvpSeason/rewardDiamonds'] = ensureNonNegativeInt(state.season.rewardDiamonds || 0);
+      updates['pvpSeason/rewardPoints'] = ensureNonNegativeInt(state.season.rewardPoints || 0);
       Object.keys(users).forEach((uid) => {
         updates[`users/${uid}/pvpStats`] = { ...createEmptyPvpStats() };
       });
@@ -1293,6 +1307,7 @@ async function endPvpSeason() {
       state.selectedOpponent = null;
       state.season.status = 'idle';
       state.season.endedAt = updates['pvpSeason/endedAt'];
+      state.season.rewardDiamonds = ensureNonNegativeInt(state.season.rewardDiamonds || 0);
       updateSeasonUI();
       renderPersonalStats();
       updateRegistrationUI();
@@ -1306,6 +1321,7 @@ async function endPvpSeason() {
     const now = Date.now();
 
     const goldRewards = allocateSeasonTotals(state.season.rewardGold || 0, participants.length);
+    const diamondRewards = allocateSeasonTotals(state.season.rewardDiamonds || 0, participants.length);
     const pointRewards = allocateSeasonTotals(state.season.rewardPoints || 0, participants.length);
 
     const updates = {
@@ -1314,6 +1330,7 @@ async function endPvpSeason() {
       'pvpSeason/status': 'idle',
       'pvpSeason/endedAt': now,
       'pvpSeason/rewardGold': ensureNonNegativeInt(state.season.rewardGold || 0),
+      'pvpSeason/rewardDiamonds': ensureNonNegativeInt(state.season.rewardDiamonds || 0),
       'pvpSeason/rewardPoints': ensureNonNegativeInt(state.season.rewardPoints || 0)
     };
 
@@ -1324,6 +1341,7 @@ async function endPvpSeason() {
       const uid = participant.uid;
       const displayName = participant.displayName || (users[uid]?.username) || `user-${uid.slice(0, 4)}`;
       const goldAward = ensureNonNegativeInt(goldRewards[index] || 0);
+      const diamondAward = ensureNonNegativeInt(diamondRewards[index] || 0);
       const pointAward = ensureNonNegativeInt(pointRewards[index] || 0);
       if (index < 2) {
         rewardRecords.push({
@@ -1331,6 +1349,7 @@ async function endPvpSeason() {
           uid,
           displayName,
           gold: goldAward,
+          diamonds: diamondAward,
           points: pointAward,
           wins: participant.wins,
           losses: participant.losses,
@@ -1349,6 +1368,7 @@ async function endPvpSeason() {
     updates['pvpSeason/lastSeason'] = {
       endedAt: now,
       rewardGold: ensureNonNegativeInt(state.season.rewardGold || 0),
+      rewardDiamonds: ensureNonNegativeInt(state.season.rewardDiamonds || 0),
       rewardPoints: ensureNonNegativeInt(state.season.rewardPoints || 0),
       winners: rewardRecords
     };
@@ -1358,14 +1378,17 @@ async function endPvpSeason() {
     await Promise.all(
       participants.map(async (participant, index) => {
         const goldAward = ensureNonNegativeInt(goldRewards[index] || 0);
+        const diamondAward = ensureNonNegativeInt(diamondRewards[index] || 0);
         const pointAward = ensureNonNegativeInt(pointRewards[index] || 0);
-        if (goldAward <= 0 && pointAward <= 0) return;
+        if (goldAward <= 0 && pointAward <= 0 && diamondAward <= 0) return;
         const title = `PVP 시즌 ${index + 1}위 보상`;
         const rewards = {};
         if (goldAward > 0) rewards.gold = goldAward;
+        if (diamondAward > 0) rewards.diamonds = diamondAward;
         if (pointAward > 0) rewards.points = pointAward;
         const rewardParts = [];
         if (goldAward > 0) rewardParts.push(`골드 ${formatNum(goldAward)}`);
+        if (diamondAward > 0) rewardParts.push(`다이아 ${formatNum(diamondAward)}`);
         if (pointAward > 0) rewardParts.push(`포인트 ${formatNum(pointAward)}`);
         const message = `이번 시즌 ${index + 1}위를 달성했습니다.
 보상: ${rewardParts.join(', ')}`;

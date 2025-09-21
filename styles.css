@@ -267,6 +267,20 @@
       .draw-card.pet .draw-part { color: var(--text); font-weight:600; font-size:12px; }
       .shop-btns { display:flex; gap:6px; }
       .shop-btns button { flex:1 1 60px; padding:6px 0; font-size:11px; }
+      .diamond-shop { margin-top:18px; padding:16px; border:1px solid rgba(142,238,255,0.18); border-radius:14px; background:rgba(12,18,30,0.72); box-shadow:0 12px 24px rgba(5,10,18,0.28); }
+      .diamond-shop__title { margin:0 0 4px 0; font-size:16px; color:#e9f6ff; display:flex; align-items:center; gap:6px; }
+      .diamond-shop__title::before { content:'💎'; font-size:18px; filter:drop-shadow(0 0 6px rgba(142,238,255,0.42)); }
+      .diamond-shop__hint { margin:0 0 12px 0; }
+      .diamond-shop__grid { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+      .diamond-pack { border:1px solid rgba(142,238,255,0.22); border-radius:12px; padding:14px; background:rgba(10,16,26,0.82); box-shadow:0 6px 16px rgba(5,10,18,0.32); display:flex; flex-direction:column; gap:6px; transition:transform 0.2s ease, box-shadow 0.2s ease; }
+      .diamond-pack:hover { transform:translateY(-2px); box-shadow:0 10px 22px rgba(5,10,18,0.38); }
+      .diamond-pack__title { font-weight:700; font-size:14px; color:#f2f7ff; }
+      .diamond-pack__cost { font-weight:600; color:#87d2ff; letter-spacing:0.01em; }
+      .diamond-pack__reward { font-size:12px; color:#dce7ff; }
+      .diamond-pack__bonus { font-size:11px; color:#ffd166; }
+      .diamond-pack__buy { margin-top:6px; align-self:flex-start; padding:6px 14px; border-radius:999px; border:none; font-size:12px; font-weight:600; background:linear-gradient(135deg,#6aa9ff,#8ce5ff); color:#091321; cursor:pointer; transition:transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease; }
+      .diamond-pack__buy:hover { transform:translateY(-1px); box-shadow:0 6px 16px rgba(106,169,255,0.32); }
+      .diamond-pack__buy:disabled { opacity:0.5; cursor:not-allowed; box-shadow:none; transform:none; }
       .shop-msg { margin-top:8px; min-height:16px; font-size:12px; color: var(--muted); }
       .shop-msg.ok { color: var(--ok); }
       .shop-msg.warn { color: var(--warn); }
