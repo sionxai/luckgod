@@ -117,6 +117,10 @@ const NAV_STYLE = `
   backdrop-filter: blur(18px);
 }
 
+.global-chat.is-hidden {
+  display: none;
+}
+
 .global-chat__header {
   display: flex;
   align-items: center;
@@ -172,6 +176,10 @@ const NAV_STYLE = `
 .global-chat__button:disabled {
   opacity: 0.56;
   cursor: not-allowed;
+}
+
+.global-chat__button--hide {
+  padding-inline: 10px;
 }
 
 .global-chat__log {
@@ -303,6 +311,41 @@ const NAV_STYLE = `
   box-shadow: none;
 }
 
+.global-chat__floating-btn {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--nav-height) + 16px);
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(106,169,255,0.92), rgba(135,210,255,0.92));
+  color: #091321;
+  font-weight: 700;
+  font-size: 12px;
+  border: none;
+  box-shadow: 0 10px 24px rgba(5,10,18,0.35);
+  cursor: pointer;
+  z-index: 1235;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.global-chat__floating-btn span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.global-chat__floating-btn.visible {
+  display: inline-flex;
+}
+
+.global-chat__floating-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px rgba(5,10,18,0.42);
+}
+
 .global-chat__status,
 .global-chat__cooldown {
   font-size: 11px;
@@ -331,11 +374,29 @@ const NAV_STYLE = `
   gap: 4px;
 }
 
+@keyframes chatFlash {
+  0%, 100% { box-shadow: 0 0 0 rgba(135, 210, 255, 0); }
+  20% { box-shadow: 0 0 20px rgba(135, 210, 255, 0.65); }
+  50% { box-shadow: 0 0 14px rgba(106, 169, 255, 0.45); }
+  80% { box-shadow: 0 0 20px rgba(135, 210, 255, 0.65); }
+}
+
+.global-chat.is-highlight {
+  animation: chatFlash 1.2s ease-in-out 1;
+}
+
+.global-chat__floating-btn.is-highlight {
+  animation: chatFlash 1.4s ease-in-out 1;
+}
+
 @media (max-width: 720px) {
   .global-chat {
     left: 12px;
     right: 12px;
     padding: 12px;
+  }
+  .global-chat__floating-btn {
+    right: 12px;
   }
 }
 
@@ -357,6 +418,9 @@ const NAV_STYLE = `
   }
   .global-chat.is-expanded .global-chat__log {
     max-height: 152px;
+  }
+  .global-chat__floating-btn {
+    bottom: calc(var(--nav-height) + 14px);
   }
 }
 
@@ -422,6 +486,7 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
 
     const chatState = {
       expanded: false,
+      hidden: false,
       messages: [],
       user: null,
       consecutiveSelf: 0,
@@ -431,7 +496,10 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
       sending: false,
       unsubMessages: null,
       unsubUser: null,
-      paddingRaf: null
+      paddingRaf: null,
+      lastMessageId: null,
+      hasLoadedMessages: false,
+      highlightTimer: null
     };
 
     const timeFormatter = new Intl.DateTimeFormat('ko-KR', {
@@ -461,6 +529,13 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
       toggle.setAttribute('aria-expanded', 'false');
       toggle.setAttribute('aria-label', '채팅창 펼치기');
       actions.appendChild(toggle);
+
+      const hideBtn = document.createElement('button');
+      hideBtn.type = 'button';
+      hideBtn.className = 'global-chat__button global-chat__button--hide';
+      hideBtn.textContent = '가리기';
+      hideBtn.setAttribute('aria-label', '채팅창 가리기');
+      actions.appendChild(hideBtn);
 
       const clear = document.createElement('button');
       clear.type = 'button';
@@ -507,19 +582,28 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
       container.append(header, log, form, footer);
       navElement.before(container);
 
+      const floatingBtn = document.createElement('button');
+      floatingBtn.type = 'button';
+      floatingBtn.className = 'global-chat__floating-btn';
+      floatingBtn.setAttribute('aria-label', '월드 채팅 열기');
+      floatingBtn.innerHTML = '<span>💬 월드 채팅</span>';
+      document.body.appendChild(floatingBtn);
+
       return {
         container,
         header,
         title,
         actions,
         toggle,
+        hide: hideBtn,
         clear,
         log,
         form,
         input,
         send,
         status,
-        cooldown
+        cooldown,
+        floatingBtn
       };
     })();
 
@@ -535,6 +619,12 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
 
     function syncBodyPadding() {
       if (!elements.container) return;
+      if (chatState.hidden) {
+        const btnHeight = elements.floatingBtn ? elements.floatingBtn.offsetHeight || 0 : 0;
+        const reserve = Math.max(btnHeight + 24, 56);
+        document.body.style.setProperty('--chat-visible-height', `${reserve}px`);
+        return;
+      }
       const height = elements.container.offsetHeight || 0;
       const minHeight = 112;
       const value = Math.max(height, minHeight);
@@ -572,6 +662,92 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
       elements.status.dataset.variant = variant;
       elements.status.hidden = false;
     }
+
+    function applyExpandedState(options = {}) {
+      const expanded = !!chatState.expanded;
+      if (elements.container) {
+        elements.container.classList.toggle('is-expanded', expanded);
+        elements.container.classList.toggle('is-collapsed', !expanded);
+      }
+      if (elements.toggle) {
+        elements.toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        elements.toggle.setAttribute('aria-label', expanded ? '채팅창 접기' : '채팅창 펼치기');
+        elements.toggle.textContent = expanded ? '접기' : '펼치기';
+      }
+      if (expanded && !chatState.hidden && !options.skipScroll) {
+        requestAnimationFrame(() => {
+          const logEl = elements.log;
+          if (logEl) {
+            logEl.scrollTop = logEl.scrollHeight;
+          }
+        });
+      }
+      schedulePaddingSync();
+    }
+
+    function setExpanded(next, options = {}) {
+      chatState.expanded = !!next;
+      applyExpandedState(options);
+    }
+
+    function clearHighlight() {
+      if (chatState.highlightTimer) {
+        clearTimeout(chatState.highlightTimer);
+        chatState.highlightTimer = null;
+      }
+      if (elements.container) {
+        elements.container.classList.remove('is-highlight');
+      }
+      if (elements.floatingBtn) {
+        elements.floatingBtn.classList.remove('is-highlight');
+      }
+    }
+
+    function triggerHighlight() {
+      clearHighlight();
+      const target = chatState.hidden && elements.floatingBtn ? elements.floatingBtn : elements.container;
+      if (!target) return;
+      target.classList.add('is-highlight');
+      chatState.highlightTimer = setTimeout(() => {
+        target.classList.remove('is-highlight');
+        chatState.highlightTimer = null;
+      }, 1600);
+      if (chatState.hidden && elements.floatingBtn) {
+        elements.floatingBtn.classList.add('visible');
+      }
+    }
+
+    function hideChat() {
+      if (chatState.hidden) return;
+      chatState.hidden = true;
+      clearHighlight();
+      if (elements.container) {
+        elements.container.classList.add('is-hidden');
+      }
+      if (elements.floatingBtn) {
+        elements.floatingBtn.classList.add('visible');
+        elements.floatingBtn.classList.remove('is-highlight');
+      }
+      schedulePaddingSync();
+    }
+
+    function showChat(options = {}) {
+      if (!chatState.hidden && !options.force) {
+        clearHighlight();
+        return;
+      }
+      chatState.hidden = false;
+      if (elements.container) {
+        elements.container.classList.remove('is-hidden');
+      }
+      if (elements.floatingBtn) {
+        elements.floatingBtn.classList.remove('visible', 'is-highlight');
+      }
+      clearHighlight();
+      applyExpandedState({ skipScroll: options.skipScroll });
+    }
+
+    applyExpandedState({ skipScroll: true });
 
     function renderMessages(shouldStick, previousLastId) {
       const log = elements.log;
@@ -748,12 +924,25 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
     chatState.unsubMessages = subscribeToChatMessages((messages) => {
       const logEl = elements.log;
       const wasNearBottom = isNearBottom(logEl);
-      const previousLastId = chatState.messages.length ? chatState.messages[chatState.messages.length - 1].id : null;
+      const prevMessageId = chatState.lastMessageId;
       chatState.messages = Array.isArray(messages) ? messages : [];
-      renderMessages(wasNearBottom, previousLastId);
+      renderMessages(wasNearBottom, prevMessageId);
       updateSelfSequence();
       updateSendButtonState();
       schedulePaddingSync();
+      const lastMessage = chatState.messages.length ? chatState.messages[chatState.messages.length - 1] : null;
+      const newMessageId = lastMessage ? lastMessage.id : null;
+      const hasNew = chatState.hasLoadedMessages && newMessageId && newMessageId !== prevMessageId;
+      chatState.lastMessageId = newMessageId;
+      if (hasNew) {
+        const fromSelf = !!(lastMessage && chatState.user && lastMessage.uid && chatState.user.uid === lastMessage.uid);
+        if (!fromSelf) {
+          triggerHighlight();
+        }
+      }
+      if (!chatState.hasLoadedMessages) {
+        chatState.hasLoadedMessages = true;
+      }
     });
 
     chatState.unsubUser = subscribeToCurrentUser((user) => {
@@ -764,22 +953,27 @@ body[data-page="index"][data-active-section="shop"] [data-section="shop"] {
     });
 
     elements.toggle.addEventListener('click', () => {
-      chatState.expanded = !chatState.expanded;
-      elements.container.classList.toggle('is-expanded', chatState.expanded);
-      elements.container.classList.toggle('is-collapsed', !chatState.expanded);
-      elements.toggle.setAttribute('aria-expanded', chatState.expanded ? 'true' : 'false');
-      elements.toggle.setAttribute('aria-label', chatState.expanded ? '채팅창 접기' : '채팅창 펼치기');
-      elements.toggle.textContent = chatState.expanded ? '접기' : '펼치기';
-      schedulePaddingSync();
-      if (chatState.expanded) {
-        requestAnimationFrame(() => {
-          const logEl = elements.log;
-          if (logEl) {
-            logEl.scrollTop = logEl.scrollHeight;
-          }
-        });
-      }
+      setExpanded(!chatState.expanded);
+      clearHighlight();
     });
+
+    if (elements.hide) {
+      elements.hide.addEventListener('click', () => {
+        hideChat();
+      });
+    }
+
+    if (elements.floatingBtn) {
+      elements.floatingBtn.addEventListener('click', () => {
+        showChat({ skipScroll: false, force: true });
+        setExpanded(true);
+      });
+    }
+
+    if (elements.container) {
+      elements.container.addEventListener('mouseenter', clearHighlight);
+      elements.container.addEventListener('focusin', clearHighlight);
+    }
 
     elements.clear.addEventListener('click', async () => {
       if (!chatState.user || chatState.user.role !== 'admin') return;

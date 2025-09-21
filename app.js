@@ -246,6 +246,8 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         characterBalanceSnapshot: $('#characterBalanceSnapshot')
       };
 
+      const ALL_USERS_OPTION = '__ALL_USERS__';
+
       // Config and state
       const defaultWeights = {"SSS+":0.5, "SS+":1.5, "S+":8, "S":30, "A":60, "B":150, "C":300, "D":450};
       const cfgVersion = 'v1';
@@ -1020,7 +1022,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }
       }
 
-      function populateAdminUserSelect(){ const select = els.adminUserSelect; if(!select) return; const prev = select.value; select.innerHTML=''; const placeholder = document.createElement('option'); placeholder.value=''; placeholder.textContent = state.adminUsers.length ? '사용자를 선택하세요' : '사용자 없음'; select.appendChild(placeholder); state.adminUsers.forEach(function(user){ const opt = document.createElement('option'); opt.value = user.uid; opt.textContent = `${user.username}${user.role==='admin'?' (관리자)':''}`; select.appendChild(opt); }); if(state.adminUsers.some(function(u){ return u.uid === prev; })){ select.value = prev; } updateAdminUserStats(); }
+      function populateAdminUserSelect(){ const select = els.adminUserSelect; if(!select) return; const prev = select.value; const users = Array.isArray(state.adminUsers) ? state.adminUsers : []; const wasAllSelection = prev === ALL_USERS_OPTION; const hasPrevUser = users.some(function(u){ return u.uid === prev; }); select.innerHTML=''; const placeholder = document.createElement('option'); placeholder.value=''; placeholder.textContent = users.length ? '사용자를 선택하세요' : '사용자 없음'; select.appendChild(placeholder); const allOption = document.createElement('option'); allOption.value = ALL_USERS_OPTION; allOption.textContent = '전체 사용자 (우편 발송)'; select.appendChild(allOption); users.forEach(function(user){ const opt = document.createElement('option'); opt.value = user.uid; opt.textContent = `${user.username}${user.role==='admin'?' (관리자)':''}`; select.appendChild(opt); }); if(wasAllSelection){ select.value = ALL_USERS_OPTION; } else if(hasPrevUser){ select.value = prev; } updateAdminUserStats(); }
 
       function updateAdminUserStats(){
         const select = els.adminUserSelect;
@@ -1028,6 +1030,17 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         if(!select || !statsEl) return;
         const uid = select.value;
         if(!uid){ statsEl.textContent = ''; return; }
+        if(uid === ALL_USERS_OPTION){
+          const users = Array.isArray(state.adminUsers) ? state.adminUsers : [];
+          if(!users.length){ statsEl.textContent = '지급 대상 사용자가 없습니다.'; return; }
+          const eligible = users.filter(function(user){ return user && user.role !== 'admin'; }).length;
+          const adminCount = users.length - eligible;
+          let line = `전체 지급 대상: 일반 ${formatNum(eligible)}명`;
+          if(adminCount > 0){ line += `, 관리자 ${formatNum(adminCount)}명`; }
+          line += '. 골드/포인트/펫 뽑기권은 일반 유저에게만 지급됩니다.';
+          statsEl.textContent = line;
+          return;
+        }
         const info = state.adminUsers.find(function(u){ return u.uid === uid; });
         if(!info){ statsEl.textContent = ''; return; }
         const walletText = info.wallet === null ? '∞' : formatNum(info.wallet||0);
@@ -1100,6 +1113,12 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           state.backups = { mirror: null, snapshots: [] };
           clearBackupUi();
           setBackupMsg('사용자를 선택하세요.', 'warn');
+          return;
+        }
+        if(uid === ALL_USERS_OPTION){
+          state.backups = { mirror: null, snapshots: [] };
+          clearBackupUi();
+          setBackupMsg('전체 사용자 선택 시 백업 기능을 사용할 수 없습니다.', 'warn');
           return;
         }
         if(!options || !options.silent){
@@ -1182,20 +1201,65 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         }
       }
 
-      async function handleAdminGrantResources(){ if(!isAdmin()) return; const uid = els.adminUserSelect?.value || ''; if(!uid){ setAdminMsg('지급할 사용자를 선택하세요.', 'warn'); return; } const points = parseInt(els.adminGrantPoints?.value||'0', 10) || 0; const gold = parseInt(els.adminGrantGold?.value||'0', 10) || 0; const diamonds = parseInt(els.adminGrantDiamonds?.value||'0', 10) || 0; const petTickets = parseInt(els.adminGrantPetTickets?.value||'0', 10) || 0; if(points===0 && gold===0 && diamonds===0 && petTickets===0){ setAdminMsg('지급할 수치를 입력하세요.', 'warn'); return; }
+      async function handleAdminGrantResources(){ if(!isAdmin()) return; const uid = els.adminUserSelect?.value || ''; if(!uid){ setAdminMsg('지급할 대상을 선택하세요.', 'warn'); return; } const points = parseInt(els.adminGrantPoints?.value||'0', 10) || 0; const gold = parseInt(els.adminGrantGold?.value||'0', 10) || 0; const diamonds = parseInt(els.adminGrantDiamonds?.value||'0', 10) || 0; const petTickets = parseInt(els.adminGrantPetTickets?.value||'0', 10) || 0; if(points===0 && gold===0 && diamonds===0 && petTickets===0){ setAdminMsg('지급할 수치를 입력하세요.', 'warn'); return; }
+        const deltas = { points, gold, diamonds, petTickets };
+        const targetAll = uid === ALL_USERS_OPTION;
         try {
-          const updated = await grantResourcesToUser(uid, { points, gold, diamonds, petTickets });
-          if(!updated){ setAdminMsg('지급할 수치를 적용할 수 없습니다.', 'warn'); return; }
-          if(els.adminGrantPoints) els.adminGrantPoints.value = '0';
-          if(els.adminGrantGold) els.adminGrantGold.value = '0';
-          if(els.adminGrantDiamonds) els.adminGrantDiamonds.value = '0';
-          if(els.adminGrantPetTickets) els.adminGrantPetTickets.value = '0';
-          await loadAdminUsers();
-          setAdminMsg('지급 우편을 발송했습니다. 우편함에서 수령하세요.', 'ok');
+          if(targetAll){
+            if(!Array.isArray(state.adminUsers) || !state.adminUsers.length){ await loadAdminUsers(); }
+            const users = Array.isArray(state.adminUsers) ? state.adminUsers : [];
+            const eligibleCount = users.filter(function(user){ return user && user.role !== 'admin'; }).length;
+            if(eligibleCount === 0){ setAdminMsg('지급 대상 일반 사용자가 없습니다.', 'warn'); return; }
+            if(!window.confirm(`일반 사용자 ${formatNum(eligibleCount)}명에게 보상을 지급합니다. 계속할까요?`)) return;
+            const delivered = await grantResourcesToAllUsers(deltas);
+            if(delivered <= 0){ setAdminMsg('지급 가능한 사용자가 없습니다.', 'warn'); return; }
+            resetAdminGrantInputs();
+            await loadAdminUsers();
+            if(els.adminUserSelect){ els.adminUserSelect.value = ALL_USERS_OPTION; }
+            updateAdminUserStats();
+            refreshAdminBackups({ silent: true });
+            setAdminMsg(`전체 ${formatNum(delivered)}명에게 지급 우편을 발송했습니다. 우편함에서 수령하세요.`, 'ok');
+          } else {
+            const updated = await grantResourcesToUser(uid, deltas);
+            if(!updated){ setAdminMsg('지급할 수치를 적용할 수 없습니다.', 'warn'); return; }
+            resetAdminGrantInputs();
+            await loadAdminUsers();
+            if(els.adminUserSelect){ els.adminUserSelect.value = uid; }
+            updateAdminUserStats();
+            refreshAdminBackups({ silent: true });
+            setAdminMsg('지급 우편을 발송했습니다. 우편함에서 수령하세요.', 'ok');
+          }
         } catch (error) {
           console.error('지급 처리 실패', error);
           setAdminMsg('지급 처리에 실패했습니다.', 'error');
         }
+      }
+
+      async function grantResourcesToAllUsers(deltas){
+        if(!isAdmin()) return 0;
+        if(!Array.isArray(state.adminUsers) || !state.adminUsers.length){
+          await loadAdminUsers();
+        }
+        const users = Array.isArray(state.adminUsers) ? state.adminUsers : [];
+        const targets = users.filter(function(user){ return user && user.uid && user.role !== 'admin'; });
+        if(!targets.length) return 0;
+        let success = 0;
+        for(const user of targets){
+          try {
+            const updated = await grantResourcesToUser(user.uid, deltas);
+            if(updated){ success += 1; }
+          } catch (error) {
+            console.error('지급 처리 실패', error);
+          }
+        }
+        return success;
+      }
+
+      function resetAdminGrantInputs(){
+        if(els.adminGrantPoints) els.adminGrantPoints.value = '0';
+        if(els.adminGrantGold) els.adminGrantGold.value = '0';
+        if(els.adminGrantDiamonds) els.adminGrantDiamonds.value = '0';
+        if(els.adminGrantPetTickets) els.adminGrantPetTickets.value = '0';
       }
 
       async function grantResourcesToUser(uid, deltas){
