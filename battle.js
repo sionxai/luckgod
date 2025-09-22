@@ -40,6 +40,11 @@ import {
   CHARACTER_ULTIMATE_DEFS,
   sanitizeUserSettings
 } from './combat-core.js';
+import {
+  QUEST_LOOKUP,
+  createDefaultQuestState,
+  sanitizeQuestState
+} from './quest-core.js';
 
 const qs = (selector) => document.querySelector(selector);
 const qsa = (selector) => Array.from(document.querySelectorAll(selector));
@@ -198,7 +203,7 @@ const AUTO_STOP_REASON_LABELS = {
 const AUTO_SESSION_STORAGE_PREFIX = 'gacha:autoSession:';
 const FIRST_BOSS_INTRO_VIDEO_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/kling_20250920_Image_to_Video__3595_0.mp4?alt=media&token=6ab78f59-2753-4c22-bfd0-14d21739b6f0';
 const TIGER_KILL_GIF_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/new4.gif?alt=media&token=3d395ec5-a922-45e0-9486-524b0a3f07aa';
-const DEFAULT_ULTIMATE_GIF_URL = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/RarSS%2B.gif?alt=media&token=670e1733-9801-44ce-b91d-1f82f1b0146f';
+const DEFAULT_ULTIMATE_GIF_URL = '';
 const ULTIMATE_TEXT_DURATION_MS = 1000;
 const ULTIMATE_GIF_DURATION_MS = 2500;
 const PLAYER_ULTIMATE_DEFAULT_CHANCE = 0.05;
@@ -424,6 +429,7 @@ const state = {
     startTime: 0
   },
   timeAccel: { multiplier: 1, until: 0 },
+  quests: createDefaultQuestState(),
   bossProgress: sanitizeBossProgress(null),
   battleProgress: sanitizeBattleProgress(null),
   difficultyState: sanitizeDifficultyState(null),
@@ -1500,9 +1506,6 @@ function cancelUltimateTimers() {
 function hideUltimateOverlay() {
   if (!els.ultimateOverlay) return;
   cancelUltimateTimers();
-  if (els.ultimateGif) {
-    els.ultimateGif.removeAttribute('src');
-  }
   els.ultimateOverlay.classList.remove('show', 'gif-visible');
   els.ultimateOverlay.hidden = true;
 }
@@ -1600,32 +1603,22 @@ function tickPlayerStatus() {
 }
 
 function showUltimateOverlay(def, onComplete) {
-  if (!els.ultimateOverlay) {
+  const overlay = els.ultimateOverlay;
+  if (!overlay) {
     onComplete?.();
     return;
   }
   cancelUltimateTimers();
-  const overlay = els.ultimateOverlay;
   overlay.hidden = false;
-  overlay.classList.remove('gif-visible');
   overlay.classList.add('show');
   if (els.ultimateTitle) {
     els.ultimateTitle.textContent = def.name || '필살기';
   }
-  if (els.ultimateGif) {
-    els.ultimateGif.removeAttribute('src');
-  }
-  const textTimer = setTimeout(() => {
-    overlay.classList.add('gif-visible');
-    if (els.ultimateGif) {
-      els.ultimateGif.src = def.gif || DEFAULT_ULTIMATE_GIF_URL;
-    }
-  }, ULTIMATE_TEXT_DURATION_MS);
   const endTimer = setTimeout(() => {
     hideUltimateOverlay();
     onComplete?.();
-  }, ULTIMATE_TEXT_DURATION_MS + ULTIMATE_GIF_DURATION_MS);
-  state.ultimateTimers.push(textTimer, endTimer);
+  }, ULTIMATE_TEXT_DURATION_MS);
+  state.ultimateTimers.push(endTimer);
 }
 
 function skipUltimateOverlay() {
@@ -1889,7 +1882,7 @@ function maybeTriggerCharacterUltimate() {
   if (Math.random() >= chance) return false;
   const preparedDef = {
     ...ultimateDef,
-    gif: ultimateDef.gif || DEFAULT_ULTIMATE_GIF_URL
+    gif: ''
   };
   triggerPlayerUltimate(preparedDef);
   return true;
@@ -2490,6 +2483,43 @@ function queueProfileUpdate(partial) {
     state.saveTimer = null;
     await flushProfileUpdates();
   }, 800);
+}
+
+function ensureQuestState() {
+  state.quests = sanitizeQuestState(state.quests);
+  return state.quests;
+}
+
+function ensureQuestStatus(questId) {
+  const quests = ensureQuestState();
+  if (!quests.statuses[questId]) {
+    quests.statuses[questId] = {
+      completed: false,
+      rewardGranted: false,
+      completedAt: null,
+      rewardAt: null
+    };
+  }
+  return quests.statuses[questId];
+}
+
+function markQuestCompleted(questId, options) {
+  if (state.user?.role === 'admin') return false;
+  const quest = QUEST_LOOKUP[questId];
+  if (!quest) return false;
+  const status = ensureQuestStatus(questId);
+  if (status.completed) return false;
+  status.completed = true;
+  status.completedAt = Date.now();
+  state.quests = sanitizeQuestState(state.quests);
+  if (state.profile) {
+    state.profile.quests = state.quests;
+  }
+  queueProfileUpdate({ quests: state.quests });
+  if (options?.log !== false) {
+    addBattleLog(`[퀘스트] ${quest.title} 완료! 퀘스트 창에서 보상을 수령하세요.`, 'heal');
+  }
+  return true;
 }
 
 async function flushProfileUpdates() {
@@ -4032,6 +4062,11 @@ function handleVictory(level) {
   if (bossContext) {
     endBossEncounter('victory');
   }
+  markQuestCompleted('firstBattleWin', { log: !bossContext });
+  const questLevel = bossContext ? bossContext.level : level;
+  if (questLevel >= 100) {
+    markQuestCompleted('slayLevel100', { log: !bossContext });
+  }
   resetUltimateState();
   if (gameState.battle.autoPlay && !bossContext) {
     scheduleNextAutoBattle('victory');
@@ -4490,9 +4525,13 @@ async function hydrateProfile(firebaseUser) {
   state.characters = sanitizeCharacterState(rawProfile.characters);
   ensureCharacterState();
   state.settings = sanitizeUserSettings(rawProfile.settings);
+  state.quests = sanitizeQuestState(rawProfile.quests);
 
   if (!rawProfile.settings || typeof rawProfile.settings !== 'object') {
     rawProfile.settings = state.settings;
+  }
+  if (!rawProfile.quests || typeof rawProfile.quests !== 'object') {
+    rawProfile.quests = state.quests;
   }
   state.wallet = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.wallet, 0, Number.MAX_SAFE_INTEGER, 1000);
   state.gold = role === 'admin' ? Number.POSITIVE_INFINITY : clampNumber(rawProfile.gold, 0, Number.MAX_SAFE_INTEGER, 10000);
@@ -4519,6 +4558,7 @@ async function hydrateProfile(firebaseUser) {
     combat: { ...state.combat },
     pets: state.pets,
     characters: state.characters,
+    quests: state.quests,
     bossProgress: state.bossProgress,
     battleProgress: state.battleProgress,
     difficultyState: state.difficultyState,

@@ -36,6 +36,53 @@ import {
   DEFAULT_CHARACTER_BALANCE,
   CHARACTER_CLASS_IDS
 } from './combat-core.js';
+import {
+  QUEST_DEFINITIONS,
+  QUEST_LOOKUP,
+  createDefaultQuestState,
+  sanitizeQuestState,
+  questRewardSummary
+} from './quest-core.js';
+
+const state = {};
+const els = {};
+
+function initializeState(initialState) {
+  if (!initialState || typeof initialState !== 'object') {
+    throw new Error('initializeState requires an object');
+  }
+  Object.assign(state, initialState);
+}
+
+function initializeElements(initialElements) {
+  if (!initialElements || typeof initialElements !== 'object') {
+    throw new Error('initializeElements requires an object');
+  }
+  Object.assign(els, initialElements);
+}
+
+function addListener(target, type, handler) {
+  if (!target || typeof target.addEventListener !== 'function') {
+    return false;
+  }
+  target.addEventListener(type, handler);
+  return true;
+}
+
+function setInputValue(target, value) {
+  if (!target) return;
+  target.value = value;
+}
+
+function setCheckboxState(target, checked) {
+  if (!target) return;
+  target.checked = !!checked;
+}
+
+function setTextContent(target, value) {
+  if (!target) return;
+  target.textContent = value;
+}
 
 const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const TIER_INDEX = Object.fromEntries(TIERS.map((t,i)=>[t,i]));
@@ -54,9 +101,11 @@ const TIERS = ["SSS+","SS+","S+","S","A","B","C","D"];
       const DEFAULT_ENHANCE_P = DEFAULT_DROP_RATES.enhance.base;
       const DEFAULT_BATTLERES_P = DEFAULT_DROP_RATES.battleRes.base;
       const DEFAULT_GOLD_SCALING = { minLow: 120, maxLow: 250, minHigh: 900, maxHigh: 1400 };
-      const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, holyWater: 1000000, starterPack: 5000 };
       const DEFAULT_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 1000, autoCdMs: 2000, speedMultiplier: 2 };
 const DEFAULT_HYPER_POTION_SETTINGS = { durationMs: 60000, manualCdMs: 200, autoCdMs: 200, speedMultiplier: 4 };
+const RARE_ANIMATION_DURATION_MS = 3600;
+const RARE_ANIMATION_FADE_MS = 220;
+const DEFAULT_SHOP_PRICES = { potion: 500, hyperPotion: 2000, protect: 1200, enhance: 800, battleRes: 2000, holyWater: 1000000, starterPack: 5000 };
 const DIAMOND_SHOP_PACKS = Object.freeze([
   { id: 'diamondPack100', label: '소형 충전팩', bonus: '기본 제공', diamonds: 100, points: 1_000_000, gold: 1_000_000 },
   { id: 'diamondPack250', label: '가성비 충전팩', bonus: '+10% 보너스', diamonds: 250, points: 2_800_000, gold: 2_800_000 },
@@ -65,55 +114,6 @@ const DIAMOND_SHOP_PACKS = Object.freeze([
   { id: 'diamondPack2000', label: '전설 충전팩', bonus: '+50% 보너스', diamonds: 2_000, points: 30_000_000, gold: 30_000_000 }
 ]);
 const DIAMOND_PACK_LOOKUP = Object.freeze(Object.fromEntries(DIAMOND_SHOP_PACKS.map((pack) => [pack.id, pack])));
-const RARE_ANIMATION_DURATION_MS = 3600;
-const RARE_ANIMATION_FADE_MS = 220;
-// 기본 희귀 연출 매핑. 관리자가 전역 설정(config.rareAnimations)을 수정하면 이 값을 덮어쓴다.
-const DEFAULT_RARE_ANIMATIONS = {
-  gear: [
-    {
-      tier: 'SS+',
-      src: 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/Carss%2B.gif?alt=media&token=d668d79b-7740-4986-b32e-11027a0453ac',
-      label: 'SS+ 장비 획득!',
-      duration: RARE_ANIMATION_DURATION_MS
-    }
-  ],
-  character: [
-    {
-      tier: 'SS+',
-      src: 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/Carss%2B.gif?alt=media&token=d668d79b-7740-4986-b32e-11027a0453ac',
-      label: 'SS+ 캐릭터 획득!',
-      duration: RARE_ANIMATION_DURATION_MS
-    }
-  ]
-};
-const DEFAULT_MONSTER_SCALING = {
-  basePower: 500,
-  maxPower: 50000000,
-  curve: 1.6,
-  difficultyMultiplier: 1,
-        attackShare: 0.32,
-        defenseShare: 0.22,
-        hpMultiplier: 6.5,
-        speedBase: 100,
-        speedMax: 260,
-        critRateBase: 5,
-        critRateMax: 55,
-        critDmgBase: 160,
-        critDmgMax: 420,
-        dodgeBase: 3,
-        dodgeMax: 40
-};
-const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
-const GLOBAL_CONFIG_PATH = 'config/global';
-const PART_DEFS = [
-  {key:'head', name:'투구', type:'def'},
-  {key:'body', name:'갑옷', type:'def'},
-  {key:'main', name:'주무기', type:'atk'},
-  {key:'off',  name:'보조무기', type:'atk'},
-  {key:'boots', name:'신발', type:'def'},
-];
-const PART_KEYS = PART_DEFS.map(function(p){ return p.key; });
-const PART_ICONS = { head:'🪖', body:'🛡️', main:'⚔️', off:'🗡️', boots:'🥾' };
 
 const ENHANCE_TICKET_COST = Object.freeze([
   0, 1, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7, 20, 20, 29, 60, 118
@@ -147,11 +147,81 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
   10240000
 ]);
 
+const GEAR_SSPLUS_GIF = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/SS%2B%20item.gif?alt=media&token=d614c7c7-eff3-4509-b1d6-a732b75936c4';
+const GEAR_SSSPLUS_GIF = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/SSS%2B%20item.gif?alt=media&token=e8ae9b0c-5891-4653-8c4c-fe2155d6473d';
+const LEGACY_GEAR_RARE_GIF = 'https://firebasestorage.googleapis.com/v0/b/gacha-870fa.firebasestorage.app/o/Carss%2B.gif?alt=media&token=d668d79b-7740-4986-b32e-11027a0453ac';
+const CHARACTER_SSPLUS_GIF = GEAR_SSPLUS_GIF;
+const CHARACTER_SSSPLUS_GIF = GEAR_SSSPLUS_GIF;
+const LEGACY_CHARACTER_RARE_GIF = LEGACY_GEAR_RARE_GIF;
+// 기본 희귀 연출 매핑. 관리자가 전역 설정(config.rareAnimations)을 수정하면 이 값을 덮어쓴다.
+const DEFAULT_RARE_ANIMATIONS = {
+  gear: [
+    {
+      tier: 'SS+',
+      src: GEAR_SSPLUS_GIF,
+      label: 'SS+ 장비 획득!',
+      duration: RARE_ANIMATION_DURATION_MS
+    },
+    {
+      tier: 'SSS+',
+      src: GEAR_SSSPLUS_GIF,
+      label: 'SSS+ 장비 획득!',
+      duration: RARE_ANIMATION_DURATION_MS
+    }
+  ],
+  character: [
+    {
+      tier: 'SS+',
+      src: CHARACTER_SSPLUS_GIF,
+      label: 'SS+ 캐릭터 획득!',
+      duration: RARE_ANIMATION_DURATION_MS
+    },
+    {
+      tier: 'SSS+',
+      src: CHARACTER_SSSPLUS_GIF,
+      label: 'SSS+ 캐릭터 획득!',
+      duration: RARE_ANIMATION_DURATION_MS
+    }
+  ]
+};
+const DEFAULT_MONSTER_SCALING = {
+  basePower: 500,
+  maxPower: 50000000,
+  curve: 1.6,
+  difficultyMultiplier: 1,
+        attackShare: 0.32,
+        defenseShare: 0.22,
+        hpMultiplier: 6.5,
+        speedBase: 100,
+        speedMax: 260,
+        critRateBase: 5,
+        critRateMax: 55,
+        critDmgBase: 160,
+        critDmgMax: 420,
+        dodgeBase: 3,
+        dodgeMax: 40
+};
+const CHARACTER_IMAGE_PLACEHOLDER = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http://www.w3.org/2000/svg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2210%22%20ry%3D%2210%22%20fill%3D%22%23d0d0d0%22/%3E%3Cpath%20d%3D%22M32%2018a10%2010%200%201%201%200%2020a10%2010%200%200%201%200-20zm0%2024c10.5%200%2019%206.3%2019%2014v4H13v-4c0-7.7%208.5-14%2019-14z%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E';
+const GLOBAL_CONFIG_PATH = 'config/global';
+const PART_DEFS = [
+  {key:'head', name:'투구', type:'def'},
+  {key:'body', name:'갑옷', type:'def'},
+  {key:'main', name:'주무기', type:'atk'},
+  {key:'off',  name:'보조무기', type:'atk'},
+  {key:'boots', name:'신발', type:'def'},
+];
+const PART_KEYS = PART_DEFS.map(function(p){ return p.key; });
+const PART_ICONS = { head:'🪖', body:'🛡️', main:'⚔️', off:'🗡️', boots:'🥾' };
+
+// 강화 상수는 forge 모듈로 이동했습니다.
+
       const $ = (q)=>document.querySelector(q);
       const $$ = (q)=>Array.from(document.querySelectorAll(q));
 
-      const els = {
-        appWrap: $('#appWrap'), logoutBtn: $('#logoutBtn'), whoami: $('#whoami'), toAdmin: $('#toAdmin'), toUser: $('#toUser'), toBattle: $('#toBattle'), goBattle: $('#goBattle'), toPvp: $('#toPvp'), adminPanel: $('#adminPanel'), adminOldPass: $('#adminOldPass'), adminNewPass: $('#adminNewPass'), adminChangePw: $('#adminChangePw'), adminMsg: $('#adminMsg'),
+      initializeElements({
+        appWrap: $('#appWrap'), logoutBtn: $('#logoutBtn'), whoami: $('#whoami'), toAdmin: $('#toAdmin'), toUser: $('#toUser'), toBattle: $('#toBattle'), goBattle: $('#goBattle'), toPvp: $('#toPvp'),
+        questBtn: $('#questBtn'), questBadge: $('#questBadge'), questOverlay: $('#questOverlay'), questPanel: $('#questPanel'), questClose: $('#questClose'), questList: $('#questList'), questEmpty: $('#questEmpty'), questToast: $('#questToast'),
+        adminPanel: $('#adminPanel'), adminOldPass: $('#adminOldPass'), adminNewPass: $('#adminNewPass'), adminChangePw: $('#adminChangePw'), adminMsg: $('#adminMsg'),
         dropPotionBase: $('#dropPotionBase'), dropPotionPer: $('#dropPotionPer'), dropPotionMax: $('#dropPotionMax'),
         dropHyperBase: $('#dropHyperBase'), dropHyperPer: $('#dropHyperPer'), dropHyperMax: $('#dropHyperMax'),
         dropProtectBase: $('#dropProtectBase'), dropProtectPer: $('#dropProtectPer'), dropProtectMax: $('#dropProtectMax'),
@@ -244,7 +314,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         characterBalanceOffsetTable: $('#characterBalanceOffsetTable'),
         characterBalanceMsg: $('#characterBalanceMsg'),
         characterBalanceSnapshot: $('#characterBalanceSnapshot')
-      };
+      });
 
       const ALL_USERS_OPTION = '__ALL_USERS__';
 
@@ -274,9 +344,10 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
       let profileSaveTimer = null;
       let forgeEffectTimer = null;
       const PROFILE_SAVE_DELAY = 1500;
+      const PROFILE_SAVE_RETRY_DELAYS = [1000, 2000, 4000];
       const USERNAME_NAMESPACE = '@gacha.local';
 
-      const state = {
+      initializeState({
         config: {
           weights: {...defaultWeights},
           probs: {},
@@ -307,12 +378,13 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         enhance: defaultEnhance(),
         forge: { protectEnabled: false, protectStock: 0, autoRunning: false },
         user: null,
-        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear', selectedCharacterDetail: null, characterDetailOpen: false, userOptionsOpen: false, rareAnimationBlocking: false },
+        ui: { adminView: false, userEditEnabled: false, statsMode: 'gear', gachaMode: 'gear', selectedCharacterDetail: null, characterDetailOpen: false, userOptionsOpen: false, questOpen: false, rareAnimationBlocking: false },
         wallet: 0,
         gold: 0,
         diamonds: 0,
         presets: { global: [], personal: [], activeGlobalId: null, activeGlobalName: null },
         selectedPreset: { scope: null, id: null },
+        profile: null,
         adminUsers: [],
         backups: { mirror: null, snapshots: [] },
         timers: { manualLast: 0, autoLast: 0, uiTimer: null, autoTimer: null, autoOn: false },
@@ -321,6 +393,7 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         pets: createDefaultPetState(),
         characters: createDefaultCharacterState(),
         characterStats: sanitizeCharacterDrawStats(null),
+        quests: createDefaultQuestState(),
         settings: sanitizeUserSettings(null),
         petGachaWeights: sanitizePetWeights(null),
         buffs: { accelUntil: 0, accelMultiplier: 1, hyperUntil: 0, hyperMultiplier: 1 },
@@ -328,7 +401,9 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         profileListener: null,
         globalConfigListener: null,
         rareAnimations: { queue: [], playing: false, timer: null, hideTimer: null, current: null, skippable: true },
-      };
+        pendingProfileExtras: {},
+        profileSaveStats: { recent: [], lastWarnAt: 0, lastErrorAt: 0 }
+      });
       state.config.petWeights = sanitizePetWeights(state.config.petWeights);
       state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
       state.config.characterWeights = sanitizeWeights(state.config.characterWeights);
@@ -371,6 +446,96 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
           n = max;
         }
         return n;
+      }
+
+      function sleep(ms){ return new Promise((resolve)=> setTimeout(resolve, ms)); }
+
+      function clonePlain(value){
+        if(!value || typeof value !== 'object') return value;
+        try {
+          if(typeof structuredClone === 'function'){
+            return structuredClone(value);
+          }
+        } catch (err) {
+          // ignore and fallback to JSON clone
+        }
+        return JSON.parse(JSON.stringify(value));
+      }
+
+      function mergePlainObjects(target, source){
+        if(!target || typeof target !== 'object') target = {};
+        if(!source || typeof source !== 'object') return target;
+        Object.keys(source).forEach((key)=>{
+          const value = source[key];
+          if(value && typeof value === 'object' && !Array.isArray(value)){
+            if(!target[key] || typeof target[key] !== 'object'){
+              target[key] = {};
+            }
+            mergePlainObjects(target[key], value);
+          } else {
+            target[key] = clonePlain(value);
+          }
+        });
+        return target;
+      }
+
+      function expandExtraUpdates(updates){
+        if(!updates || typeof updates !== 'object') return {};
+        const result = {};
+        Object.keys(updates).forEach((key)=>{
+          const value = updates[key];
+          if(!key) return;
+          if(key.includes('/')){
+            const parts = key.split('/');
+            let node = result;
+            for(let i=0;i<parts.length;i++){
+              const part = parts[i];
+              if(i === parts.length-1){
+                node[part] = clonePlain(value);
+              } else {
+                if(!node[part] || typeof node[part] !== 'object') node[part] = {};
+                node = node[part];
+              }
+            }
+          } else {
+            if(value && typeof value === 'object' && !Array.isArray(value)){
+              if(!result[key] || typeof result[key] !== 'object') result[key] = {};
+              mergePlainObjects(result[key], value);
+            } else {
+              result[key] = clonePlain(value);
+            }
+          }
+        });
+        return result;
+      }
+
+      function queueProfileExtras(updates){
+        if(!updates || typeof updates !== 'object') return;
+        const normalized = expandExtraUpdates(updates);
+        if(!Object.keys(normalized).length) return;
+        if(!state.pendingProfileExtras || typeof state.pendingProfileExtras !== 'object'){
+          state.pendingProfileExtras = {};
+        }
+        state.pendingProfileExtras = mergePlainObjects(state.pendingProfileExtras, normalized);
+      }
+
+      function collectPendingProfileExtras(){
+        if(!state.pendingProfileExtras || !Object.keys(state.pendingProfileExtras).length) return null;
+        const snapshot = clonePlain(state.pendingProfileExtras);
+        state.pendingProfileExtras = {};
+        return snapshot;
+      }
+
+      function recordProfileSaveSuccess(){
+        const stats = state.profileSaveStats || (state.profileSaveStats = { recent: [], lastWarnAt: 0, lastErrorAt: 0 });
+        const now = Date.now();
+        stats.recent = (stats.recent || []).filter((ts)=> now - ts < 60000);
+        stats.recent.push(now);
+        const threshold = 20;
+        if(stats.recent.length > threshold && (now - (stats.lastWarnAt || 0) > 60000)){
+          stats.lastWarnAt = now;
+          console.warn(`최근 60초 동안 프로필 저장이 ${stats.recent.length}회 발생했습니다. 쓰기 최적화를 검토하세요.`);
+        }
       }
 
       function sanitizeWeights(rawWeights){
@@ -455,6 +620,35 @@ const ENHANCE_EXPECTED_GOLD = Object.freeze([
         kinds.forEach((kind)=>{
           const defaults = DEFAULT_RARE_ANIMATIONS[kind] || [];
           const list = normalizeRareAnimationList(raw && raw[kind], defaults);
+          const ensureEntry = (tier, gif, label, legacySrc)=>{
+            const idx = list.findIndex((entry)=> entry && entry.tier === tier && !entry.id);
+            if(idx === -1){
+              list.push({ tier, src: gif, label, duration: RARE_ANIMATION_DURATION_MS });
+              return;
+            }
+            const current = list[idx];
+            if(current.src === legacySrc){
+              current.src = gif;
+            }
+            if(!current.label || !current.label.trim()){
+              current.label = label;
+            }
+            current.duration = clampNumber(current.duration, 600, 20000, RARE_ANIMATION_DURATION_MS);
+          };
+          if(kind === 'gear'){
+            ensureEntry('SS+', GEAR_SSPLUS_GIF, 'SS+ 장비 획득!', LEGACY_GEAR_RARE_GIF);
+            ensureEntry('SSS+', GEAR_SSSPLUS_GIF, 'SSS+ 장비 획득!', LEGACY_GEAR_RARE_GIF);
+          } else if(kind === 'character'){
+            ensureEntry('SS+', CHARACTER_SSPLUS_GIF, 'SS+ 캐릭터 획득!', LEGACY_CHARACTER_RARE_GIF);
+            ensureEntry('SSS+', CHARACTER_SSSPLUS_GIF, 'SSS+ 캐릭터 획득!', LEGACY_CHARACTER_RARE_GIF);
+          }
+          if(kind === 'gear' || kind === 'character'){
+            list.sort((a,b)=>{
+              const ai = TIER_INDEX[a.tier] ?? Number.POSITIVE_INFINITY;
+              const bi = TIER_INDEX[b.tier] ?? Number.POSITIVE_INFINITY;
+              return ai - bi;
+            });
+          }
           result[kind] = list;
         });
         return result;
@@ -1338,18 +1532,6 @@ ${parts.join(', ')}`;
         return true;
       }
 
-      function pushProfileUpdate(partial){
-        if(!partial || typeof partial !== 'object') return;
-        if(!currentFirebaseUser) return;
-        const payload = { ...partial };
-        if(!Object.prototype.hasOwnProperty.call(payload, 'updatedAt')){
-          payload.updatedAt = Date.now();
-        }
-        update(ref(db, `users/${currentFirebaseUser.uid}`), payload).catch((error)=>{
-          console.error('프로필 업데이트 실패', error);
-        });
-      }
-
       function detachProfileListener(){ if(state.profileListener){ try { state.profileListener(); } catch (err) { console.warn('프로필 리스너 해제 실패', err); } state.profileListener = null; } }
 
       function detachGlobalConfigListener(){
@@ -1433,6 +1615,15 @@ ${parts.join(', ')}`;
             state.characters = nextCharacters;
             if(userProfile) userProfile.characters = nextCharacters;
             updateCharacterList();
+          }
+
+          const nextQuests = sanitizeQuestState(data.quests);
+          if(JSON.stringify(nextQuests) !== JSON.stringify(state.quests)){
+            state.quests = nextQuests;
+            if(userProfile) userProfile.quests = nextQuests;
+            if(state.profile) state.profile.quests = nextQuests;
+            refreshQuestView();
+            recoverPendingQuestRewards();
           }
 
           if(role === 'admin'){ return; }
@@ -1608,6 +1799,24 @@ ${parts.join(', ')}`;
       });
         return out;
       }
+      function normalizeShopPrices(raw){ const defaults = { ...DEFAULT_SHOP_PRICES }; const result = { ...defaults }; if(raw && typeof raw === 'object'){ Object.keys(defaults).forEach(function(key){ const value = raw[key]; if(value === undefined || value === null) return; const num = Number(value); if(Number.isFinite(num) && num >= 0){ result[key] = Math.floor(num); } }); }
+        return result;
+      }
+      function normalizePotionSettings(raw, defaults){ const base = { ...(defaults || DEFAULT_POTION_SETTINGS) }; if(raw && typeof raw === 'object'){ const duration = Number(raw.durationMs ?? raw.duration ?? base.durationMs); const manual = Number(raw.manualCdMs ?? raw.manualCd ?? base.manualCdMs); const auto = Number(raw.autoCdMs ?? raw.autoCd ?? base.autoCdMs); const speed = Number(raw.speedMultiplier ?? raw.speed ?? base.speedMultiplier); if(Number.isFinite(duration) && duration >= 0) base.durationMs = Math.round(duration); if(Number.isFinite(manual) && manual >= 0) base.manualCdMs = Math.round(manual); if(Number.isFinite(auto) && auto >= 0) base.autoCdMs = Math.round(auto); if(Number.isFinite(speed) && speed > 0) base.speedMultiplier = speed; }
+        base.durationMs = Math.max(0, base.durationMs);
+        base.manualCdMs = Math.max(0, base.manualCdMs);
+        base.autoCdMs = Math.max(0, base.autoCdMs);
+        base.speedMultiplier = Math.max(0.1, base.speedMultiplier || (defaults?.speedMultiplier ?? 1));
+        return base;
+      }
+      function normalizeMonsterScaling(raw){ const base = { ...DEFAULT_MONSTER_SCALING }; if(raw && typeof raw === 'object'){ const coerce = (key, min, max)=>{ const value = Number(raw[key]); if(Number.isFinite(value)){ if(min !== undefined && value < min) return min; if(max !== undefined && value > max) return max; return value; } return base[key]; }; base.basePower = coerce('basePower', 1); base.maxPower = coerce('maxPower', base.basePower); base.curve = coerce('curve', 0.1); base.difficultyMultiplier = coerce('difficultyMultiplier', 0.01); base.attackShare = coerce('attackShare', 0); base.defenseShare = coerce('defenseShare', 0); base.hpMultiplier = coerce('hpMultiplier', 0.1); base.speedBase = coerce('speedBase', 1); base.speedMax = coerce('speedMax', base.speedBase); base.critRateBase = coerce('critRateBase', 0); base.critRateMax = coerce('critRateMax', base.critRateBase); base.critDmgBase = coerce('critDmgBase', 0); base.critDmgMax = coerce('critDmgMax', base.critDmgBase); base.dodgeBase = coerce('dodgeBase', 0); base.dodgeMax = coerce('dodgeMax', base.dodgeBase); }
+        if(base.maxPower < base.basePower) base.maxPower = base.basePower;
+        if(base.speedMax < base.speedBase) base.speedMax = base.speedBase;
+        if(base.critRateMax < base.critRateBase) base.critRateMax = base.critRateBase;
+        if(base.critDmgMax < base.critDmgBase) base.critDmgMax = base.critDmgBase;
+        if(base.dodgeMax < base.dodgeBase) base.dodgeMax = base.dodgeBase;
+        return base;
+      }
       function normalizeGoldScaling(raw){ const base = {...DEFAULT_GOLD_SCALING}; const coerce = (val)=> (typeof val==='number' && isFinite(val)) ? val : null; if(raw){ const a = coerce(raw.minLow); const b = coerce(raw.maxLow); const c = coerce(raw.minHigh); const d = coerce(raw.maxHigh); if(a!==null) base.minLow = a; if(b!==null) base.maxLow = b; if(c!==null) base.minHigh = c; if(d!==null) base.maxHigh = d; }
         if(base.maxLow < base.minLow) base.maxLow = base.minLow;
         if(base.minHigh < base.minLow) base.minHigh = base.minLow;
@@ -1715,23 +1924,22 @@ ${parts.join(', ')}`;
             <td class="prob" data-char-prob="${tier}">-</td>`; els.characterWeightsBody.appendChild(tr); }
         updateCharacterWeightsInputs(); }
 
-      function updateWeightsInputs(){ const mode = els.mode.value; const cfg = state.config; const weights = cfg.weights; cfg.probs = normalize(weights);
+      function updateWeightsInputs(){ if(!els.mode || !els.weightsTable) return; const mode = els.mode.value; const cfg = state.config; const weights = cfg.weights; cfg.probs = normalize(weights);
         const dis = cfg.locked || !isAdmin();
         $$('.winput').forEach(inp=>{ const t = inp.dataset.tier; inp.disabled = dis; inp.value = mode==='weight' ? weights[t] : (cfg.probs[t]*100).toFixed(5); });
-        for(const t of TIERS){ const td = els.weightsTable.querySelector(`[data-prob="${t}"]`); td.textContent = formatPct(cfg.probs[t]); }
+        for(const t of TIERS){ const td = els.weightsTable.querySelector(`[data-prob="${t}"]`); if(td) td.textContent = formatPct(cfg.probs[t]); }
         updateCharacterWeightsInputs();
         syncStats(); drawChart(); }
 
-      function updateCharacterWeightsInputs(){ if(!els.characterWeightsBody) return; const mode = els.mode.value; const cfg = state.config; const weights = cfg.characterWeights || sanitizeWeights(null); cfg.characterWeights = weights; cfg.characterProbs = normalize(weights); const disabled = cfg.locked || !isAdmin();
+      function updateCharacterWeightsInputs(){ if(!els.characterWeightsBody || !els.mode) return; const mode = els.mode.value; const cfg = state.config; const weights = cfg.characterWeights || sanitizeWeights(null); cfg.characterWeights = weights; cfg.characterProbs = normalize(weights); const disabled = cfg.locked || !isAdmin();
         els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ const tier = input.dataset.charTier; const weight = weights[tier]; input.disabled = disabled; if(mode === 'weight'){ input.value = weight; } else { input.value = (cfg.characterProbs[tier] * 100).toFixed(5); } });
         for(const tier of TIERS){ const cell = els.characterWeightsBody.querySelector(`[data-char-prob="${tier}"]`); if(cell) cell.textContent = formatPct(cfg.characterProbs[tier] || 0); }
       }
 
-      function applyInputsToConfig(){ const mode = els.mode.value; const weights = {...state.config.weights}; $$('.winput').forEach(inp=>{ const t=inp.dataset.tier; const raw = (inp.value||'').replace(',', '.'); let v=parseFloat(raw); if(!(v>=0)) v=0; if(mode==='weight'){ weights[t]=v; } else { weights[t]=v/100 || 0; } }); if(mode==='percent'){ // convert percents to comparable weights (just keep as probs, re-normalize below)
-          const sum = TIERS.reduce((s,t)=>s+weights[t],0); if(sum>0){ for(const t of TIERS){ weights[t] = weights[t]/sum; } } }
+      function applyInputsToConfig(){ if(!els.mode) return; const mode = els.mode.value; const weights = {...state.config.weights}; $$('.winput').forEach(inp=>{ const t=inp.dataset.tier; const raw = (inp.value||'').replace(',', '.'); let v=parseFloat(raw); if(!(v>=0)) v=0; if(mode==='weight'){ weights[t]=v; } else { weights[t]=v/100 || 0; } }); if(mode==='percent'){ const sum = TIERS.reduce((s,t)=>s+weights[t],0); if(sum>0){ for(const t of TIERS){ weights[t] = weights[t]/sum; } } }
         state.config.weights = weights; state.config.probs = normalize(weights); if(isAdmin()) clearActivePreset(); }
 
-      function applyCharacterInputsToConfig(){ if(!els.characterWeightsBody) return; const mode = els.mode.value; const weights = {...state.config.characterWeights}; els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ const tier = input.dataset.charTier; const raw = (input.value||'').replace(',', '.'); let value = parseFloat(raw); if(!(value>=0)) value = 0; if(mode === 'weight'){ weights[tier] = value; } else { weights[tier] = value/100 || 0; } }); if(mode === 'percent'){ const sum = TIERS.reduce((acc, tier)=> acc + weights[tier], 0); if(sum>0){ TIERS.forEach((tier)=>{ weights[tier] = weights[tier]/sum; }); } }
+      function applyCharacterInputsToConfig(){ if(!els.characterWeightsBody || !els.mode) return; const mode = els.mode.value; const weights = {...state.config.characterWeights}; els.characterWeightsBody.querySelectorAll('input[data-char-tier]').forEach((input)=>{ const tier = input.dataset.charTier; const raw = (input.value||'').replace(',', '.'); let value = parseFloat(raw); if(!(value>=0)) value = 0; if(mode === 'weight'){ weights[tier] = value; } else { weights[tier] = value/100 || 0; } }); if(mode === 'percent'){ const sum = TIERS.reduce((acc, tier)=> acc + weights[tier], 0); if(sum>0){ TIERS.forEach((tier)=>{ weights[tier] = weights[tier]/sum; }); } }
         state.config.characterWeights = weights; state.config.characterProbs = normalize(weights); if(isAdmin()) clearActivePreset(); }
 
       function refreshCharacterProbCells(){ if(!els.characterWeightsBody) return; const probs = state.config.characterProbs || {}; for(const tier of TIERS){ const cell = els.characterWeightsBody.querySelector(`[data-char-prob="${tier}"]`); if(cell) cell.textContent = formatPct(probs[tier] || 0); } }
@@ -1743,11 +1951,13 @@ ${parts.join(', ')}`;
       }
 
       // UI bindings
-      function bind(){ els.mode.addEventListener('change', ()=>{ updateWeightsInputs(); });
+      function bind(){ addListener(els.mode, 'change', ()=>{ updateWeightsInputs(); });
         // On typing, update config and probs without overwriting the user's current text
-        els.weightsTable.addEventListener('input', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; applyInputsToConfig(); refreshProbsAndStats(); markProfileDirty(); });
-        // On commit (change/blur), format inputs from config
-        els.weightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; updateWeightsInputs(); });
+        if(els.weightsTable){
+          addListener(els.weightsTable, 'input', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; applyInputsToConfig(); refreshProbsAndStats(); markProfileDirty(); });
+          // On commit (change/blur), format inputs from config
+          addListener(els.weightsTable, 'change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(state.config.locked || !isAdmin()) return; updateWeightsInputs(); });
+        }
         if(els.characterWeightsTable){ els.characterWeightsTable.addEventListener('input', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(!e.target.dataset.charTier) return; if(state.config.locked || !isAdmin()) return; applyCharacterInputsToConfig(); refreshCharacterProbCells(); markProfileDirty(); });
           els.characterWeightsTable.addEventListener('change', (e)=>{ if(!(e.target instanceof HTMLInputElement)) return; if(!e.target.dataset.charTier) return; if(state.config.locked || !isAdmin()) return; updateCharacterWeightsInputs(); }); }
         if(els.characterBalanceTable){
@@ -1758,7 +1968,7 @@ ${parts.join(', ')}`;
           els.characterBalanceOffsetTable.addEventListener('input', handleCharacterBalanceOffsetInput);
           els.characterBalanceOffsetTable.addEventListener('change', ()=> updateCharacterBalanceInputs());
         }
-        els.seed.addEventListener('input', ()=>{ state.config.seed = els.seed.value.trim(); markProfileDirty(); });
+        addListener(els.seed, 'input', ()=>{ state.config.seed = els.seed.value.trim(); markProfileDirty(); });
         if(els.gachaModeGearConfig) els.gachaModeGearConfig.addEventListener('click', ()=> updateGachaModeView('gear'));
         if(els.gachaModePetConfig) els.gachaModePetConfig.addEventListener('click', ()=> updateGachaModeView('pet'));
         if(els.gachaModeCharacterConfig) els.gachaModeCharacterConfig.addEventListener('click', ()=> updateGachaModeView('character'));
@@ -1778,23 +1988,23 @@ ${parts.join(', ')}`;
             }
           });
         }
-        els.lock.addEventListener('change', ()=>{ state.config.locked = els.lock.checked; updateWeightsInputs(); toggleConfigDisabled(); markProfileDirty(); });
-        els.pityEnabled.addEventListener('change', ()=>{ state.config.pity.enabled = els.pityEnabled.checked; markProfileDirty(); });
-        els.pityFloor.addEventListener('change', ()=>{ state.config.pity.floorTier = els.pityFloor.value; markProfileDirty(); });
-        els.pitySpan.addEventListener('input', ()=>{ state.config.pity.span = Math.max(1, parseInt(els.pitySpan.value||'1')); markProfileDirty(); });
-        els.g10Enabled.addEventListener('change', ()=>{ state.config.minGuarantee10.enabled = els.g10Enabled.checked; markProfileDirty(); });
-        els.g10Tier.addEventListener('change', ()=>{ state.config.minGuarantee10.tier = els.g10Tier.value; markProfileDirty(); });
-        els.draw1.addEventListener('click', ()=> runDraws(1));
-        els.draw10.addEventListener('click', ()=> runDraws(10));
-        els.draw100.addEventListener('click', ()=> runDraws(100));
-        els.draw1k.addEventListener('click', ()=> runDraws(1000));
-        els.draw10k.addEventListener('click', ()=> runDraws(10000));
+        addListener(els.lock, 'change', ()=>{ state.config.locked = els.lock.checked; updateWeightsInputs(); toggleConfigDisabled(); markProfileDirty(); });
+        addListener(els.pityEnabled, 'change', ()=>{ state.config.pity.enabled = els.pityEnabled.checked; markProfileDirty(); });
+        addListener(els.pityFloor, 'change', ()=>{ state.config.pity.floorTier = els.pityFloor.value; markProfileDirty(); });
+        addListener(els.pitySpan, 'input', ()=>{ state.config.pity.span = Math.max(1, parseInt(els.pitySpan?.value||'1')); markProfileDirty(); });
+        addListener(els.g10Enabled, 'change', ()=>{ state.config.minGuarantee10.enabled = els.g10Enabled.checked; markProfileDirty(); });
+        addListener(els.g10Tier, 'change', ()=>{ state.config.minGuarantee10.tier = els.g10Tier.value; markProfileDirty(); });
+        addListener(els.draw1, 'click', ()=> runDraws(1));
+        addListener(els.draw10, 'click', ()=> runDraws(10));
+        addListener(els.draw100, 'click', ()=> runDraws(100));
+        addListener(els.draw1k, 'click', ()=> runDraws(1000));
+        addListener(els.draw10k, 'click', ()=> runDraws(10000));
         if (els.drawPet1) els.drawPet1.addEventListener('click', ()=> runPetDraws(1));
         if (els.drawPet10) els.drawPet10.addEventListener('click', ()=> runPetDraws(10));
         if (els.drawChar1) els.drawChar1.addEventListener('click', ()=> runCharacterDraws(1));
         if (els.drawChar10) els.drawChar10.addEventListener('click', ()=> runCharacterDraws(10));
-        els.cancel.addEventListener('click', ()=>{ state.cancelFlag = true; });
-        els.scope.addEventListener('change', ()=>{ syncStats(); drawChart(); });
+        addListener(els.cancel, 'click', ()=>{ state.cancelFlag = true; });
+        addListener(els.scope, 'change', ()=>{ syncStats(); drawChart(); });
         if (els.petWeightTableBody) {
           els.petWeightTableBody.addEventListener('input', (e) => {
             const target = e.target;
@@ -1828,11 +2038,37 @@ ${parts.join(', ')}`;
         if(els.userOptionsClose) els.userOptionsClose.addEventListener('click', ()=> closeUserOptionsModal());
         if(els.userOptionsSave) els.userOptionsSave.addEventListener('click', saveUserOptions);
         if(els.userOptionsModal){ els.userOptionsModal.addEventListener('click', (event)=>{ if(event.target === els.userOptionsModal){ closeUserOptionsModal(); } }); }
-        els.saveCfg.addEventListener('click', saveConfigFile);
-        els.loadCfg.addEventListener('click', ()=> els.cfgFile.click());
-        els.cfgFile.addEventListener('change', loadConfigFile);
-        els.shareLink.addEventListener('click', shareLink);
-        $('#exportCsv').addEventListener('click', exportCsv);
+        if(els.questBtn) els.questBtn.addEventListener('click', ()=> openQuestModal());
+        if(els.questClose) els.questClose.addEventListener('click', ()=> closeQuestModal());
+        if(els.questOverlay){ els.questOverlay.addEventListener('click', (event)=>{ if(event.target === els.questOverlay){ closeQuestModal(); } }); }
+        if(els.questList){
+          els.questList.addEventListener('click', (event)=>{
+            const rawTarget = event.target;
+            const target = rawTarget instanceof HTMLButtonElement
+              ? rawTarget
+              : rawTarget instanceof Element
+                ? rawTarget.closest('.quest-claim')
+                : null;
+            if(!(target instanceof HTMLButtonElement)) return;
+            if(target.disabled) return;
+            const questId = target.dataset.questId;
+            if(!questId) return;
+            target.disabled = true;
+            claimQuestReward(questId).then((ok)=>{
+              if(!ok){
+                target.disabled = false;
+              }
+            });
+          });
+        }
+        if(els.saveCfg) els.saveCfg.addEventListener('click', saveConfigFile);
+        if(els.loadCfg && els.cfgFile){
+          els.loadCfg.addEventListener('click', ()=> els.cfgFile.click());
+          els.cfgFile.addEventListener('change', loadConfigFile);
+        }
+        if(els.shareLink) els.shareLink.addEventListener('click', shareLink);
+        const exportCsvBtn = $('#exportCsv');
+        if(exportCsvBtn) addListener(exportCsvBtn, 'click', exportCsv);
         if (els.resetSession) els.resetSession.addEventListener('click', resetSession);
         if (els.resetGlobal) els.resetGlobal.addEventListener('click', resetGlobal);
         if (els.characterDetailClose) els.characterDetailClose.addEventListener('click', closeCharacterDetail);
@@ -1849,20 +2085,20 @@ ${parts.join(', ')}`;
         if(els.lvlDec){ els.lvlDec.addEventListener('click', ()=>{ const cur = parseInt(els.monLevel?.value||'1',10); setLevel(cur-1); }); }
         if(els.lvlInc){ els.lvlInc.addEventListener('click', ()=>{ const cur = parseInt(els.monLevel?.value||'1',10); setLevel(cur+1); }); }
         if(els.fightBtn){ els.fightBtn.addEventListener('click', doFight); }
-        els.forgeTarget.addEventListener('change', updateForgeInfo);
+        addListener(els.forgeTarget, 'change', updateForgeInfo);
         // forge
-        els.forgeOnce.addEventListener('click', doForgeOnce);
+        addListener(els.forgeOnce, 'click', doForgeOnce);
         if(els.forgeAuto){ els.forgeAuto.addEventListener('click', toggleAutoForge); }
-        els.forgeTableBody.addEventListener('input', onForgeTableInput);
-        els.forgeReset.addEventListener('click', ()=>{ state.enhance = defaultEnhance(); buildForgeTable(); updateInventoryView(); markProfileDirty(); });
-        els.forgeProtectUse.addEventListener('change', ()=>{ state.forge.protectEnabled = els.forgeProtectUse.checked; updateForgeInfo(); markProfileDirty(); });
-        els.logoutBtn.addEventListener('click', logout);
-        els.toAdmin.addEventListener('click', ()=>{ if(!isAdmin()) { alert('관리자만 접근 가능합니다.'); return; } state.ui.adminView = true; updateViewMode(); });
-        els.toUser.addEventListener('click', ()=>{ state.ui.adminView = false; updateViewMode(); });
+        addListener(els.forgeTableBody, 'input', onForgeTableInput);
+        addListener(els.forgeReset, 'click', ()=>{ state.enhance = defaultEnhance(); buildForgeTable(); updateInventoryView(); markProfileDirty(); });
+        addListener(els.forgeProtectUse, 'change', ()=>{ state.forge.protectEnabled = els.forgeProtectUse.checked; updateForgeControlsView(); updateForgeInfo(); markProfileDirty(); });
+        addListener(els.logoutBtn, 'click', logout);
+        addListener(els.toAdmin, 'click', ()=>{ if(!isAdmin()) { alert('관리자만 접근 가능합니다.'); return; } state.ui.adminView = true; updateViewMode(); });
+        addListener(els.toUser, 'click', ()=>{ state.ui.adminView = false; updateViewMode(); });
         if(els.toBattle){ els.toBattle.addEventListener('click', ()=>{ window.location.href = 'battle.html'; }); }
         if(els.toPvp){ els.toPvp.addEventListener('click', ()=>{ window.location.href = 'pvp.html'; }); }
         if(els.goBattle){ els.goBattle.addEventListener('click', ()=>{ window.location.href = 'battle.html'; }); }
-        els.adminChangePw.addEventListener('click', changeAdminPassword);
+        addListener(els.adminChangePw, 'click', changeAdminPassword);
         if(els.legendaryOverlay){ els.legendaryOverlay.addEventListener('click', (event)=>{ if(!isLegendaryVisible()) return; if(event.target === els.legendaryOverlay && activeLegendaryType === 'gear'){ if(els.gearDiscardBtn) els.gearDiscardBtn.click(); } else if(event.target === els.legendaryOverlay && activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); } }); }
         document.addEventListener('keydown', (event)=>{
           if(event.key === 'Escape'){
@@ -1882,13 +2118,18 @@ ${parts.join(', ')}`;
               else if(activeLegendaryType === 'character'){ if(els.characterLegendaryClose) els.characterLegendaryClose.click(); }
               return;
             }
+            if(state.ui.questOpen){
+              event.preventDefault();
+              closeQuestModal();
+              return;
+            }
             if(state.ui.characterDetailOpen){
               event.preventDefault();
               closeCharacterDetail();
             }
           }
         });
-        els.saveDrops.addEventListener('click', ()=>{
+        if(els.saveDrops) els.saveDrops.addEventListener('click', ()=>{
           if(!isAdmin()) return;
           const parseDrop = (baseEl, perEl, maxEl, defaults)=>{
             const base = parseFloat(baseEl?.value);
@@ -2015,7 +2256,18 @@ ${parts.join(', ')}`;
         const rng = getRng(); state.inRun = true; state.cancelFlag = false; els.cancel.disabled = false; els.draw1.disabled = els.draw10.disabled = els.draw100.disabled = els.draw1k.disabled = els.draw10k.disabled = true; const speed = parseInt(els.speed.value||'0'); let results = []; const cfgHash = await sha256Hex(JSON.stringify(compactConfig())); const runId = state.runId++;
         const shouldRender = (n===1 || n===10 || n===100);
         const collected = [];
-        const collectFn = shouldRender ? function(payload){ if(!payload) return; const partName = getPartNameByKey(payload.part) || ''; collected.push({ type: 'gear', tier: payload.tier, part: payload.part, icon: iconForPart(payload.part), partName }); } : null;
+        const collectFn = shouldRender ? function(payload){
+          if(!payload) return;
+          const partName = getPartNameByKey(payload.part) || '';
+          collected.push({
+            type: 'gear',
+            tier: payload.tier,
+            part: payload.part,
+            icon: iconForPart(payload.part),
+            partName,
+            item: payload.item || null
+          });
+        } : null;
         const batch = n >= 200; const updateEvery = n>=10000? 200 : n>=1000? 50 : n>=200? 10 : 1;
         if(n===10 && state.config.minGuarantee10.enabled){ // 10-pull with minimum guarantee
           for(let i=0;i<9;i++){ if(state.cancelFlag) break; if(!spendPoints(100)) { if(els.fightResult) els.fightResult.textContent='포인트가 부족합니다.'; break; } const t = drawOneWithPity(rng); results.push(t); await applyResult(t, runId, cfgHash, {deferUI: batch, skipLog: batch, rng, onCollect: collectFn}); if(batch && ((i+1)%updateEvery===0)) { syncStats(); drawChart(); const h = latestHistory(); if(h) appendLog(h); } await maybeDelay(speed); updateProgress(results.length, n); }
@@ -2037,9 +2289,18 @@ ${parts.join(', ')}`;
 
       async function applyResult(tier, runId, cfgHash, opts){ opts = opts||{}; const rng = opts.rng || getRng(); state.session.draws++; state.session.counts[tier]++; const now=Date.now(); const id = state.session.history.length + 1; const part = choosePart(rng); const stat = rollStatFor(tier, part, rng); const rec = {id, tier, ts: now, runId, cfgHash, part, stat}; state.session.history.push(rec);
         const item = { id: state.itemSeq++, tier, part, base: stat, lvl: 0, type: PARTS.find(p=>p.key===part).type };
+        item.__animationPlayed = false;
         if(typeof opts.onCollect === 'function'){ opts.onCollect({ tier, part, item }); }
         let decision = opts.decision || null;
         if(!opts.skipPrompt && isLegendaryGearTier(tier)){
+          if(!opts.deferUI){
+            try {
+              await playLegendaryGearAnimation(tier, part);
+              item.__animationPlayed = true;
+            } catch (error) {
+              console.warn('전설 장비 이펙트 실행 실패', error);
+            }
+          }
           const current = state.equip[part] || null;
           decision = await showGearLegendaryModal(item, current);
         }
@@ -2379,6 +2640,20 @@ ${parts.join(', ')}`;
         }));
       }
 
+      async function playLegendaryGearAnimation(tier, part){
+        const partName = getPartNameByKey(part) || part || '장비';
+        const label = `${tier} ${partName}`.trim();
+        resetRareAnimationState({ immediate: true });
+        await withRareAnimationBlock(()=> playRareAnimation({
+          kind: 'gear',
+          tier,
+          label,
+          targetId: part || null,
+          message: '전설 장비가 나타났습니다',
+          prefaceDuration: 1200
+        }));
+      }
+
       function fillCharacterStats(target, stats, classId){ if(!target) return; const rows = [
           ['hp', 'HP', false],
           ['atk', 'ATK', false],
@@ -2621,7 +2896,19 @@ ${parts.join(', ')}`;
           if(entry.partName) parts.push(entry.partName);
           const label = parts.length ? `${parts.join(' ')} 획득!` : '희귀 획득!';
           const targetId = entry.part || entry.partName || null;
+          if(entry.item && entry.item.__animationPlayed){
+            return;
+          }
           playRareAnimation({ kind, tier: entry.tier, label, targetId });
+        });
+        items.filter(function(entry){ return entry.type === 'character' && entry.tier && isAtLeast(entry.tier, 'SS+'); }).forEach(function(entry){
+          if(entry.__animationPlayed){
+            return;
+          }
+          const labelParts = [entry.tier];
+          if(entry.name){ labelParts.push(entry.name); }
+          const label = labelParts.join(' ');
+          playRareAnimation({ kind: 'character', tier: entry.tier, label, targetId: entry.characterId || null });
         });
       }
 
@@ -3163,16 +3450,17 @@ ${parts.join(', ')}`;
 
       function updateCharacterDetailSelection(){ if(!els.characterList) return; const selectedId = state.ui.selectedCharacterDetail || getActiveCharacterId(); const cards = els.characterList.querySelectorAll('.character-card'); cards.forEach((card) => { card.classList.toggle('selected', card.dataset.character === selectedId); }); if(state.ui.characterDetailOpen && els.characterDetailBody){ els.characterDetailBody.innerHTML = buildCharacterDetailContent(getCharacterDefinition(selectedId)); } }
 
-      // Points (wallet)
+      function clampCurrencyValue(value){ return clampNumber(value, 0, Number.MAX_SAFE_INTEGER, 0); }
+
       function loadWallet(){
         if(isAdmin()){
           state.wallet = Number.POSITIVE_INFINITY;
           updatePointsView();
           return;
         }
-        const stored = userProfile?.wallet;
-        if(typeof stored === 'number' && isFinite(stored)){
-          state.wallet = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, stored);
+        const stored = (userProfile && typeof userProfile.wallet === 'number' && isFinite(userProfile.wallet)) ? userProfile.wallet : null;
+        if(stored !== null){
+          state.wallet = clampCurrencyValue(stored);
           userProfile.wallet = state.wallet;
           if(state.profile) state.profile.wallet = state.wallet;
         } else {
@@ -3184,43 +3472,31 @@ ${parts.join(', ')}`;
       function saveWallet(opts){
         if(isAdmin()) return;
         if(!userProfile) return;
-        const coerced = clampNumber(state.wallet, 0, Number.MAX_SAFE_INTEGER, 0);
+        const coerced = clampCurrencyValue(state.wallet);
         state.wallet = coerced;
         const prev = typeof userProfile.wallet === 'number' && isFinite(userProfile.wallet) ? userProfile.wallet : null;
         userProfile.wallet = coerced;
         if(state.profile) state.profile.wallet = coerced;
         if(opts?.force || prev !== coerced){
-          pushProfileUpdate({ wallet: coerced });
+          markProfileDirty();
         }
         if(!opts || !opts.silent) updatePointsView();
       }
-      function updatePointsView(){ els.points.textContent = isAdmin()? '∞' : formatNum(state.wallet); updateDrawButtons(); updateReviveButton(); }
-      function updateDrawButtons(){ const running = !!state.inRun; const blocked = !!state.ui.rareAnimationBlocking; const mode = state.ui.gachaMode || 'gear'; const wallet = isAdmin() ? Number.POSITIVE_INFINITY : (state.wallet || 0); const petTickets = state.items.petTicket || 0;
-        const enoughGear = isAdmin() || wallet >= 100;
-        const enoughChar1 = isAdmin() || wallet >= CHARACTER_DRAW_COST;
-        const enoughChar10 = isAdmin() || wallet >= CHARACTER_DRAW_COST * 10;
-        if(els.draw1) els.draw1.disabled = mode !== 'gear' || running || blocked || !enoughGear;
-        if(els.draw10) els.draw10.disabled = mode !== 'gear' || running || blocked || !enoughGear;
-        if(els.draw100) els.draw100.disabled = mode !== 'gear' || running || blocked || !enoughGear;
-        if(els.draw1k) els.draw1k.disabled = mode !== 'gear' || running || blocked || !enoughGear;
-        if(els.draw10k) els.draw10k.disabled = mode !== 'gear' || running || blocked || !enoughGear;
-        if(els.drawPet1) els.drawPet1.disabled = mode !== 'pet' || running || blocked || (!isAdmin() && petTickets < 1);
-        if(els.drawPet10) els.drawPet10.disabled = mode !== 'pet' || running || blocked || (!isAdmin() && petTickets < 10);
-        if(els.drawChar1) els.drawChar1.disabled = mode !== 'character' || running || blocked || !enoughChar1;
-        if(els.drawChar10) els.drawChar10.disabled = mode !== 'character' || running || blocked || !enoughChar10;
-      }
+      function updatePointsView(){ if(els.points) els.points.textContent = isAdmin()? '∞' : formatNum(state.wallet||0); updateDrawButtons(); updateReviveButton(); }
+      function updateDrawButtons(){ const running = !!state.inRun; const blocked = !!state.ui.rareAnimationBlocking; const mode = state.ui.gachaMode || 'gear'; const wallet = isAdmin() ? Number.POSITIVE_INFINITY : (state.wallet || 0); const petTickets = state.items.petTicket || 0; const enoughGear = isAdmin() || wallet >= 100; const enoughChar1 = isAdmin() || wallet >= CHARACTER_DRAW_COST; const enoughChar10 = isAdmin() || wallet >= CHARACTER_DRAW_COST * 10; if(els.draw1) els.draw1.disabled = mode !== 'gear' || running || blocked || !enoughGear; if(els.draw10) els.draw10.disabled = mode !== 'gear' || running || blocked || !enoughGear; if(els.draw100) els.draw100.disabled = mode !== 'gear' || running || blocked || !enoughGear; if(els.draw1k) els.draw1k.disabled = mode !== 'gear' || running || blocked || !enoughGear; if(els.draw10k) els.draw10k.disabled = mode !== 'gear' || running || blocked || !enoughGear; if(els.drawPet1) els.drawPet1.disabled = mode !== 'pet' || running || blocked || (!isAdmin() && petTickets < 1); if(els.drawPet10) els.drawPet10.disabled = mode !== 'pet' || running || blocked || (!isAdmin() && petTickets < 10); if(els.drawChar1) els.drawChar1.disabled = mode !== 'character' || running || blocked || !enoughChar1; if(els.drawChar10) els.drawChar10.disabled = mode !== 'character' || running || blocked || !enoughChar10; }
       function canSpend(amt){ if(isAdmin()) return true; return state.wallet >= amt; }
       function spendPoints(amt){ if(isAdmin()) return true; if(state.wallet < amt) return false; state.wallet -= amt; saveWallet(); return true; }
       function addPoints(amt){ if(isAdmin()) return; state.wallet += amt; saveWallet(); }
+
       function loadGold(){
         if(isAdmin()){
           state.gold = Number.POSITIVE_INFINITY;
           updateGoldView();
           return;
         }
-        const stored = userProfile?.gold;
-        if(typeof stored === 'number' && isFinite(stored)){
-          state.gold = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, stored);
+        const stored = (userProfile && typeof userProfile.gold === 'number' && isFinite(userProfile.gold)) ? userProfile.gold : null;
+        if(stored !== null){
+          state.gold = clampCurrencyValue(stored);
           userProfile.gold = state.gold;
           if(state.profile) state.profile.gold = state.gold;
         } else {
@@ -3232,30 +3508,33 @@ ${parts.join(', ')}`;
       function saveGold(opts){
         if(isAdmin()) return;
         if(!userProfile) return;
-        const coerced = clampNumber(state.gold, 0, Number.MAX_SAFE_INTEGER, 0);
+        const coerced = clampCurrencyValue(state.gold);
         state.gold = coerced;
         const prev = typeof userProfile.gold === 'number' && isFinite(userProfile.gold) ? userProfile.gold : null;
         userProfile.gold = coerced;
         if(state.profile) state.profile.gold = coerced;
-        const extra = opts?.extraUpdates && Object.keys(opts.extraUpdates).length ? { ...opts.extraUpdates } : null;
-        if(opts?.force || prev !== coerced || extra){
-          const payload = extra ? { gold: coerced, ...extra } : { gold: coerced };
-          pushProfileUpdate(payload);
+        const hasExtraUpdates = !!(opts?.extraUpdates && Object.keys(opts.extraUpdates).length);
+        if(hasExtraUpdates){
+          queueProfileExtras(opts.extraUpdates);
+        }
+        if(opts?.force || prev !== coerced || hasExtraUpdates){
+          markProfileDirty();
         }
         if(!opts || !opts.silent) updateGoldView();
       }
       function updateGoldView(){ if(els.gold){ if(isAdmin()){ els.gold.textContent = '∞'; } else { els.gold.textContent = formatNum(state.gold||0); } } updateShopButtons(); }
       function addGold(amount){ if(!(amount>0)) return; state.gold = (state.gold||0) + Math.floor(amount); saveGold(); }
       function spendGold(amount, opts){ amount = Math.floor(amount); if(!(amount>0)) return false; if((state.gold||0) < amount) return false; state.gold -= amount; if(opts?.deferSave) return true; saveGold(opts); return true; }
+
       function loadDiamonds(){
         if(isAdmin()){
           state.diamonds = Number.POSITIVE_INFINITY;
           updateDiamondsView();
           return;
         }
-        const stored = userProfile?.diamonds;
-        if(typeof stored === 'number' && isFinite(stored)){
-          state.diamonds = clampNumber(stored, 0, Number.MAX_SAFE_INTEGER, stored);
+        const stored = (userProfile && typeof userProfile.diamonds === 'number' && isFinite(userProfile.diamonds)) ? userProfile.diamonds : null;
+        if(stored !== null){
+          state.diamonds = clampCurrencyValue(stored);
           userProfile.diamonds = state.diamonds;
           if(state.profile) state.profile.diamonds = state.diamonds;
         } else {
@@ -3267,19 +3546,341 @@ ${parts.join(', ')}`;
       function saveDiamonds(opts){
         if(isAdmin()) return;
         if(!userProfile) return;
-        const coerced = clampNumber(state.diamonds, 0, Number.MAX_SAFE_INTEGER, 0);
+        const coerced = clampCurrencyValue(state.diamonds);
         state.diamonds = coerced;
         const prev = typeof userProfile.diamonds === 'number' && isFinite(userProfile.diamonds) ? userProfile.diamonds : null;
         userProfile.diamonds = coerced;
         if(state.profile) state.profile.diamonds = coerced;
         if(opts?.force || prev !== coerced){
-          pushProfileUpdate({ diamonds: coerced });
+          markProfileDirty();
         }
         if(!opts || !opts.silent) updateDiamondsView();
       }
       function updateDiamondsView(){ if(els.diamonds){ els.diamonds.textContent = isAdmin()? '∞' : formatNum(state.diamonds||0); } updateShopButtons(); }
-      function addDiamonds(amount){ amount = Math.floor(amount); if(!(amount>0)) return; if(isAdmin()) return; state.diamonds += amount; saveDiamonds(); }
+      function addDiamonds(amount){ amount = Math.floor(amount); if(!amount || isNaN(amount)) return; if(isAdmin()) return; state.diamonds = Math.max(0, (state.diamonds || 0) + amount); saveDiamonds(); }
       function spendDiamonds(amount){ amount = Math.floor(amount); if(!(amount>0)) return false; if(isAdmin()) return true; if((state.diamonds||0) < amount) return false; state.diamonds -= amount; saveDiamonds(); return true; }
+
+      function updateItemCountsView(){ const items = state.items || {}; const f = (value)=> formatNum(value || 0);
+        setTextContent(els.petTicketCount, f(items.petTicket));
+        setTextContent(els.petTicketInline, f(items.petTicket));
+        setTextContent(els.holyWaterCount, f(items.holyWater));
+        setTextContent(els.potionCount, f(items.potion));
+        setTextContent(els.hyperPotionCount, f(items.hyperPotion));
+        setTextContent(els.protectCount, f(items.protect));
+        setTextContent(els.enhanceCount, f(items.enhance));
+        setTextContent(els.battleResCount, f(items.battleRes));
+        setTextContent(els.battleResRemain, f(items.battleRes));
+        setTextContent(els.battleResInline, f(items.battleRes));
+        setTextContent(els.invPotion, f(items.potion));
+        setTextContent(els.invHyper, f(items.hyperPotion));
+        setTextContent(els.invProtect, f(items.protect));
+        setTextContent(els.invEnhance, f(items.enhance));
+        setTextContent(els.invBattleRes, f(items.battleRes));
+        setTextContent(els.invHolyWater, f(items.holyWater));
+        setTextContent(els.reviveCount, f(items.revive));
+      }
+
+      function updateBattleResControls(){ if(!els.battleResUse) return; const admin = isAdmin(); const items = state.items || {}; const available = admin ? Number.POSITIVE_INFINITY : (items.battleRes || 0); const enabled = admin || (state.combat.useBattleRes && available > 0);
+        els.battleResUse.checked = state.combat.useBattleRes && available > 0;
+        if(els.battleResInline) els.battleResInline.textContent = formatNum(available);
+        if(els.battleResCount) els.battleResCount.textContent = formatNum(available);
+        els.battleResUse.disabled = !admin && available <= 0;
+        if(els.battleResToggle) els.battleResToggle.classList.toggle('disabled', !enabled);
+      }
+
+      function shopPrice(type){ const prices = state.config.shopPrices || DEFAULT_SHOP_PRICES; const val = Object.prototype.hasOwnProperty.call(prices, type) ? prices[type] : DEFAULT_SHOP_PRICES[type]; return Math.max(0, Math.floor(val)); }
+      function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceHolyWater) els.priceHolyWater.textContent = formatNum(shopPrice('holyWater')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack'));
+        const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0);
+        const buttons = els.shopPanel.querySelectorAll('.shop-buy');
+        buttons.forEach(function(btn){ const type = btn.dataset.item; if(!type) return; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; });
+        const diamonds = state.diamonds === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.diamonds || 0);
+        const diamondButtons = els.shopPanel.querySelectorAll('.diamond-pack-buy');
+        diamondButtons.forEach((btn)=>{ const packId = btn.dataset.pack || btn.closest('[data-pack-id]')?.dataset.packId; const pack = findDiamondPack(packId); if(!pack){ btn.disabled = true; return; } btn.disabled = diamonds !== Number.POSITIVE_INFINITY && pack.diamonds > diamonds; });
+      }
+      function setShopMessage(msg, status){ if(!els.shopMsg) return; els.shopMsg.textContent = msg || ''; els.shopMsg.classList.remove('ok','warn','error'); if(status){ els.shopMsg.classList.add(status); } }
+      function renderDiamondShop(){ if(!els.diamondShopGrid) return; const grid = els.diamondShopGrid; grid.textContent = ''; const frag = document.createDocumentFragment(); DIAMOND_SHOP_PACKS.forEach((pack)=>{ const card = document.createElement('div'); card.className = 'diamond-pack'; card.dataset.packId = pack.id; card.innerHTML = `
+          <div class="diamond-pack__title">${pack.label}</div>
+          <div class="diamond-pack__cost">💎 ${formatNum(pack.diamonds)}</div>
+          <div class="diamond-pack__reward">포인트 ${formatNum(pack.points)}</div>
+          <div class="diamond-pack__reward">골드 ${formatNum(pack.gold)}</div>
+          ${pack.bonus ? `<div class="diamond-pack__bonus">${pack.bonus}</div>` : ''}
+          <button type="button" class="diamond-pack__buy diamond-pack-buy" data-pack="${pack.id}">구매</button>`; frag.appendChild(card); }); grid.appendChild(frag); if(els.diamondShop){ els.diamondShop.hidden = DIAMOND_SHOP_PACKS.length === 0; } updateShopButtons(); }
+      function findDiamondPack(id){ return id ? (DIAMOND_PACK_LOOKUP[id] || null) : null; }
+      function buyDiamondPack(packId){ const pack = findDiamondPack(packId); if(!pack){ setShopMessage('알 수 없는 다이아 상품입니다.', 'warn'); return; } if(!spendDiamonds(pack.diamonds)){ setShopMessage('다이아가 부족합니다.', 'error'); updateShopButtons(); return; } if(pack.points > 0){ addPoints(pack.points); }
+        if(pack.gold > 0){ addGold(pack.gold); }
+        setShopMessage(`💎 ${formatNum(pack.diamonds)} 다이아 사용! 포인트 ${formatNum(pack.points)}, 골드 ${formatNum(pack.gold)}를 획득했습니다.`, 'ok');
+        updateShopButtons();
+        markProfileDirty();
+      }
+      function onShopClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(target.classList.contains('diamond-pack-buy')){ const packId = target.dataset.pack || target.closest('[data-pack-id]')?.dataset.packId; if(packId){ buyDiamondPack(packId); } return; } if(!target.classList.contains('shop-buy')) return; const item = target.dataset.item; const count = parseInt(target.dataset.count||'1',10) || 1; if(item) buyShopItem(item, count); }
+      function grantStarterPack(count){ count = Math.max(1, parseInt(count,10)||1); const rng = getRng(); for(let n=0;n<count;n++){ PART_DEFS.forEach(function(part){ const item = { id: state.itemSeq++, tier: 'B', part: part.key, base: rollStatFor('B', part.key, rng), lvl: 0, type: part.type }; applyEquipAndInventory(item); }); } updateInventoryView(); }
+      function buyShopItem(type, count){
+        count = Math.max(1, parseInt(count,10)||1);
+        const totalCost = shopPrice(type) * count;
+        if(state.gold !== Number.POSITIVE_INFINITY && (state.gold||0) < totalCost){ setShopMessage('골드가 부족합니다.', 'error'); return; }
+        if(!spendGold(totalCost, { deferSave:true })){ setShopMessage('골드 차감에 실패했습니다.', 'error'); return; }
+        switch(type){
+          case 'potion':
+            state.items.potion = (state.items.potion||0) + count;
+            setShopMessage(`가속 물약 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'hyperPotion':
+            state.items.hyperPotion = (state.items.hyperPotion||0) + count;
+            setShopMessage(`초 가속 물약 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'protect':
+            state.items.protect = (state.items.protect||0) + count;
+            setShopMessage(`보호권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'enhance':
+            state.items.enhance = (state.items.enhance||0) + count;
+            setShopMessage(`강화권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'battleRes':
+            state.items.battleRes = (state.items.battleRes||0) + count;
+            setShopMessage(`전투부활권 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'holyWater':
+            state.items.holyWater = (state.items.holyWater||0) + count;
+            setShopMessage(`성수 ${count}개를 구매했습니다.`, 'ok');
+            break;
+          case 'starterPack':
+            grantStarterPack(count);
+            setShopMessage(`초보자 패키지를 구매했습니다! B 등급 장비 ${count*PART_KEYS.length}개를 획득했습니다.`, 'ok');
+            markQuestCompleted('starterPackPurchase');
+            break;
+          default:
+            setShopMessage('알 수 없는 아이템입니다.', 'warn');
+            addGold(totalCost);
+            return;
+        }
+        const itemsPayload = sanitizeItems(state.items);
+        state.items = itemsPayload;
+        if(userProfile){ userProfile.items = { ...itemsPayload }; }
+        if(state.profile){ state.profile.items = { ...itemsPayload }; }
+        if(!isAdmin()){
+          saveGold({ extraUpdates: { items: itemsPayload } });
+        }
+        updateItemCountsView();
+        markProfileDirty();
+      }
+      function canClaimRevive(){ if(isAdmin()) return false; if(totalKept() !== 0) return false; if((state.wallet||0) > 100) return false; return true; }
+      function updateReviveButton(){ if(!els.claimRevive) return; const show = canClaimRevive(); els.claimRevive.style.display = show ? '' : 'none'; els.claimRevive.disabled = !show; }
+      function claimRevive(){ if(!canClaimRevive()){ alert('부활권을 받을 조건이 아닙니다. (장비 0개, 포인트 100 이하 필요)'); return; } state.items.revive = (state.items.revive||0) + 1; addPoints(1000); updateItemCountsView(); updateReviveButton(); markProfileDirty(); alert('부활권을 획득하고 1,000 포인트를 받았습니다!'); }
+
+      // Quest helpers
+      let questToastTimer = null;
+
+      function ensureQuestState(){
+        state.quests = sanitizeQuestState(state.quests);
+        return state.quests;
+      }
+
+      function ensureQuestStatus(questId){
+        const quests = ensureQuestState();
+        if(!quests.statuses[questId]){
+          quests.statuses[questId] = {
+            completed: false,
+            rewardGranted: false,
+            completedAt: null,
+            rewardAt: null
+          };
+        }
+        return quests.statuses[questId];
+      }
+
+      function showQuestToast(message){
+        if(!els.questToast || !message) return;
+        els.questToast.textContent = message;
+        els.questToast.classList.add('show');
+        if(questToastTimer){
+          clearTimeout(questToastTimer);
+        }
+        questToastTimer = setTimeout(()=>{
+          if(els.questToast){
+            els.questToast.classList.remove('show');
+          }
+          questToastTimer = null;
+        }, 3200);
+      }
+
+      function refreshQuestBadge(){
+        if(!els.questBadge) return;
+        const quests = ensureQuestState();
+        let readyToClaim = 0;
+        QUEST_DEFINITIONS.forEach((quest)=>{
+          const status = quests.statuses[quest.id];
+          if(status && status.completed && !status.rewardGranted){
+            readyToClaim++;
+          }
+        });
+        if(readyToClaim > 0){
+          els.questBadge.textContent = String(readyToClaim);
+          els.questBadge.hidden = false;
+        } else {
+          els.questBadge.hidden = true;
+        }
+      }
+
+      function renderQuestItem(quest, status){
+        const container = document.createElement('div');
+        container.className = 'quest-item';
+        container.setAttribute('role', 'listitem');
+
+        const header = document.createElement('div');
+        header.className = 'quest-item__header';
+        const title = document.createElement('div');
+        title.className = 'quest-item__title';
+        title.textContent = quest.title;
+        const badge = document.createElement('span');
+        badge.className = 'quest-item__status';
+        if(status.rewardGranted){
+          badge.textContent = '완료';
+          badge.dataset.status = 'done';
+        } else if(status.completed){
+          badge.textContent = '보상 지급 대기';
+          badge.dataset.status = 'pending';
+        } else {
+          badge.textContent = '진행 중';
+          badge.dataset.status = 'active';
+        }
+        header.appendChild(title);
+        header.appendChild(badge);
+
+        const desc = document.createElement('p');
+        desc.className = 'quest-item__desc';
+        desc.textContent = quest.description;
+
+        const reward = document.createElement('div');
+        reward.className = 'quest-item__reward';
+        reward.textContent = `보상: ${quest.rewardLabel || questRewardSummary(quest)}`;
+
+        const actions = document.createElement('div');
+        actions.className = 'quest-item__actions';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'quest-claim';
+        button.dataset.questId = quest.id;
+        if(status.rewardGranted){
+          button.textContent = '보상 수령 완료';
+          button.disabled = true;
+        } else if(status.completed){
+          button.textContent = '보상 받기';
+          button.disabled = false;
+        } else {
+          button.textContent = '미완료';
+          button.disabled = true;
+        }
+        actions.appendChild(button);
+
+        container.appendChild(header);
+        container.appendChild(desc);
+        container.appendChild(reward);
+        container.appendChild(actions);
+        return container;
+      }
+
+      function refreshQuestView(){
+        refreshQuestBadge();
+        if(!els.questList) return;
+        const quests = ensureQuestState();
+        els.questList.innerHTML='';
+        let pendingClaims = 0;
+        QUEST_DEFINITIONS.forEach((quest)=>{
+          const status = ensureQuestStatus(quest.id);
+          const node = renderQuestItem(quest, status);
+          els.questList.appendChild(node);
+          if(status.completed && !status.rewardGranted){ pendingClaims++; }
+        });
+        if(els.questEmpty){
+          els.questEmpty.hidden = pendingClaims !== 0;
+        }
+      }
+
+      function commitQuestState(options){
+        const sanitized = sanitizeQuestState(state.quests);
+        state.quests = sanitized;
+        if(userProfile){ userProfile.quests = sanitized; }
+        if(state.profile){ state.profile.quests = sanitized; }
+        if(options?.skipDirty !== true){
+          markProfileDirty();
+        }
+        if(options?.refreshList === false){
+          refreshQuestBadge();
+        } else {
+          refreshQuestView();
+        }
+      }
+
+      async function grantQuestReward(quest){
+        if(!quest) return null;
+        if(isAdmin()) return null;
+        if(quest.delivery === 'mail'){
+          const uid = currentFirebaseUser?.uid;
+          if(!uid){
+            throw new Error('사용자 정보가 없습니다.');
+          }
+          const mailPayload = {
+            title: quest.mail?.title || `퀘스트 보상 — ${quest.title}`,
+            message: quest.mail?.message || `${quest.title} 퀘스트 달성 보상입니다.`,
+            rewards: (quest.mail && quest.mail.rewards) ? quest.mail.rewards : (quest.rewards || {})
+          };
+          await enqueueMail(uid, mailPayload);
+          return questRewardSummary(quest);
+        }
+        const rewards = quest.rewards || {};
+        if(rewards.points){ addPoints(rewards.points); }
+        if(rewards.gold){ addGold(rewards.gold); }
+        if(rewards.diamonds){ addDiamonds(rewards.diamonds); }
+        return questRewardSummary(quest);
+      }
+
+      function markQuestCompleted(questId, options){
+        if(isAdmin()) return;
+        const quest = QUEST_LOOKUP[questId];
+        if(!quest) return;
+        const status = ensureQuestStatus(questId);
+        if(status.completed){
+          return;
+        }
+        status.completed = true;
+        status.completedAt = Date.now();
+        commitQuestState({});
+        if(options?.notify !== false){
+          showQuestToast(`${quest.title} 완료! 퀘스트 창에서 보상을 받아가세요.`);
+        }
+      }
+
+      async function claimQuestReward(questId){
+        if(isAdmin()) return false;
+        const quest = QUEST_LOOKUP[questId];
+        if(!quest) return false;
+        const status = ensureQuestStatus(questId);
+        if(!status.completed){ showQuestToast('먼저 퀘스트 조건을 달성하세요.'); return false; }
+        if(status.rewardGranted){ showQuestToast('이미 보상을 수령했습니다.'); return false; }
+        try {
+          const summary = await grantQuestReward(quest);
+          status.rewardGranted = true;
+          status.rewardAt = Date.now();
+          commitQuestState({});
+          const message = summary ? `${quest.title} 보상 지급! ${summary}` : `${quest.title} 보상을 받았습니다!`;
+          showQuestToast(message);
+          return true;
+        } catch (error) {
+          console.error('퀘스트 보상 지급 실패', error);
+          showQuestToast('퀘스트 보상 지급에 실패했습니다. 잠시 후 다시 시도해주세요.');
+          return false;
+        }
+      }
+
+      function openQuestModal(opts){ if(!els.questOverlay || !els.questPanel) return; refreshQuestView(); els.questOverlay.hidden = false; requestAnimationFrame(()=>{ els.questOverlay.classList.add('open'); }); document.body.classList.add('modal-open'); state.ui.questOpen = true; if(!opts || !opts.silent){ const quests = ensureQuestState(); if(!quests.seenIntro){ quests.seenIntro = true; commitQuestState({ refreshList: false }); } } }
+
+      function closeQuestModal(){ if(!els.questOverlay) return; state.ui.questOpen = false; els.questOverlay.classList.remove('open'); setTimeout(()=>{ if(!state.ui.questOpen && els.questOverlay){ els.questOverlay.hidden = true; } }, 180); if(!isLegendaryVisible() && !state.ui.characterDetailOpen && !state.ui.userOptionsOpen){ document.body.classList.remove('modal-open'); } }
+
+      function recoverPendingQuestRewards(){ if(isAdmin()) return; const quests = ensureQuestState(); let changed = false; QUEST_DEFINITIONS.forEach((quest)=>{ const status = ensureQuestStatus(quest.id); if(status.completed && !status.completedAt){ status.completedAt = Date.now(); changed = true; } }); if(changed){ commitQuestState({ refreshList: false }); refreshQuestBadge(); } else { refreshQuestBadge(); } }
+
+      function maybeShowQuestIntro(){ if(isAdmin()) return; const quests = ensureQuestState(); if(quests.seenIntro || !els.questOverlay){ return; } openQuestModal({ silent: true }); showQuestToast('새로운 퀘스트가 준비되었습니다!'); setTimeout(()=>{ closeQuestModal(); }, 2200); quests.seenIntro = true; commitQuestState({ refreshList: false }); }
+
 
       // CSV export
       async function exportCsv(){ const rows = [['draw_id','tier','part','stat','run_id','timestamp','config_hash']]; for(const h of state.session.history){ const partName = getPartNameByKey(h.part) || ''; rows.push([h.id, h.tier, partName, h.stat||0, h.runId, new Date(h.ts).toISOString(), h.cfgHash]); } const csv = rows.map(function(r){ return r.map(function(v){ return String(v); }).join(','); }).join('\n'); const blob = new Blob([csv], {type:'text/csv'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gacha_session.csv'; a.click(); URL.revokeObjectURL(a.href); }
@@ -3297,7 +3898,7 @@ ${parts.join(', ')}`;
       function saveGlobal(){ if(!userProfile) return; userProfile.globalStats = state.global; markProfileDirty(); }
 
       // Init
-      function reflectConfig(){ els.seed.value = state.config.seed||''; els.lock.checked = state.config.locked; els.pityEnabled.checked = !!(state.config.pity && state.config.pity.enabled); els.pityFloor.value = (state.config.pity && state.config.pity.floorTier) || 'S'; els.pitySpan.value = (state.config.pity && state.config.pity.span) || 90; els.g10Enabled.checked = !!(state.config.minGuarantee10 && state.config.minGuarantee10.enabled); els.g10Tier.value = (state.config.minGuarantee10 && state.config.minGuarantee10.tier) || 'A';
+      function reflectConfig(){ setInputValue(els.seed, state.config.seed||''); setCheckboxState(els.lock, state.config.locked); setCheckboxState(els.pityEnabled, !!(state.config.pity && state.config.pity.enabled)); setInputValue(els.pityFloor, (state.config.pity && state.config.pity.floorTier) || 'S'); setInputValue(els.pitySpan, (state.config.pity && state.config.pity.span) || 90); setCheckboxState(els.g10Enabled, !!(state.config.minGuarantee10 && state.config.minGuarantee10.enabled)); setInputValue(els.g10Tier, (state.config.minGuarantee10 && state.config.minGuarantee10.tier) || 'A');
         state.petGachaWeights = sanitizePetWeights(state.config.petWeights);
         state.config.petWeights = { ...state.petGachaWeights };
         updatePetWeightInputs();
@@ -3480,6 +4081,12 @@ ${parts.join(', ')}`;
           role,
           email: currentFirebaseUser.email || ''
         };
+        state.profile = userProfile;
+
+        const questState = sanitizeQuestState(userProfile.quests);
+        state.quests = questState;
+        userProfile.quests = questState;
+        if(state.profile){ state.profile.quests = questState; }
 
         attachProfileListener(uid);
 
@@ -3628,9 +4235,12 @@ ${parts.join(', ')}`;
         drawChart();
         renderCharacterStats();
         syncUserOptionsInputs();
+        refreshQuestView();
+        recoverPendingQuestRewards();
+        maybeShowQuestIntro();
       }
 
-      function buildProfilePayload(){
+      function buildProfilePayload(extra){
         if(!state.user){
           return null;
         }
@@ -3645,6 +4255,7 @@ ${parts.join(', ')}`;
           items: sanitizeItems(state.items),
           pets: sanitizePetState(state.pets),
           characters: sanitizeCharacterState(state.characters),
+          quests: sanitizeQuestState(state.quests),
           characterStats: sanitizeCharacterDrawStats(state.characterStats),
           settings: sanitizeUserSettings(state.settings),
           petGachaWeights: sanitizePetWeights(state.petGachaWeights),
@@ -3667,7 +4278,12 @@ ${parts.join(', ')}`;
           createdAt: userProfile?.createdAt || Date.now(),
           updatedAt: Date.now()
         };
+        if(extra && typeof extra === 'object'){ mergePlainObjects(payload, extra); }
+
         if(role !== 'admin'){
+          payload.wallet = clampNumber(state.wallet, 0, Number.MAX_SAFE_INTEGER, 0);
+          payload.gold = clampNumber(state.gold, 0, Number.MAX_SAFE_INTEGER, 0);
+          payload.diamonds = clampNumber(state.diamonds, 0, Number.MAX_SAFE_INTEGER, 0);
           payload.presets = personalPresetsToMap(state.presets.personal);
           payload.selectedPreset = state.selectedPreset && state.selectedPreset.scope ? { scope: state.selectedPreset.scope, id: state.selectedPreset.id } : null;
         } else {
@@ -3695,42 +4311,64 @@ ${parts.join(', ')}`;
 
       async function saveProfileSnapshot(){
         if(!currentFirebaseUser || !userProfile) return;
-        const payload = buildProfilePayload();
+        const extraSnapshot = collectPendingProfileExtras();
+        const payload = buildProfilePayload(extraSnapshot);
         if(!payload) return;
+        if(profileSaveTimer){
+          clearTimeout(profileSaveTimer);
+          profileSaveTimer = null;
+        }
         const uid = currentFirebaseUser.uid;
         const profileRef = ref(db, `users/${uid}`);
-        try {
-          if(profileSaveTimer){
-            clearTimeout(profileSaveTimer);
-            profileSaveTimer = null;
+        let attempt = 0;
+        while(true){
+          try {
+            await update(profileRef, payload);
+            if(typeof payload.username === 'string'){ userProfile.username = payload.username; }
+            userProfile.role = payload.role;
+            if(Object.prototype.hasOwnProperty.call(payload, 'wallet')){ userProfile.wallet = payload.wallet; }
+            if(Object.prototype.hasOwnProperty.call(payload, 'gold')){ userProfile.gold = payload.gold; }
+            if(Object.prototype.hasOwnProperty.call(payload, 'diamonds')){ userProfile.diamonds = payload.diamonds; }
+            userProfile.pitySince = payload.pitySince;
+            userProfile.updatedAt = payload.updatedAt;
+            if(payload.createdAt && !userProfile.createdAt){ userProfile.createdAt = payload.createdAt; }
+            userProfile.config = state.config;
+            userProfile.globalStats = state.global;
+            userProfile.items = payload.items || state.items;
+            userProfile.pets = state.pets;
+            userProfile.characters = state.characters;
+            userProfile.characterStats = state.characterStats;
+            userProfile.settings = state.settings;
+            userProfile.petGachaWeights = state.petGachaWeights;
+            if('enhance' in userProfile){ delete userProfile.enhance; }
+            userProfile.equip = state.equip;
+            userProfile.spares = state.spares;
+            userProfile.session = state.session;
+            userProfile.combat = { useBattleRes: state.combat.useBattleRes, prefBattleRes: state.combat.prefBattleRes };
+            userProfile.forge = { protectEnabled: state.forge.protectEnabled };
+            recordProfileSaveSuccess();
+            if(isAdmin()){
+              await persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
+            }
+            return;
+          } catch (error) {
+            console.error(`프로필 저장 실패 (시도 ${attempt + 1})`, error);
+            const delay = PROFILE_SAVE_RETRY_DELAYS[attempt];
+            if(delay === undefined){
+              if(extraSnapshot){
+                state.pendingProfileExtras = mergePlainObjects(state.pendingProfileExtras || {}, extraSnapshot);
+              }
+              const stats = state.profileSaveStats || (state.profileSaveStats = { recent: [], lastWarnAt: 0, lastErrorAt: 0 });
+              stats.lastErrorAt = Date.now();
+              if(typeof setShopMessage === 'function'){
+                setShopMessage('프로필 저장에 실패했습니다. 잠시 후 다시 시도합니다.', 'warn');
+              }
+              markProfileDirty();
+              return;
+            }
+            await sleep(delay);
+            attempt += 1;
           }
-          await update(profileRef, payload);
-          if(typeof payload.username === 'string'){ userProfile.username = payload.username; }
-          userProfile.role = payload.role;
-          if(Object.prototype.hasOwnProperty.call(payload, 'wallet')){ userProfile.wallet = payload.wallet; }
-          if(Object.prototype.hasOwnProperty.call(payload, 'gold')){ userProfile.gold = payload.gold; }
-          userProfile.pitySince = payload.pitySince;
-          userProfile.updatedAt = payload.updatedAt;
-          if(payload.createdAt && !userProfile.createdAt){ userProfile.createdAt = payload.createdAt; }
-          userProfile.config = state.config;
-          userProfile.globalStats = state.global;
-          userProfile.items = state.items;
-          userProfile.pets = state.pets;
-          userProfile.characters = state.characters;
-          userProfile.characterStats = state.characterStats;
-          userProfile.settings = state.settings;
-          userProfile.petGachaWeights = state.petGachaWeights;
-          if('enhance' in userProfile){ delete userProfile.enhance; }
-          userProfile.equip = state.equip;
-          userProfile.spares = state.spares;
-          userProfile.session = state.session;
-          userProfile.combat = { useBattleRes: state.combat.useBattleRes, prefBattleRes: state.combat.prefBattleRes };
-          userProfile.forge = { protectEnabled: state.forge.protectEnabled };
-          if(isAdmin()){
-            await persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
-          }
-        } catch (error) {
-          console.error('프로필 저장 실패', error);
         }
       }
 
@@ -3935,7 +4573,43 @@ ${parts.join(', ')}`;
         if(els.battleEnemyReward){ const estimated = calcGoldReward(lvl, ()=>0.5); els.battleEnemyReward.textContent = formatNum(estimated) + ' G'; }
       }
       function setLevel(lvl){ if(!(lvl>=1)) lvl=1; if(lvl>999) lvl=999; state.combat.lastLevel = lvl; if(els.monLevel) els.monLevel.value = String(lvl); if(els.monLevelVal) els.monLevelVal.textContent = String(lvl); if(els.battleEnemyLevel) els.battleEnemyLevel.textContent = String(lvl); if(els.battleEnemyReward){ const estimated = calcGoldReward(lvl, ()=>0.5); els.battleEnemyReward.textContent = formatNum(estimated) + ' G'; } updateWinProbView(); }
-      function doFight(){ if(!els.monLevel || !els.fightResult) return; const now=Date.now(); const remain = manualCooldownRemain(now); if(remain>0){ els.fightResult.textContent = `쿨다운 ${Math.ceil(remain/1000)}초 남음`; return; } state.timers.manualLast = now; const rng = getRng(); const lvl = parseInt(els.monLevel.value||'1',10); const {atk, def} = getTotals(); const p = winProbability(atk, def, lvl); const u = rng(); const win = u < p; if(win){ const reward = levelReward(lvl); addPoints(reward); const goldGain = calcGoldReward(lvl, rng); addGold(goldGain); const gains=[]; if(maybeDropEnhance(rng, lvl)) gains.push('강화권 +1'); if(maybeDropPotion(rng, lvl)) gains.push('가속 물약 +1'); if(maybeDropHyperPotion(rng, lvl)) gains.push('초 가속 물약 +1'); if(maybeDropProtect(rng, lvl)) gains.push('보호권 +1'); if(maybeDropBattleRes(rng, lvl)) gains.push('전투부활권 +1'); updateItemCountsView(); const msg = `Lv.${lvl} 전투 승리! (+${formatNum(reward)} 포인트, +${formatNum(goldGain)} 골드` + (gains.length? ', '+gains.join(', '):'') + `, p=${(p*100).toFixed(2)}%)`; els.fightResult.textContent = msg; } else { if(consumeBattleResToken(lvl,'manual')) return; els.fightResult.textContent = `Lv.${lvl} 전투 패배... (p=${(p*100).toFixed(2)}%)`; } }
+      function doFight(){
+        if(!els.monLevel || !els.fightResult) return;
+        const now = Date.now();
+        const remain = manualCooldownRemain(now);
+        if(remain > 0){
+          els.fightResult.textContent = `쿨다운 ${Math.ceil(remain/1000)}초 남음`;
+          return;
+        }
+        state.timers.manualLast = now;
+        const rng = getRng();
+        const lvl = parseInt(els.monLevel.value || '1', 10);
+        const { atk, def } = getTotals();
+        const p = winProbability(atk, def, lvl);
+        const win = rng() < p;
+        if(win){
+          const reward = levelReward(lvl);
+          addPoints(reward);
+          const goldGain = calcGoldReward(lvl, rng);
+          addGold(goldGain);
+          const gains = [];
+          if(maybeDropEnhance(rng, lvl)) gains.push('강화권 +1');
+          if(maybeDropPotion(rng, lvl)) gains.push('가속 물약 +1');
+          if(maybeDropHyperPotion(rng, lvl)) gains.push('초 가속 물약 +1');
+          if(maybeDropProtect(rng, lvl)) gains.push('보호권 +1');
+          if(maybeDropBattleRes(rng, lvl)) gains.push('전투부활권 +1');
+          updateItemCountsView();
+          const msg = `Lv.${lvl} 전투 승리! (+${formatNum(reward)} 포인트, +${formatNum(goldGain)} 골드${gains.length ? ', ' + gains.join(', ') : ''}, p=${(p*100).toFixed(2)}%)`;
+          els.fightResult.textContent = msg;
+          markQuestCompleted('firstBattleWin');
+          if(lvl >= 100){
+            markQuestCompleted('slayLevel100');
+          }
+        } else {
+          if(consumeBattleResToken(lvl, 'manual')) return;
+          els.fightResult.textContent = `Lv.${lvl} 전투 패배... (p=${(p*100).toFixed(2)}%)`;
+        }
+      }
 
       function isAccelActive(now){ now = now || Date.now(); return (state.buffs.hyperUntil||0) > now || (state.buffs.accelUntil||0) > now; }
       function currentManualCooldown(now){ if(typeof now!=='number') now = Date.now(); if((state.buffs.hyperUntil||0) > now){ const hyperCfg = getHyperPotionSettings(); return Math.max(0, hyperCfg.manualCdMs ?? DEFAULT_HYPER_POTION_SETTINGS.manualCdMs ?? CD_MANUAL_MS); } if((state.buffs.accelUntil||0) > now){ const potCfg = getPotionSettings(); return Math.max(0, potCfg.manualCdMs ?? DEFAULT_POTION_SETTINGS.manualCdMs ?? CD_MANUAL_MS); } return CD_MANUAL_MS; }
@@ -3954,9 +4628,49 @@ ${parts.join(', ')}`;
       function stopAutoTimer(){ if(state.timers.autoTimer){ clearInterval(state.timers.autoTimer); state.timers.autoTimer=null; }
         state.timers.autoLast = 0;
       }
-      function autoHuntOnce(){ if(!els.monLevel) return; const rng = getRng(); const lvl = parseInt(els.monLevel.value||'1',10); const {atk, def} = getTotals(); const p = winProbability(atk, def, lvl); const u = rng(); const win = u < p; if(win){ const reward = levelReward(lvl); addPoints(reward); const goldGain = calcGoldReward(lvl, rng); addGold(goldGain); const gains=[]; if(maybeDropEnhance(rng, lvl)) gains.push('강화권 +1'); if(maybeDropPotion(rng, lvl)) gains.push('가속 물약 +1'); if(maybeDropHyperPotion(rng, lvl)) gains.push('초 가속 물약 +1'); if(maybeDropProtect(rng, lvl)) gains.push('보호권 +1'); if(maybeDropBattleRes(rng, lvl)) gains.push('전투부활권 +1'); updateItemCountsView(); if(els.fightResult){ const msg = `자동사냥: Lv.${lvl} 승리! (+${formatNum(reward)} 포인트, +${formatNum(goldGain)} 골드` + (gains.length? ', '+gains.join(', '):'') + `, p=${(p*100).toFixed(2)}%)`; els.fightResult.textContent = msg; } } else { // penalty
+      function autoHuntOnce(){
+        if(!els.monLevel) return;
+        const rng = getRng();
+        const lvl = parseInt(els.monLevel.value || '1', 10);
+        const { atk, def } = getTotals();
+        const p = winProbability(atk, def, lvl);
+        const win = rng() < p;
+        if(win){
+          const reward = levelReward(lvl);
+          addPoints(reward);
+          const goldGain = calcGoldReward(lvl, rng);
+          addGold(goldGain);
+          const gains = [];
+          if(maybeDropEnhance(rng, lvl)) gains.push('강화권 +1');
+          if(maybeDropPotion(rng, lvl)) gains.push('가속 물약 +1');
+          if(maybeDropHyperPotion(rng, lvl)) gains.push('초 가속 물약 +1');
+          if(maybeDropProtect(rng, lvl)) gains.push('보호권 +1');
+          if(maybeDropBattleRes(rng, lvl)) gains.push('전투부활권 +1');
+          updateItemCountsView();
+          if(els.fightResult){
+            const msg = `자동사냥: Lv.${lvl} 승리! (+${formatNum(reward)} 포인트, +${formatNum(goldGain)} 골드${gains.length ? ', ' + gains.join(', ') : ''}, p=${(p*100).toFixed(2)}%)`;
+            els.fightResult.textContent = msg;
+          }
+          markQuestCompleted('firstBattleWin');
+          if(lvl >= 100){
+            markQuestCompleted('slayLevel100');
+          }
+        } else {
           if(consumeBattleResToken(lvl, 'auto')){ return; }
-          const choosePoints = rng() < 0.5; if(choosePoints && !isAdmin() && state.wallet>0){ const lost = Math.floor(state.wallet * 0.5); state.wallet -= lost; saveWallet(); updatePointsView(); if(els.fightResult) els.fightResult.textContent = `자동사냥: Lv.${lvl} 패배... 포인트 ${formatNum(lost)} 손실`; } else { const n = Math.max(1, Math.min(3, (1 + Math.floor(rng()*3)))); const removed = removeRandomItems(n, rng); const removedTxt = removed.map(itemLabel).join(', '); if(els.fightResult) els.fightResult.textContent = `자동사냥: Lv.${lvl} 패배... 장비 ${removed.length}개 손실 (${removedTxt})`; updateInventoryView(); }
+          const choosePoints = rng() < 0.5;
+          if(choosePoints && !isAdmin() && state.wallet > 0){
+            const lost = Math.floor(state.wallet * 0.5);
+            state.wallet -= lost;
+            saveWallet();
+            updatePointsView();
+            if(els.fightResult) els.fightResult.textContent = `자동사냥: Lv.${lvl} 패배... 포인트 ${formatNum(lost)} 손실`;
+          } else {
+            const n = Math.max(1, Math.min(3, (1 + Math.floor(rng() * 3))));
+            const removed = removeRandomItems(n, rng);
+            const removedTxt = removed.map(itemLabel).join(', ');
+            if(els.fightResult) els.fightResult.textContent = `자동사냥: Lv.${lvl} 패배... 장비 ${removed.length}개 손실 (${removedTxt})`;
+            updateInventoryView();
+          }
           maybeAwardRevive();
         }
       }
@@ -3985,7 +4699,77 @@ ${parts.join(', ')}`;
       }
 
       // Forge UI/model
-      function showForgeEffect(kind){ const eff = els.forgeEffect; if(!eff) return; const textMap = { success:'강화 성공!', fail:'강화 실패...', protected:'보호권 발동!', destroyed:'장비 파괴...' }; if(forgeEffectTimer){ clearTimeout(forgeEffectTimer); forgeEffectTimer = null; } eff.classList.remove('success','fail','protected','destroyed','show'); // restart animation
+      function onSpareListClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(!target.classList.contains('equip-btn')) return; const part = target.dataset.part; if(!part) return; equipSpare(part); }
+      function equipSpare(part){
+        const spareItem = state.spares[part];
+        if(!spareItem){ alert('예비 장비가 없습니다.'); return; }
+        const equipped = state.equip[part];
+        const partName = (PART_DEFS.find((p) => p.key === part)?.name) || '장비';
+        if(equipped){
+          const ok = confirm(`${partName} 부위에 장착된 장비를 예비로 이동하고 선택한 장비로 교체할까요?`);
+          if(!ok) return;
+          state.spares[part] = equipped;
+        } else {
+          state.spares[part] = null;
+        }
+        state.equip[part] = spareItem;
+        updateInventoryView();
+        buildForgeTargetOptions();
+        updateItemCountsView();
+        setForgeMsg('장비를 교체했습니다.', 'ok');
+        markProfileDirty();
+      }
+
+      function setAutoForgeRunning(running){ running = !!running; state.forge.autoRunning = running; if(els.forgeAuto){ els.forgeAuto.textContent = running ? '자동 강화 중지' : '자동 강화'; els.forgeAuto.classList.toggle('forge-auto-running', running); }
+        if(els.forgeOnce){ els.forgeOnce.disabled = running; } }
+
+      function buildForgeTable(){ const tb = els.forgeTableBody; if(!tb) return; tb.innerHTML=''; const admin = isAdmin(); for(let lv=1; lv<=20; lv++){ const tr = document.createElement('tr'); const mul = state.enhance.multipliers[lv]||1; const p = state.enhance.probs[lv]||0; tr.innerHTML = `<td>${lv}</td><td><input data-kind="mul" data-lv="${lv}" type="number" step="any" value="${mul}" style="width:100px" ${admin?'':'disabled'} /></td><td><input data-kind="p" data-lv="${lv}" type="number" step="any" min="0" max="1" value="${p}" style="width:100px" ${admin?'':'disabled'} /></td>`; tb.appendChild(tr); } }
+
+      function onForgeTableInput(e){ const t = e.target; if(!(t instanceof HTMLInputElement)) return; if(!isAdmin()) return; const lv = parseInt(t.dataset.lv||'0',10); if(!lv) return; let changed = false; if(t.dataset.kind==='mul'){ let v = parseFloat(t.value); if(!(v>0)) v = 1; state.enhance.multipliers[lv] = v; t.value = String(v); changed = true; } else if(t.dataset.kind==='p'){ let v = parseFloat(t.value); if(!(v>=0)) v = 0; if(v>1) v = 1; state.enhance.probs[lv] = v; t.value = String(v); changed = true; } if(!changed) return; updateForgeInfo(); markProfileDirty(); if(isAdmin()){ persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName }); } }
+
+      function currentForgeItem(){ const v = els.forgeTarget?.value||''; if(!v) return null; const [kind, id] = v.split(':'); if(kind==='equip'){ return state.equip[id] || null; } if(kind==='spare'){ return state.spares[id] || null; } return null; }
+
+      function buildForgeTargetOptions(){ const sel = els.forgeTarget; if(!sel) return; const options = []; PART_DEFS.forEach(function(p){ const it = state.equip[p.key]; if(it) options.push({key:`equip:${p.key}`, label:`장착-${p.name} ${it.tier} ${formatNum(effectiveStat(it))} (Lv.${it.lvl||0})`, ref: it}); }); PART_DEFS.forEach(function(p){ const spare = state.spares[p.key]; if(spare) options.push({key:`spare:${p.key}`, label:`예비-${p.name} ${spare.tier} ${formatNum(effectiveStat(spare))} (Lv.${spare.lvl||0})`, ref: spare}); }); const prev = sel.value; sel.innerHTML=''; options.forEach(function(o){ const opt = document.createElement('option'); opt.value = o.key; opt.textContent = o.label; sel.appendChild(opt); }); if(options.length===0){ const opt = document.createElement('option'); opt.value=''; opt.textContent='보강할 장비 없음'; sel.appendChild(opt); } sel.value = options.some(function(o){ return o.key===prev; }) ? prev : sel.value; if(options.length===0 && state.forge.autoRunning){ setAutoForgeRunning(false); } updateForgeInfo(); updateForgeControlsView(); updateItemCountsView(); }
+
+      function updateForgeControlsView(){ if(!els.forgeProtectUse) return; els.forgeProtectUse.checked = !!state.forge.protectEnabled; }
+
+      function updateForgeInfo(){ const it = currentForgeItem(); if(!it){ if(els.forgeLv) els.forgeLv.textContent = '0'; if(els.forgeMul) els.forgeMul.textContent = '1.00×'; if(els.forgeP) els.forgeP.textContent = '-'; if(els.forgePreview) els.forgePreview.textContent = '-'; if(els.forgeStageMul) els.forgeStageMul.textContent = '1.00×'; if(els.forgeNextMul) els.forgeNextMul.textContent = '-'; if(els.forgeCostEnh) els.forgeCostEnh.textContent = '0'; if(els.forgeCostProtect) els.forgeCostProtect.textContent = '0'; if(els.forgeCostGold) els.forgeCostGold.textContent = '0'; if(els.forgeOnce) els.forgeOnce.disabled = true; return; }
+        const lv = it.lvl || 0;
+        const next = Math.min(20, lv + 1);
+        const currentMul = state.enhance.multipliers[lv] || 1;
+        const nextMul = (next <= 20 ? state.enhance.multipliers[next] : currentMul);
+        const successProb = lv >= 20 ? null : (state.enhance.probs[next] || 0);
+        const stepMultiplier = lv >= 20 ? null : (nextMul / (currentMul || 1));
+        const nextTotalMul = lv >= 20 ? null : nextMul;
+        const enhanceCost = ENHANCE_TICKET_COST[next] || 0;
+        const protectCost = ENHANCE_PROTECT_COST[next] || 0;
+        const expectedGold = ENHANCE_EXPECTED_GOLD[next] || 0;
+
+        if(els.forgeLv) els.forgeLv.textContent = String(lv);
+        if(els.forgeMul) els.forgeMul.textContent = `${currentMul.toFixed(2)}×`;
+        if(els.forgeP) els.forgeP.textContent = successProb === null ? '-' : `${(successProb * 100).toFixed(2)}%`;
+        if(els.forgeStageMul) els.forgeStageMul.textContent = stepMultiplier === null ? '-' : `${stepMultiplier.toFixed(stepMultiplier >= 10 ? 1 : 3)}×`;
+        if(els.forgeNextMul) els.forgeNextMul.textContent = nextTotalMul === null ? '-' : `${nextTotalMul.toFixed(nextTotalMul >= 10 ? 1 : 3)}×`;
+        if(els.forgeCostEnh) els.forgeCostEnh.textContent = lv >= 20 ? '-' : String(enhanceCost);
+        if(els.forgeCostProtect) els.forgeCostProtect.textContent = lv >= 20 ? '-' : String(protectCost);
+        if(els.forgeCostGold) els.forgeCostGold.textContent = lv >= 20 ? '-' : formatNum(expectedGold);
+
+        const cur = effectiveStat(it);
+        const after = Math.floor((it.base || 0) * nextMul);
+        if(els.forgePreview){
+          if(lv >= 20){ els.forgePreview.textContent = '-'; }
+          else {
+            const curMulText = currentMul.toFixed(currentMul >= 10 ? 1 : 3);
+            const nextMulText = nextMul.toFixed(nextMul >= 10 ? 1 : 3);
+            els.forgePreview.textContent = `${formatNum(cur)} (×${curMulText}) → ${formatNum(after)} (×${nextMulText})`;
+          }
+        }
+        if(els.forgeOnce) els.forgeOnce.disabled = lv >= 20;
+      }
+
+      function setForgeMsg(text, tone){ if(!els.forgeMsg) return; els.forgeMsg.textContent = text || ''; els.forgeMsg.classList.remove('msg-ok','msg-warn','msg-danger','muted'); if(tone==='ok'){ els.forgeMsg.classList.add('msg-ok'); } else if(tone==='warn'){ els.forgeMsg.classList.add('msg-warn'); } else if(tone==='danger'){ els.forgeMsg.classList.add('msg-danger'); } else { els.forgeMsg.classList.add('muted'); } }
+
+      function showForgeEffect(kind){ const eff = els.forgeEffect; if(!eff) return; const textMap = { success:'강화 성공!', fail:'강화 실패...', protected:'보호권 발동!', destroyed:'장비 파괴...' }; if(forgeEffectTimer){ clearTimeout(forgeEffectTimer); forgeEffectTimer = null; } eff.classList.remove('success','fail','protected','destroyed','show');
         void eff.offsetWidth;
         if(kind === 'success'){ eff.classList.add('success'); }
         else if(kind === 'protected'){ eff.classList.add('protected'); }
@@ -3993,144 +4777,22 @@ ${parts.join(', ')}`;
         else { eff.classList.add('fail'); }
         eff.textContent = textMap[kind] || '';
         eff.classList.add('show');
-        forgeEffectTimer = setTimeout(()=>{ eff.classList.remove('show','success','fail','protected','destroyed'); eff.textContent=''; forgeEffectTimer=null; }, 720);
+        forgeEffectTimer = setTimeout(()=>{ if(!els.forgeEffect) return; eff.classList.remove('show','success','fail','protected','destroyed'); eff.textContent=''; forgeEffectTimer=null; }, 720);
       }
 
-      function setAutoForgeRunning(running){ running = !!running; state.forge.autoRunning = running; if(els.forgeAuto){ els.forgeAuto.textContent = running ? '자동 강화 중지' : '자동 강화'; els.forgeAuto.classList.toggle('forge-auto-running', running); }
-        if(els.forgeOnce){ els.forgeOnce.disabled = running; }
-      }
-
-      function buildForgeTable(){ const tb = els.forgeTableBody; tb.innerHTML=''; const admin = isAdmin(); for(let lv=1; lv<=20; lv++){ const tr = document.createElement('tr'); const mul = state.enhance.multipliers[lv]||1; const p = state.enhance.probs[lv]||0; tr.innerHTML = `<td>${lv}</td><td><input data-kind="mul" data-lv="${lv}" type="number" step="any" value="${mul}" style="width:100px" ${admin?'':'disabled'} /></td><td><input data-kind="p" data-lv="${lv}" type="number" step="any" min="0" max="1" value="${p}" style="width:100px" ${admin?'':'disabled'} /></td>`; tb.appendChild(tr); }
-      }
-      function onForgeTableInput(e){
-        const t = e.target;
-        if(!(t instanceof HTMLInputElement)) return;
-        if(!isAdmin()) return;
-        const lv = parseInt(t.dataset.lv||'0',10);
-        if(!lv) return;
-        let changed = false;
-        if(t.dataset.kind==='mul'){
-          let v = parseFloat(t.value);
-          if(!(v>0)) v = 1;
-          state.enhance.multipliers[lv] = v;
-          t.value = String(v);
-          changed = true;
-        } else if(t.dataset.kind==='p'){
-          let v = parseFloat(t.value);
-          if(!(v>=0)) v = 0;
-          if(v>1) v = 1;
-          state.enhance.probs[lv] = v;
-          t.value = String(v);
-          changed = true;
-        }
-        if(!changed) return;
-        updateForgeInfo();
-        markProfileDirty();
-        if(isAdmin()){
-          persistGlobalConfig(state.config, { activePresetId: state.presets.activeGlobalId, activePresetName: state.presets.activeGlobalName });
-        }
-      }
-
-      function performForgeAttempt(opts){
-        const auto = !!(opts && opts.auto);
-        const item = currentForgeItem();
-        if(!item){
-          if(!auto) setForgeMsg('강화할 장비를 선택하세요.', 'warn');
-          showForgeEffect('fail');
-          return {status:'no-item'};
-        }
-        const lv = item.lvl || 0;
-        if(lv >= 20){
-          if(!auto) setForgeMsg('이미 최대 강화 레벨입니다.', 'warn');
-          showForgeEffect('fail');
-          return {status:'max'};
-        }
-        const admin = isAdmin();
-        const nextLv = lv + 1;
-        const enhanceCost = ENHANCE_TICKET_COST[nextLv] || 0;
-        const protectCost = ENHANCE_PROTECT_COST[nextLv] || 0;
-        const expectedGold = ENHANCE_EXPECTED_GOLD[nextLv] || 0;
-        const wantProtect = !!state.forge.protectEnabled;
-
-        if(!auto){
-          const willProtect = wantProtect && (admin || (state.items.protect || 0) >= protectCost);
-          if(!willProtect){
-            const ok = confirm('강화 실패 시 장비가 파괴될 수 있습니다. 계속하시겠습니까?');
-            if(!ok){
-              setForgeMsg('강화를 취소했습니다.', 'warn');
-              return {status:'cancelled'};
-            }
-          }
-        }
-
-        if(!admin && (state.items.enhance || 0) < enhanceCost){
-          if(!auto) setForgeMsg('강화권이 부족합니다.', 'warn');
-          showForgeEffect('fail');
-          return {status:'no-enhance'};
-        }
-
-        if(wantProtect && !admin && protectCost > 0 && (state.items.protect || 0) < protectCost){
-          if(!auto) setForgeMsg('보호권이 부족합니다.', 'warn');
-          showForgeEffect('fail');
-          return {status:'no-protect'};
-        }
-
-        if(!admin && (state.gold || 0) < expectedGold){
-          if(!auto) setForgeMsg('골드가 부족합니다.', 'warn');
-          showForgeEffect('fail');
-          return {status:'no-gold'};
-        }
-
-        if(!admin){
-          state.items.enhance = Math.max(0, (state.items.enhance || 0) - enhanceCost);
-          state.gold = Math.max(0, (state.gold || 0) - expectedGold);
-        }
+      function performForgeAttempt(opts){ opts = opts||{}; const auto = !!opts.auto; const item = currentForgeItem(); if(!item){ if(!auto) setForgeMsg('강화할 장비를 선택하세요.', 'warn'); showForgeEffect('fail'); return {status:'no-item'}; } const lv = item.lvl || 0; if(lv >= 20){ if(!auto) setForgeMsg('이미 최대 강화 레벨입니다.', 'warn'); showForgeEffect('fail'); return {status:'max'}; } const admin = isAdmin(); const nextLv = lv + 1; const enhanceCost = ENHANCE_TICKET_COST[nextLv] || 0; const protectCost = ENHANCE_PROTECT_COST[nextLv] || 0; const expectedGold = ENHANCE_EXPECTED_GOLD[nextLv] || 0; const wantProtect = !!state.forge.protectEnabled;
+        if(!auto){ const willProtect = wantProtect && (admin || (state.items.protect || 0) >= protectCost); if(!willProtect){ const ok = confirm('강화 실패 시 장비가 파괴될 수 있습니다. 계속하시겠습니까?'); if(!ok){ setForgeMsg('강화를 취소했습니다.', 'warn'); return {status:'cancelled'}; } } }
+        if(!admin && (state.items.enhance || 0) < enhanceCost){ if(!auto) setForgeMsg('강화권이 부족합니다.', 'warn'); showForgeEffect('fail'); return {status:'no-enhance'}; }
+        if(wantProtect && !admin && protectCost > 0 && (state.items.protect || 0) < protectCost){ if(!auto) setForgeMsg('보호권이 부족합니다.', 'warn'); showForgeEffect('fail'); return {status:'no-protect'}; }
+        if(!admin && (state.gold || 0) < expectedGold){ if(!auto) setForgeMsg('골드가 부족합니다.', 'warn'); showForgeEffect('fail'); return {status:'no-gold'}; }
+        if(!admin){ state.items.enhance = Math.max(0, (state.items.enhance || 0) - enhanceCost); state.gold = Math.max(0, (state.gold || 0) - expectedGold); }
         updateItemCountsView();
-
-        const commitConsumables = () => {
-          if (admin) return;
-          const itemsSnapshot = sanitizeItems(state.items);
-          state.items = itemsSnapshot;
-          if (userProfile) {
-            userProfile.items = itemsSnapshot;
-          }
-          if (state.profile) {
-            state.profile.items = { ...itemsSnapshot };
-          }
-          saveGold({ extraUpdates: { items: itemsSnapshot } });
-          updateItemCountsView();
-        };
-
-        const successProb = state.enhance.probs[nextLv] || 0;
-        const rng = getRng();
-        const success = rng() < successProb;
-
-        if(success){
-          item.lvl = nextLv;
-          updateInventoryView();
-          updateForgeInfo();
-          setForgeMsg(`강화 성공! Lv.${lv} → Lv.${nextLv}`, 'ok');
-          showForgeEffect('success');
-          commitConsumables();
-          markProfileDirty();
-          return {status:'success', level: nextLv};
-        }
-
+        const commitConsumables = ()=>{ if(admin) return; const itemsSnapshot = sanitizeItems(state.items); state.items = itemsSnapshot; if(userProfile) userProfile.items = itemsSnapshot; if(state.profile) state.profile.items = { ...itemsSnapshot }; saveGold({ extraUpdates: { items: itemsSnapshot } }); updateItemCountsView(); };
+        const successProb = state.enhance.probs[nextLv] || 0; const rng = getRng(); const success = rng() < successProb;
+        if(success){ item.lvl = nextLv; updateInventoryView(); updateForgeInfo(); setForgeMsg(`강화 성공! Lv.${lv} → Lv.${nextLv}`, 'ok'); showForgeEffect('success'); commitConsumables(); markProfileDirty(); return {status:'success', level: nextLv}; }
         const protectActive = wantProtect && (admin || (protectCost > 0 ? (state.items.protect || 0) >= protectCost : true));
-        if(protectActive){
-          if(!admin && protectCost > 0){
-            state.items.protect = Math.max(0, (state.items.protect || 0) - protectCost);
-            updateItemCountsView();
-          }
-          updateInventoryView();
-          updateForgeInfo();
-          setForgeMsg('강화 실패! 보호권이 소모되어 장비가 보호되었습니다.', 'warn');
-          showForgeEffect('protected');
-          commitConsumables();
-          markProfileDirty();
-          return {status:'protected'};
-        }
-
+        if(protectActive){ if(!admin && protectCost > 0){ state.items.protect = Math.max(0, (state.items.protect || 0) - protectCost); updateItemCountsView(); }
+          updateInventoryView(); updateForgeInfo(); setForgeMsg('강화 실패! 보호권이 소모되어 장비가 보호되었습니다.', 'warn'); showForgeEffect('protected'); commitConsumables(); markProfileDirty(); return {status:'protected'}; }
         removeItem(item);
         updateInventoryView();
         updateForgeInfo();
@@ -4165,286 +4827,12 @@ ${parts.join(', ')}`;
       function toggleAutoForge(){ if(state.forge.autoRunning){ setAutoForgeRunning(false); setForgeMsg('자동 강화를 중지합니다.', 'warn'); return; }
         if(!currentForgeItem()){ setForgeMsg('강화할 장비를 선택하세요.', 'warn'); showForgeEffect('fail'); return; }
         runAutoForgeLoop(); }
-      function buildForgeTargetOptions(){ const sel = els.forgeTarget; const options = []; // equipped first
-        PART_DEFS.forEach(function(p){ const it = state.equip[p.key]; if(it) options.push({key:`equip:${p.key}`, label:`장착-${p.name} ${it.tier} ${formatNum(effectiveStat(it))} (Lv.${it.lvl||0})`, ref: it}); });
-        PART_DEFS.forEach(function(p){ const spare = state.spares[p.key]; if(spare) options.push({key:`spare:${p.key}`, label:`예비-${p.name} ${spare.tier} ${formatNum(effectiveStat(spare))} (Lv.${spare.lvl||0})`, ref: spare}); });
-        const prev = sel.value; sel.innerHTML=''; options.forEach(function(o){ const opt = document.createElement('option'); opt.value = o.key; opt.textContent = o.label; sel.appendChild(opt); });
-        if(options.length===0){ const opt = document.createElement('option'); opt.value=''; opt.textContent='보강할 장비 없음'; sel.appendChild(opt); }
-        sel.value = options.some(function(o){ return o.key===prev; }) ? prev : sel.value;
-        if(options.length===0 && state.forge.autoRunning){ setAutoForgeRunning(false); }
-        updateForgeInfo(); updateForgeControlsView(); updateItemCountsView();
-      }
-      function updateForgeControlsView(){ els.forgeProtectUse.checked = !!state.forge.protectEnabled; }
-      function updateItemCountsView(){
-        const potions = state.items.potion || 0;
-        const hyper = state.items.hyperPotion || 0;
-        const protects = state.items.protect || 0;
-        const enhances = state.items.enhance || 0;
-        const revive = state.items.revive || 0;
-        const br = state.items.battleRes || 0;
-        const holyWater = state.items.holyWater || 0;
-        const petTickets = state.items.petTicket || 0;
-
-        if (els.potionCount) els.potionCount.textContent = String(potions);
-        if (els.usePotion) els.usePotion.disabled = !isAdmin() && !(potions > 0);
-        if (els.hyperPotionCount) els.hyperPotionCount.textContent = String(hyper);
-        if (els.useHyperPotion) els.useHyperPotion.disabled = !isAdmin() && !(hyper > 0);
-        if (els.protectCount) els.protectCount.textContent = isAdmin() ? '∞' : String(protects);
-        if (els.enhanceCount) els.enhanceCount.textContent = String(enhances);
-        if (els.reviveCount) els.reviveCount.textContent = String(revive);
-        const holyWaterDisplay = isAdmin() ? '∞' : formatNum(holyWater);
-        if (els.holyWaterCount) els.holyWaterCount.textContent = holyWaterDisplay;
-        if (els.petTickets) els.petTickets.textContent = isAdmin() ? '∞' : formatNum(petTickets);
-        if (els.petTicketInline) els.petTicketInline.textContent = isAdmin() ? '∞' : formatNum(petTickets);
-
-        if (els.invPotion) els.invPotion.textContent = String(potions);
-        if (els.invHyper) els.invHyper.textContent = String(hyper);
-        if (els.invProtect) els.invProtect.textContent = isAdmin() ? '∞' : String(protects);
-        if (els.invEnhance) els.invEnhance.textContent = String(enhances);
-        if (els.invBattleRes) els.invBattleRes.textContent = String(br);
-        if (els.invHolyWater) els.invHolyWater.textContent = isAdmin() ? '∞' : formatNum(holyWater);
-
-        updateReviveButton();
-        updateShopButtons();
-        updateBattleResControls();
-      }
-      function usePotion(){ if(!(state.items.potion>0) && !isAdmin()) return; if(!isAdmin()) state.items.potion--; const cfg = getPotionSettings(); const now = Date.now(); const duration = (cfg.durationMs ?? DEFAULT_POTION_SETTINGS.durationMs); const mult = cfg.speedMultiplier ?? DEFAULT_POTION_SETTINGS.speedMultiplier ?? 2; state.buffs.accelUntil = now + duration; state.buffs.accelMultiplier = Math.max(1, mult); if(state.buffs.hyperUntil > state.buffs.accelUntil){ state.buffs.accelUntil = state.buffs.hyperUntil; } updateItemCountsView(); updateBuffInfo(); markProfileDirty(); }
-      function useHyperPotion(){ if(!(state.items.hyperPotion>0) && !isAdmin()) return; if(!isAdmin()) state.items.hyperPotion--; const cfg = getHyperPotionSettings(); const now = Date.now(); const duration = (cfg.durationMs ?? DEFAULT_HYPER_POTION_SETTINGS.durationMs); const mult = cfg.speedMultiplier ?? DEFAULT_HYPER_POTION_SETTINGS.speedMultiplier ?? 4; state.buffs.hyperUntil = now + duration; state.buffs.hyperMultiplier = Math.max(1, mult); state.buffs.accelUntil = Math.max(state.buffs.accelUntil, state.buffs.hyperUntil); state.buffs.accelMultiplier = Math.max(state.buffs.accelMultiplier || 1, state.buffs.hyperMultiplier); updateItemCountsView(); updateBuffInfo(); markProfileDirty(); }
-      function maybeDropPotion(rng, lvl){ if(rng() < dropRateForLevel('potion', lvl)){ state.items.potion++; updateItemCountsView(); markProfileDirty(); return true; } return false; }
-      function maybeDropHyperPotion(rng, lvl){ if(rng() < dropRateForLevel('hyperPotion', lvl)){ state.items.hyperPotion = (state.items.hyperPotion||0) + 1; updateItemCountsView(); markProfileDirty(); return true; } return false; }
-      function maybeDropProtect(rng, lvl){ if(rng() < dropRateForLevel('protect', lvl)){ state.items.protect = (state.items.protect||0) + 1; updateItemCountsView(); markProfileDirty(); return true; } return false; }
-      function maybeDropEnhance(rng, lvl){ if(rng() < dropRateForLevel('enhance', lvl)){ state.items.enhance = (state.items.enhance||0) + 1; updateItemCountsView(); markProfileDirty(); return true; } return false; }
-      function maybeDropBattleRes(rng, lvl){ if(rng() < dropRateForLevel('battleRes', lvl)){ state.items.battleRes = (state.items.battleRes||0) + 1; updateItemCountsView(); markProfileDirty(); return true; } return false; }
-      function calcGoldReward(level, rng){ const cfg = normalizeGoldScaling(state.config.goldScaling); const lvl = Math.max(1, Math.min(MAX_LEVEL, level||1)); const ratio = (lvl - 1) / (MAX_LEVEL - 1 || 1); const minVal = Math.round(cfg.minLow + ratio * (cfg.minHigh - cfg.minLow)); const maxVal = Math.round(cfg.maxLow + ratio * (cfg.maxHigh - cfg.maxLow)); const low = Math.min(minVal, maxVal); const high = Math.max(minVal, maxVal); const span = Math.max(0, high - low); const rand = Math.floor((rng ? rng() : Math.random()) * (span + 1)); return Math.max(1, low + rand); }
-      function normalizeShopPrices(sp){ const base = {...DEFAULT_SHOP_PRICES}; const raw = {...base, ...(sp||{})}; Object.keys(base).forEach(function(k){ const v = raw[k]; raw[k] = (typeof v==='number' && v>=0) ? Math.floor(v) : base[k]; }); return raw; }
-      function normalizePotionSettings(raw, defaults){
-        const base = {...defaults};
-        if(raw && typeof raw==='object'){
-          const coerce = (val, fallback)=>{ if(typeof val==='number' && isFinite(val) && val>=0){ return Math.round(val); } return fallback; };
-          const coerceMult = (val, fallback)=>{ if(typeof val==='number' && isFinite(val) && val>0){ return val; } return fallback; };
-          base.durationMs = coerce(raw.durationMs, base.durationMs);
-          base.manualCdMs = coerce(raw.manualCdMs, base.manualCdMs);
-          base.autoCdMs = coerce(raw.autoCdMs, base.autoCdMs);
-          base.speedMultiplier = coerceMult(raw.speedMultiplier, base.speedMultiplier ?? 1);
-        }
-        return base;
-      }
-      function normalizeMonsterScaling(raw){
-        const base = {...DEFAULT_MONSTER_SCALING};
-        const num = (val, fallback, min, max)=>{
-          if(typeof val === 'number' && isFinite(val)){
-            let v = val;
-            if(typeof min === 'number' && v < min) v = min;
-            if(typeof max === 'number' && v > max) v = max;
-            return v;
-          }
-          return fallback;
-        };
-        if(raw && typeof raw === 'object'){
-          base.basePower = num(raw.basePower, base.basePower, 1, 1e12);
-          base.maxPower = num(raw.maxPower, base.maxPower, base.basePower, 1e15);
-          base.curve = num(raw.curve, base.curve, 0.1, 10);
-          base.difficultyMultiplier = num(raw.difficultyMultiplier, base.difficultyMultiplier, 0.1, 10);
-          base.attackShare = num(raw.attackShare, base.attackShare, 0.05, 0.9);
-          base.defenseShare = num(raw.defenseShare, base.defenseShare, 0.05, 0.9);
-          base.hpMultiplier = num(raw.hpMultiplier, base.hpMultiplier, 0.1, 100);
-          base.speedBase = num(raw.speedBase, base.speedBase, 1, 1000);
-          base.speedMax = num(raw.speedMax, base.speedMax, base.speedBase, 2000);
-          base.critRateBase = num(raw.critRateBase, base.critRateBase, 0, 100);
-          base.critRateMax = num(raw.critRateMax, base.critRateMax, base.critRateBase, 100);
-          base.critDmgBase = num(raw.critDmgBase, base.critDmgBase, 100, 1000);
-          base.critDmgMax = num(raw.critDmgMax, base.critDmgMax, base.critDmgBase, 1000);
-          base.dodgeBase = num(raw.dodgeBase, base.dodgeBase, 0, 100);
-          base.dodgeMax = num(raw.dodgeMax, base.dodgeMax, base.dodgeBase, 95);
-        }
-        const share = base.attackShare + base.defenseShare;
-        if(share >= 0.95){
-          base.attackShare = (base.attackShare / share) * 0.9;
-          base.defenseShare = (base.defenseShare / share) * 0.9;
-        }
-        return base;
-      }
-      function getPotionSettings(){ const cfg = normalizePotionSettings(state.config.potionSettings, DEFAULT_POTION_SETTINGS); state.config.potionSettings = cfg; return cfg; }
-      function getHyperPotionSettings(){ const cfg = normalizePotionSettings(state.config.hyperPotionSettings, DEFAULT_HYPER_POTION_SETTINGS); state.config.hyperPotionSettings = cfg; return cfg; }
-      function consumeBattleResToken(lvl, context){ if(!state.combat.useBattleRes) return false; if(state.items.battleRes && state.items.battleRes > 0){ state.items.battleRes--; if(state.items.battleRes < 0) state.items.battleRes = 0; updateItemCountsView(); updateShopButtons(); if(els.fightResult){ const label = context==='auto' ? '자동사냥' : '전투'; els.fightResult.textContent = label+`: Lv.${lvl} 패배... 전투부활권이 발동되어 손실이 없습니다.`; }
-        if(state.items.battleRes<=0){ state.combat.useBattleRes = false; if(state.timers.autoOn){ stopAutoTimer(); state.timers.autoOn=false; if(els.autoHuntBtn) els.autoHuntBtn.textContent='자동사냥: OFF'; if(els.fightResult){ els.fightResult.textContent += ' (전투부활권 소진으로 자동사냥이 중단되었습니다.)'; } }
-        }
-        updateBattleResControls();
-        markProfileDirty();
-        return true; }
-        return false; }
-      function renderDiamondShop(){ if(!els.diamondShopGrid) return; const grid = els.diamondShopGrid; grid.textContent = ''; const frag = document.createDocumentFragment(); DIAMOND_SHOP_PACKS.forEach((pack)=>{ const card = document.createElement('div'); card.className = 'diamond-pack'; card.dataset.packId = pack.id; card.innerHTML = `
-          <div class="diamond-pack__title">${pack.label}</div>
-          <div class="diamond-pack__cost">💎 ${formatNum(pack.diamonds)}</div>
-          <div class="diamond-pack__reward">포인트 ${formatNum(pack.points)}</div>
-          <div class="diamond-pack__reward">골드 ${formatNum(pack.gold)}</div>
-          ${pack.bonus ? `<div class="diamond-pack__bonus">${pack.bonus}</div>` : ''}
-          <button type="button" class="diamond-pack__buy diamond-pack-buy" data-pack="${pack.id}">구매</button>`; frag.appendChild(card); }); grid.appendChild(frag); if(els.diamondShop){ els.diamondShop.hidden = DIAMOND_SHOP_PACKS.length === 0; } updateShopButtons(); }
-      function findDiamondPack(id){ return id ? (DIAMOND_PACK_LOOKUP[id] || null) : null; }
-      function buyDiamondPack(packId){ const pack = findDiamondPack(packId); if(!pack){ setShopMessage('알 수 없는 다이아 상품입니다.', 'warn'); return; } if(!spendDiamonds(pack.diamonds)){ setShopMessage('다이아가 부족합니다.', 'error'); updateShopButtons(); return; } if(pack.points > 0){ addPoints(pack.points); }
-        if(pack.gold > 0){ addGold(pack.gold); }
-        setShopMessage(`💎 ${formatNum(pack.diamonds)} 다이아 사용! 포인트 ${formatNum(pack.points)}, 골드 ${formatNum(pack.gold)}를 획득했습니다.`, 'ok');
-        updateShopButtons();
-        markProfileDirty();
-      }
-      function shopPrice(type){ const prices = state.config.shopPrices || DEFAULT_SHOP_PRICES; const val = prices.hasOwnProperty(type) ? prices[type] : DEFAULT_SHOP_PRICES[type]; return Math.max(0, Math.floor(val)); }
-      function onShopClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(target.classList.contains('diamond-pack-buy')){ const packId = target.dataset.pack || target.closest('[data-pack-id]')?.dataset.packId; if(packId){ buyDiamondPack(packId); } return; } if(!target.classList.contains('shop-buy')) return; const item = target.dataset.item; const count = parseInt(target.dataset.count||'1',10) || 1; if(item) buyShopItem(item, count); }
-      function setShopMessage(msg, status){ if(!els.shopMsg) return; els.shopMsg.textContent = msg || ''; els.shopMsg.classList.remove('ok','warn','error'); if(status){ els.shopMsg.classList.add(status); } }
-      function updateShopButtons(){ if(!els.shopPanel) return; if(els.pricePotion) els.pricePotion.textContent = formatNum(shopPrice('potion')); if(els.priceHyper) els.priceHyper.textContent = formatNum(shopPrice('hyperPotion')); if(els.priceProtect) els.priceProtect.textContent = formatNum(shopPrice('protect')); if(els.priceEnhance) els.priceEnhance.textContent = formatNum(shopPrice('enhance')); if(els.priceBattleRes) els.priceBattleRes.textContent = formatNum(shopPrice('battleRes')); if(els.priceHolyWater) els.priceHolyWater.textContent = formatNum(shopPrice('holyWater')); if(els.priceStarter) els.priceStarter.textContent = formatNum(shopPrice('starterPack'));
-        const gold = state.gold===Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.gold||0);
-        const buttons = els.shopPanel.querySelectorAll('.shop-buy');
-        buttons.forEach(function(btn){ const type = btn.dataset.item; if(!type) return; const cnt = parseInt(btn.dataset.count||'1',10) || 1; const cost = shopPrice(type) * cnt; btn.disabled = gold !== Number.POSITIVE_INFINITY && cost > gold; });
-        const diamondButtons = els.shopPanel.querySelectorAll('.diamond-pack-buy');
-        const diamonds = state.diamonds === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : (state.diamonds || 0);
-        diamondButtons.forEach((btn)=>{ const packId = btn.dataset.pack || btn.closest('[data-pack-id]')?.dataset.packId; const pack = findDiamondPack(packId); if(!pack){ btn.disabled = true; return; } btn.disabled = diamonds !== Number.POSITIVE_INFINITY && pack.diamonds > diamonds; });
-      }
-      function grantStarterPack(count){ count = Math.max(1, parseInt(count,10)||1); const rng = getRng(); for(let n=0;n<count;n++){ PART_DEFS.forEach(function(part){ const item = { id: state.itemSeq++, tier: 'B', part: part.key, base: rollStatFor('B', part.key, rng), lvl: 0, type: part.type }; applyEquipAndInventory(item); }); } updateInventoryView(); }
-      function buyShopItem(type, count){
-        count = Math.max(1, parseInt(count,10)||1);
-        const totalCost = shopPrice(type) * count;
-        if(state.gold !== Number.POSITIVE_INFINITY && (state.gold||0) < totalCost){ setShopMessage('골드가 부족합니다.', 'error'); return; }
-        if(!spendGold(totalCost, { deferSave:true })){ setShopMessage('골드 차감에 실패했습니다.', 'error'); return; }
-        switch(type){
-          case 'potion':
-            state.items.potion = (state.items.potion||0) + count;
-            setShopMessage(`가속 물약 ${count}개를 구매했습니다.`, 'ok');
-            break;
-          case 'hyperPotion':
-            state.items.hyperPotion = (state.items.hyperPotion||0) + count;
-            setShopMessage(`초 가속 물약 ${count}개를 구매했습니다.`, 'ok');
-            break;
-          case 'protect':
-            state.items.protect = (state.items.protect||0) + count;
-            setShopMessage(`보호권 ${count}개를 구매했습니다.`, 'ok');
-            break;
-          case 'enhance':
-            state.items.enhance = (state.items.enhance||0) + count;
-            setShopMessage(`강화권 ${count}개를 구매했습니다.`, 'ok');
-            break;
-          case 'battleRes':
-            state.items.battleRes = (state.items.battleRes||0) + count;
-            setShopMessage(`전투부활권 ${count}개를 구매했습니다.`, 'ok');
-            break;
-          case 'holyWater':
-            state.items.holyWater = (state.items.holyWater||0) + count;
-            setShopMessage(`성수 ${count}개를 구매했습니다.`, 'ok');
-            break;
-          case 'starterPack':
-            grantStarterPack(count);
-            setShopMessage(`초보자 패키지를 구매했습니다! B 등급 장비 ${count*PART_KEYS.length}개를 획득했습니다.`, 'ok');
-            break;
-          default:
-            setShopMessage('알 수 없는 아이템입니다.', 'warn');
-            addGold(totalCost);
-            return;
-        }
-        const itemsPayload = sanitizeItems(state.items);
-        state.items = itemsPayload;
-        if(userProfile){ userProfile.items = { ...itemsPayload }; }
-        if(state.profile){ state.profile.items = { ...itemsPayload }; }
-        if(isAdmin()){
-          pushProfileUpdate({ items: itemsPayload });
-        } else {
-          saveGold({ extraUpdates: { items: itemsPayload } });
-        }
-        updateItemCountsView();
-        markProfileDirty();
-      }
-      function canClaimRevive(){ if(isAdmin()) return false; if(totalKept() !== 0) return false; if((state.wallet||0) > 100) return false; return true; }
-      function updateReviveButton(){ if(!els.claimRevive) return; const show = canClaimRevive(); els.claimRevive.style.display = show ? '' : 'none'; els.claimRevive.disabled = !show; }
-      function updateBattleResControls(){ if(!els.battleResUse) return; const count = state.items.battleRes||0; if(typeof state.combat.prefBattleRes === 'undefined'){ state.combat.prefBattleRes = true; }
-        if(els.battleResRemain) els.battleResRemain.textContent = formatNum(count);
-        if(count > 0){ state.combat.useBattleRes = !!state.combat.prefBattleRes; els.battleResUse.checked = state.combat.useBattleRes; els.battleResUse.disabled = false; }
-        else { state.combat.useBattleRes = false; els.battleResUse.checked = false; els.battleResUse.disabled = true; }
-      }
-      function claimRevive(){ if(!canClaimRevive()){ alert('부활권을 받을 조건이 아닙니다. (장비 0개, 포인트 100 이하 필요)'); return; } state.items.revive = (state.items.revive||0) + 1; addPoints(1000); updateItemCountsView(); updateReviveButton(); markProfileDirty(); alert('부활권을 획득하고 1,000 포인트를 받았습니다!'); }
-      function onSpareListClick(e){ const target = e.target; if(!(target instanceof HTMLButtonElement)) return; if(!target.classList.contains('equip-btn')) return; const part = target.dataset.part; if(!part) return; equipSpare(part); }
-      function equipSpare(part){
-        const spareItem = state.spares[part];
-        if(!spareItem){ alert('예비 장비가 없습니다.'); return; }
-        const equipped = state.equip[part];
-        if(equipped){
-          const ok = confirm(`${PART_DEFS.find(p=>p.key===part)?.name || '장비'} 부위에 장착된 장비를 예비로 이동하고 선택한 장비로 교체할까요?`);
-          if(!ok) return;
-          state.spares[part] = equipped;
-        } else {
-          state.spares[part] = null;
-        }
-        state.equip[part] = spareItem;
-        updateInventoryView();
-        buildForgeTargetOptions();
-        updateItemCountsView();
-        setForgeMsg('장비를 교체했습니다.', 'ok');
-        markProfileDirty();
-      }
-      function currentForgeItem(){ const v = els.forgeTarget.value||''; if(!v) return null; const [kind, id] = v.split(':'); if(kind==='equip'){ return state.equip[id] || null; } if(kind==='spare'){ return state.spares[id] || null; } return null; }
-      function updateForgeInfo(){
-        const it = currentForgeItem();
-        if(!it){
-          els.forgeLv.textContent = '0';
-          els.forgeMul.textContent = '1.00×';
-          els.forgeP.textContent = '-';
-          els.forgePreview.textContent = '-';
-          if(els.forgeStageMul) els.forgeStageMul.textContent = '1.00×';
-          if(els.forgeNextMul) els.forgeNextMul.textContent = '-';
-          if(els.forgeCostEnh) els.forgeCostEnh.textContent = '0';
-          if(els.forgeCostProtect) els.forgeCostProtect.textContent = '0';
-          if(els.forgeCostGold) els.forgeCostGold.textContent = '0';
-          els.forgeOnce.disabled = true;
-          return;
-        }
-        const lv = it.lvl || 0;
-        const next = Math.min(20, lv + 1);
-        const currentMul = state.enhance.multipliers[lv] || 1;
-        const nextMul = (next <= 20 ? state.enhance.multipliers[next] : currentMul);
-        const successProb = lv >= 20 ? null : (state.enhance.probs[next] || 0);
-        const stepMultiplier = lv >= 20 ? null : (nextMul / (currentMul || 1));
-        const nextTotalMul = lv >= 20 ? null : nextMul;
-        const enhanceCost = ENHANCE_TICKET_COST[next] || 0;
-        const protectCost = ENHANCE_PROTECT_COST[next] || 0;
-        const expectedGold = ENHANCE_EXPECTED_GOLD[next] || 0;
-
-        els.forgeLv.textContent = String(lv);
-        els.forgeMul.textContent = `${currentMul.toFixed(2)}×`;
-        els.forgeP.textContent = successProb === null ? '-' : `${(successProb * 100).toFixed(2)}%`;
-        if(els.forgeStageMul){ els.forgeStageMul.textContent = stepMultiplier === null ? '-' : `${stepMultiplier.toFixed(stepMultiplier >= 10 ? 1 : 3)}×`; }
-        if(els.forgeNextMul){ els.forgeNextMul.textContent = nextTotalMul === null ? '-' : `${nextTotalMul.toFixed(nextTotalMul >= 10 ? 1 : 3)}×`; }
-        if(els.forgeCostEnh){ els.forgeCostEnh.textContent = lv >= 20 ? '-' : String(enhanceCost); }
-        if(els.forgeCostProtect){ els.forgeCostProtect.textContent = lv >= 20 ? '-' : String(protectCost); }
-        if(els.forgeCostGold){ els.forgeCostGold.textContent = lv >= 20 ? '-' : formatNum(expectedGold); }
-
-        const cur = effectiveStat(it);
-        const after = Math.floor((it.base || 0) * nextMul);
-        if(lv >= 20){
-          els.forgePreview.textContent = '-';
-        } else {
-          const curMulText = currentMul.toFixed(currentMul >= 10 ? 1 : 3);
-          const nextMulText = nextMul.toFixed(nextMul >= 10 ? 1 : 3);
-          els.forgePreview.textContent = `${formatNum(cur)} (×${curMulText}) → ${formatNum(after)} (×${nextMulText})`;
-        }
-        els.forgeOnce.disabled = lv >= 20;
-      }
       function doForgeOnce(){ if(state.forge.autoRunning){ setForgeMsg('자동 강화 중에는 수동 강화를 사용할 수 없습니다.', 'warn'); return; }
-        performForgeAttempt({auto:false});
-      }
-      function setForgeMsg(text, kind){ els.forgeMsg.textContent = text; els.forgeMsg.classList.remove('msg-ok','msg-warn','msg-danger','muted'); if(kind==='ok'){ els.forgeMsg.classList.add('msg-ok'); } else if(kind==='warn'){ els.forgeMsg.classList.add('msg-warn'); } else if(kind==='danger'){ els.forgeMsg.classList.add('msg-danger'); } else { els.forgeMsg.classList.add('muted'); } }
-      function setAdminMsg(text, tone){ if(!els.adminMsg) return; els.adminMsg.textContent = text || ''; els.adminMsg.classList.remove('msg-ok','msg-warn','msg-danger'); if(tone){ if(tone==='ok') els.adminMsg.classList.add('msg-ok'); else if(tone==='warn') els.adminMsg.classList.add('msg-warn'); else if(tone==='error') els.adminMsg.classList.add('msg-danger'); }
-        setTimeout(()=>{ if(els.adminMsg.textContent===text){ els.adminMsg.textContent=''; els.adminMsg.classList.remove('msg-ok','msg-warn','msg-danger'); } }, 3000);
-      }
-      function setAdminPresetMsg(text, tone){ if(!els.presetAdminMsg) return; els.presetAdminMsg.textContent = text || ''; els.presetAdminMsg.classList.remove('msg-ok','msg-warn','msg-danger'); if(tone){ if(tone==='ok') els.presetAdminMsg.classList.add('msg-ok'); else if(tone==='warn') els.presetAdminMsg.classList.add('msg-warn'); else if(tone==='error') els.presetAdminMsg.classList.add('msg-danger'); }
-        setTimeout(()=>{ if(els.presetAdminMsg.textContent===text){ els.presetAdminMsg.textContent=''; els.presetAdminMsg.classList.remove('msg-ok','msg-warn','msg-danger'); } }, 3000);
-      }
-      function setPresetMsg(text, tone){ if(!els.presetMsg) return; els.presetMsg.textContent = text || ''; els.presetMsg.classList.remove('msg-ok','msg-warn','msg-danger'); if(tone){ if(tone==='ok') els.presetMsg.classList.add('msg-ok'); else if(tone==='warn') els.presetMsg.classList.add('msg-warn'); else if(tone==='error') els.presetMsg.classList.add('msg-danger'); }
-        setTimeout(()=>{ if(els.presetMsg.textContent===text){ els.presetMsg.textContent=''; els.presetMsg.classList.remove('msg-ok','msg-warn','msg-danger'); } }, 3000);
-      }
-      function removeItem(item){ // remove from equip or spares by reference
-        PART_KEYS.forEach(function(part){ if(state.equip[part] === item){ state.equip[part] = null; }
-          if(state.spares[part] === item){ state.spares[part] = null; }
-        });
-        refreshInventoryCache();
-        buildForgeTargetOptions();
-        markProfileDirty();
-      }
+        performForgeAttempt({auto:false}); }
+
+      function removeItem(item){ if(!item) return; PART_KEYS.forEach(function(part){ if(state.equip[part] === item){ state.equip[part] = null; } if(state.spares[part] === item){ state.spares[part] = null; } }); refreshInventoryCache(); buildForgeTargetOptions(); markProfileDirty(); }
+      // 강화 관련 로직은 forge 모듈로 이동했습니다.
+
 
       // Bootstrap DOM
       renderDiamondShop();

@@ -274,49 +274,20 @@
         transition: opacity 0.25s ease;
       }
       .ultimate-overlay.show { display: flex; }
-      .ultimate-content {
-        width: min(680px, 90vw);
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        align-items: center;
-        text-align: center;
-      }
       .ultimate-title {
-        font-size: 2.6rem;
+        font-size: 2.4rem;
         font-weight: 800;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.1em;
         color: #f9f7ff;
-        text-shadow: 0 0 14px rgba(120, 150, 255, 0.9), 0 0 28px rgba(44, 122, 255, 0.6);
+        text-shadow: 0 0 12px rgba(120, 150, 255, 0.85), 0 0 24px rgba(44, 122, 255, 0.5);
         margin: 0;
         opacity: 0;
         transform: translateY(20px);
-        transition: opacity 0.35s ease, transform 0.35s ease;
+        transition: opacity 0.3s ease, transform 0.3s ease;
       }
       .ultimate-overlay.show .ultimate-title {
         opacity: 1;
         transform: translateY(0);
-      }
-      .ultimate-gif-wrap {
-        width: 100%;
-        display: none;
-        border-radius: 14px;
-        overflow: hidden;
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
-        background: rgba(0, 0, 0, 0.85);
-      }
-      .ultimate-overlay.gif-visible .ultimate-gif-wrap {
-        display: block;
-        animation: ultimateGifPop 0.35s ease-out;
-      }
-      #ultimateGif {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-      @keyframes ultimateGifPop {
-        0% { transform: scale(0.92); opacity: 0; }
-        100% { transform: scale(1); opacity: 1; }
       }
       .tiger-kill-overlay {
         position: fixed;
@@ -827,12 +798,7 @@
     </div>
 
     <div id="ultimateOverlay" class="ultimate-overlay" hidden>
-      <div class="ultimate-content">
-        <h2 id="ultimateTitle" class="ultimate-title"></h2>
-        <div id="ultimateGifWrap" class="ultimate-gif-wrap">
-          <img id="ultimateGif" src="" alt="필살기 연출" />
-        </div>
-      </div>
+      <h2 id="ultimateTitle" class="ultimate-title"></h2>
     </div>
 
     <script type="module" src="battle.js"></script>

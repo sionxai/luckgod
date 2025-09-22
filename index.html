@@ -20,13 +20,11 @@
         <span class="muted small">성수: <b id="holyWaterCount">0</b></span>
         <button id="toUser">사용자 페이지</button>
         <button id="toAdmin">관리자 페이지</button>
-        <button id="toBattle">전투 페이지</button>
-        <button id="toPvp">PVP</button>
         <button id="logoutBtn">로그아웃</button>
-        <button id="saveCfg">설정 저장</button>
-        <button id="loadCfg">불러오기</button>
-        <input id="cfgFile" type="file" accept="application/json" style="display:none" />
-        <button id="shareLink">공유 링크</button>
+        <button id="questBtn" type="button" class="header-quest">
+          퀘스트
+          <span id="questBadge" class="quest-badge" hidden>0</span>
+        </button>
         <button id="userOptionsBtn" type="button">옵션</button>
       </header>
 
@@ -638,6 +636,20 @@
         </section>
       </div>
     </div>
+
+    <div id="questOverlay" class="quest-overlay" hidden>
+      <div id="questPanel" class="quest-panel" role="dialog" aria-modal="true" aria-labelledby="questTitle">
+        <div class="quest-header">
+          <h3 id="questTitle">퀘스트</h3>
+          <button id="questClose" type="button" class="quest-close" aria-label="닫기">×</button>
+        </div>
+        <p class="quest-subtitle">조건을 달성하고 다이아 보상을 받아보세요.</p>
+        <div id="questList" class="quest-list" role="list"></div>
+        <div id="questEmpty" class="quest-empty" hidden>모든 퀘스트를 완료했습니다! 새로운 미션을 기다려주세요.</div>
+      </div>
+    </div>
+
+    <div id="questToast" class="quest-toast" aria-live="polite"></div>
 
     <div id="userOptionsModal" class="user-options-modal" hidden>
       <div class="user-options-panel" role="dialog" aria-modal="true" aria-labelledby="userOptionsTitle">
