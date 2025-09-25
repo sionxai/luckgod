@@ -5,7 +5,8 @@ import {
   signOut,
   ref,
   get,
-  update
+  update,
+  onValue
 } from './firebase.js';
 import {
   PART_DEFS,
@@ -14,6 +15,7 @@ import {
   DEFAULT_POTION_SETTINGS,
   DEFAULT_HYPER_POTION_SETTINGS,
   DEFAULT_MONSTER_SCALING,
+  DEFAULT_DIFFICULTY_ADJUSTMENTS,
   clampNumber,
   sanitizeEquipMap,
   sanitizeItems,
@@ -21,6 +23,7 @@ import {
   normalizeGoldScaling,
   normalizeMonsterScaling,
   sanitizeConfig,
+  sanitizeDifficultyAdjustments,
   formatNum,
   formatMultiplier,
   computePlayerStats as derivePlayerStats,
@@ -184,10 +187,10 @@ const AUTO_DROP_LABELS = {
 };
 
 const DIFFICULTY_ORDER = ['easy', 'normal', 'hard'];
-const DIFFICULTY_CONFIG = {
-  easy: { id: 'easy', label: '이지', difficultyMultiplier: 1, rewardMultiplier: 1 },
-  normal: { id: 'normal', label: '노멀', difficultyMultiplier: 2, rewardMultiplier: 3 },
-  hard: { id: 'hard', label: '하드', difficultyMultiplier: 4, rewardMultiplier: 5 }
+const DIFFICULTY_PRESETS = {
+  easy: { id: 'easy', label: '이지', rewardMultiplier: 1, defaultPercent: DEFAULT_DIFFICULTY_ADJUSTMENTS.easy },
+  normal: { id: 'normal', label: '노멀', rewardMultiplier: 3, defaultPercent: 0 },
+  hard: { id: 'hard', label: '하드', rewardMultiplier: 5, defaultPercent: DEFAULT_DIFFICULTY_ADJUSTMENTS.hard }
 };
 
 const AUTO_BASE_THRESHOLD_MS = 3 * 60 * 60 * 1000; // 3 hours
@@ -402,6 +405,8 @@ const BOSS_BEHAVIORS = {
 
 const USERNAME_NAMESPACE = '@gacha.local';
 
+let detachGlobalConfigListener = null;
+
 const state = {
   user: null,
   profile: null,
@@ -491,6 +496,44 @@ const gameState = {
 };
 
 const DEFAULT_CHARACTER_ID = createDefaultCharacterState().active;
+
+function applyGlobalConfigSnapshot(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return;
+  }
+  const payload = raw.config && typeof raw.config === 'object' ? raw.config : raw;
+  const nextConfig = sanitizeConfig(payload);
+  const prevMultiplier = state.config?.monsterScaling?.difficultyMultiplier;
+  state.config = nextConfig;
+  state.profile = state.profile || {};
+  state.profile.config = nextConfig;
+  state.config.monsterScaling = normalizeMonsterScaling(state.config.monsterScaling);
+  const nextMultiplier = state.config.monsterScaling?.difficultyMultiplier ?? DEFAULT_MONSTER_SCALING.difficultyMultiplier;
+  if (Number.isFinite(prevMultiplier) && Math.abs(prevMultiplier - nextMultiplier) > 1e-6) {
+    addBattleLog(`전역 난이도 배율이 ${formatMultiplier(prevMultiplier)}× → ${formatMultiplier(nextMultiplier)}×로 변경되었습니다.`, 'warn');
+  }
+  updateEnemyStats(gameState.enemy.level || 1);
+  updateDifficultyUi();
+}
+
+function attachGlobalConfigListener() {
+  if (detachGlobalConfigListener) {
+    detachGlobalConfigListener();
+    detachGlobalConfigListener = null;
+  }
+  try {
+    detachGlobalConfigListener = onValue(ref(db, GLOBAL_CONFIG_PATH), (snapshot) => {
+      if (!snapshot.exists()) {
+        return;
+      }
+      applyGlobalConfigSnapshot(snapshot.val());
+    }, (error) => {
+      console.error('전역 설정 실시간 수신 실패', error);
+    });
+  } catch (error) {
+    console.error('전역 설정 리스너 초기화 실패', error);
+  }
+}
 
 function ensureCharacterState() {
   if (!state.characters || typeof state.characters !== 'object') {
@@ -695,7 +738,21 @@ function registerLevelClear(level) {
 }
 
 function difficultyConfig(id) {
-  return DIFFICULTY_CONFIG[id] || DIFFICULTY_CONFIG.easy;
+  const preset = DIFFICULTY_PRESETS[id] || DIFFICULTY_PRESETS.easy;
+  const adjustments = sanitizeDifficultyAdjustments(state.config?.difficultyAdjustments);
+  if (!state.config.difficultyAdjustments || state.config.difficultyAdjustments.easy !== adjustments.easy || state.config.difficultyAdjustments.hard !== adjustments.hard) {
+    state.config.difficultyAdjustments = adjustments;
+  }
+  const percent = preset.id === 'easy' ? adjustments.easy : (preset.id === 'hard' ? adjustments.hard : 0);
+  const baseMultiplier = Math.max(0.01, Number(state.config?.monsterScaling?.difficultyMultiplier) || DEFAULT_MONSTER_SCALING.difficultyMultiplier);
+  const ratio = Math.max(0.05, 1 + percent / 100);
+  return {
+    id: preset.id,
+    label: preset.label,
+    rewardMultiplier: preset.rewardMultiplier,
+    percent,
+    difficultyMultiplier: ratio
+  };
 }
 
 function difficultyLabel(id) {
@@ -4582,6 +4639,7 @@ async function hydrateProfile(firebaseUser) {
   updateBattleResUi();
   updateAutoPlayUi();
   updateAutoSessionUi();
+  attachGlobalConfigListener();
   startBuffTicker();
   if (els.whoami) els.whoami.textContent = `${fallbackName} (${role === 'admin' ? '관리자' : '회원'})`;
   updateBossUi();

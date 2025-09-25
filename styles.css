@@ -130,15 +130,136 @@
       button { background: var(--panel-2); color: var(--text); border: 1px solid var(--grid); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
       button.primary { background: var(--accent); color: #06122a; border-color: transparent; }
       button:disabled { opacity: .6; cursor: not-allowed; }
+
+      /* Input group with step buttons */
+      .input-group { display: flex; align-items: stretch; }
+      .input-group input { border-radius: 0; border-left: none; border-right: none; }
+      .input-group .step-btn { min-width: 28px; padding: 4px 8px; border-radius: 0; font-size: 12px; font-weight: 600; }
+      .input-group .step-minus { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+      .input-group .step-plus { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+      .input-group .step-btn:hover:not(:disabled) { background: var(--accent); color: #06122a; }
       .mode-btn { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--grid); background: var(--panel-2); color: var(--text); font-weight: 600; }
       .mode-btn.active { background: var(--accent); color: #06122a; border-color: transparent; }
       #petConfigWrap { margin-top: 8px; }
       .pet-draw-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
       .pet-draw-row .muted { margin-left:auto; }
+      .pet-draw-controls .pet-ticket-info { margin-bottom:12px; }
+      .pet-ticket-badge { display:inline-flex; align-items:center; padding:6px 12px; background:linear-gradient(135deg, rgba(67,195,131,0.15), rgba(52,168,83,0.25)); border:1px solid rgba(67,195,131,0.3); border-radius:20px; color:rgba(213,233,255,0.9); font-size:12px; font-weight:600; }
+      .pet-ticket-badge strong { color:#43c383; margin:0 2px; }
+      .gear-preview { display:flex; gap:8px; margin-bottom:12px; justify-content:center; }
+      .gear-icon { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; font-size:18px; background:rgba(12,18,28,0.6); border:1px solid rgba(142,238,255,0.2); border-radius:8px; transition:all 0.2s ease; }
+      .gear-icon:hover { background:rgba(106,169,255,0.15); border-color:rgba(142,238,255,0.4); transform:translateY(-1px); }
+      .character-preview { display:flex; gap:8px; margin-bottom:12px; justify-content:center; }
+      .character-class { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; font-size:20px; background:linear-gradient(135deg, rgba(217,70,239,0.15), rgba(56,189,248,0.25)); border:1px solid rgba(217,70,239,0.3); border-radius:50%; transition:all 0.25s ease; position:relative; }
+      .character-class:hover { background:linear-gradient(135deg, rgba(217,70,239,0.25), rgba(56,189,248,0.35)); border-color:rgba(217,70,239,0.5); transform:translateY(-2px) scale(1.05); box-shadow:0 8px 20px rgba(217,70,239,0.2); }
+      .character-draw-controls { background:linear-gradient(135deg, rgba(217,70,239,0.05), rgba(56,189,248,0.08)); border:1px solid rgba(217,70,239,0.15); border-radius:16px; padding:20px; }
+      .character-draw-controls .draw-group h3 { color:rgba(217,70,239,0.9); text-shadow:0 0 12px rgba(217,70,239,0.3); }
       .weights { width: 100%; border-collapse: collapse; }
       .weights th, .weights td { border-bottom: 1px solid var(--grid); padding: 6px 4px; text-align: left; }
       .weights th { color: var(--muted); font-weight: 600; }
       .prob { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+      /* 확률 테이블 스타일 */
+      .probability-display-section {
+        margin-bottom: 20px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 12px;
+        border: 1px solid rgba(142, 238, 255, 0.15);
+      }
+      .probability-table-container {
+        margin-top: 16px;
+        background: linear-gradient(135deg, rgba(12,18,28,0.6), rgba(8,14,22,0.8));
+        border: 1px solid rgba(142,238,255,0.18);
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: inset 0 0 20px rgba(10,20,38,0.4);
+      }
+      .probability-table-container h4 {
+        margin: 0 0 12px 0;
+        color: var(--accent);
+        font-size: 15px;
+        font-weight: 700;
+        text-shadow: 0 0 12px rgba(106,169,255,0.3);
+      }
+      .probability-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: linear-gradient(135deg, rgba(6,12,20,0.7), rgba(4,10,18,0.9));
+        border: 1px solid rgba(142, 238, 255, 0.25);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      }
+      .probability-table th,
+      .probability-table td {
+        border-bottom: 1px solid var(--grid);
+        padding: 8px 6px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .probability-table th:first-child,
+      .probability-table td:first-child {
+        text-align: left;
+        font-weight: 600;
+      }
+      .probability-table th {
+        background: rgba(106, 169, 255, 0.12);
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .probability-table .small-cost {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 400;
+      }
+      .probability-table .prob-basic { color: #9ec1ff; }
+      .probability-table .prob-boost { color: #ffd166; }
+      .probability-table .prob-premium { color: #ff7f66; }
+      .probability-table .tier-boosted {
+        background: rgba(255, 209, 102, 0.15);
+        color: #ffd166;
+        font-weight: 600;
+      }
+      .probability-notes {
+        margin-top: 12px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 6px;
+        border-left: 3px solid var(--accent);
+      }
+      .boost-highlight {
+        color: #ffd166;
+        font-weight: 600;
+      }
+      .probability-update-status {
+        margin-top: 12px;
+        padding: 8px 12px;
+        background: rgba(67, 195, 131, 0.15);
+        border-radius: 6px;
+        border-left: 3px solid var(--ok);
+        animation: probabilityUpdateFade 0.3s ease-in-out;
+      }
+      .update-message {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ok);
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .update-icon {
+        animation: probabilityUpdateSpin 1s ease-in-out;
+      }
+      @keyframes probabilityUpdateFade {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes probabilityUpdateSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
       .tier { font-weight: 700; }
       .tier.SSS\+ { color: #ffd166; }
       .tier.SS\+  { color: #ffb366; }
@@ -290,15 +411,60 @@
       }
 
       /* Draw results */
-      .draw-results { margin-top: 12px; background: rgba(12,16,25,0.45); border: 1px solid rgba(142,238,255,0.15); border-radius: 12px; padding: 12px; }
-      .draw-results h3 { margin: 0 0 10px; font-size: 14px; color: var(--accent); display:flex; align-items:center; gap:8px; }
-      .draw-result-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(90px,1fr)); gap:8px; }
-      .draw-card { background: rgba(6,10,16,0.7); border:1px solid rgba(142,238,255,0.1); border-radius:10px; padding:8px; text-align:center; font-size:12px; display:flex; flex-direction:column; gap:4px; }
-      .draw-card .tier-label { font-size:11px; font-weight:600; padding:2px 6px; border-radius:999px; background: rgba(142,238,255,0.12); border:1px solid rgba(142,238,255,0.25); }
-      .draw-card .draw-icon { font-size:28px; }
-      .draw-card .draw-part { color: var(--muted); font-size:11px; }
-      .draw-card.pet .draw-icon { font-size:34px; }
-      .draw-card.pet .draw-part { color: var(--text); font-weight:600; font-size:12px; }
+      .draw-results { margin-top: 16px; background: linear-gradient(135deg, rgba(12,16,25,0.6), rgba(8,12,20,0.8)); border: 1px solid rgba(142,238,255,0.2); border-radius: 16px; padding: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+      .draw-results h3 { margin: 0 0 14px; font-size: 15px; color: var(--accent); display:flex; align-items:center; gap:8px; font-weight:700; text-shadow: 0 0 12px rgba(106,169,255,0.4); }
+      .draw-result-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(100px,1fr)); gap:12px; }
+      .draw-card { background: linear-gradient(135deg, rgba(6,10,16,0.8), rgba(4,8,14,0.9)); border:1px solid rgba(142,238,255,0.15); border-radius:12px; padding:10px; text-align:center; font-size:12px; display:flex; flex-direction:column; gap:6px; transition:all 0.2s ease; }
+      .draw-card:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,0.4); border-color:rgba(142,238,255,0.3); }
+      .draw-card .tier-label { font-size:10px; font-weight:700; padding:3px 8px; border-radius:999px; background: linear-gradient(135deg, rgba(142,238,255,0.15), rgba(106,169,255,0.25)); border:1px solid rgba(142,238,255,0.3); text-shadow: 0 0 8px rgba(106,169,255,0.3); }
+      .draw-card .draw-icon { font-size:32px; filter:drop-shadow(0 0 8px rgba(255,255,255,0.1)); }
+      .draw-card .draw-part { color: var(--text); font-size:11px; font-weight:600; }
+      .draw-card.pet .draw-icon { font-size:36px; }
+      .draw-card.pet .draw-part { color: #43c383; font-weight:700; font-size:12px; }
+      .draw-card.character .draw-icon { font-size:30px; }
+      .draw-card.character .draw-part { color: rgba(217,70,239,0.9); font-weight:600; }
+      .gear-draw-controls { display:flex; flex-direction:column; gap:16px; }
+      .draw-groups { display:flex; flex-wrap:wrap; gap:16px; }
+      .draw-group { flex:1 1 260px; background: rgba(12, 18, 28, 0.55); border: 1px solid rgba(142, 238, 255, 0.14); border-radius: 14px; padding: 16px; box-shadow: inset 0 0 18px rgba(14, 32, 64, 0.4); }
+      .draw-group h3 { margin: 0 0 12px; font-size: 15px; color: var(--accent); display:flex; align-items:center; gap:8px; }
+      .draw-button-grid { display:flex; flex-direction:column; gap:10px; }
+      .draw-button { position:relative; border:none; border-radius:12px; padding:12px 16px; display:flex; flex-direction:column; align-items:flex-start; gap:4px; cursor:pointer; transition:transform 0.12s ease, box-shadow 0.12s ease, border 0.12s ease; color:#f5fbff; text-align:left; background:linear-gradient(135deg, rgba(66,110,173,0.35), rgba(30,60,120,0.6)); border:1px solid rgba(106,169,255,0.25); font-size:14px; font-weight:600; }
+      .draw-button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 8px 18px rgba(0,0,0,0.35); border-color:rgba(142,238,255,0.45); }
+      .draw-button:disabled { opacity:0.45; cursor:not-allowed; }
+      .draw-button__title { font-size:14px; font-weight:700; }
+      .draw-button__subtitle { font-size:12px; color:rgba(213,233,255,0.86); }
+      .draw-button__note { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:rgba(255,255,255,0.7); }
+      .draw-button--base { background:linear-gradient(135deg, rgba(58,94,162,0.35), rgba(21,49,98,0.68)); }
+      .draw-button--boost { background:linear-gradient(135deg, rgba(255,180,92,0.3), rgba(180,95,255,0.45)); border-color:rgba(255,200,130,0.45); }
+      .draw-button--premium { background:linear-gradient(135deg, rgba(217,70,239,0.35), rgba(56,189,248,0.55)); border-color:rgba(217,70,239,0.55); }
+      .draw-button--pet { background:linear-gradient(135deg, rgba(67,195,131,0.25), rgba(52,168,83,0.45)); border-color:rgba(67,195,131,0.35); }
+      .draw-button--pet:hover:not(:disabled) { border-color:rgba(67,195,131,0.55); box-shadow:0 8px 18px rgba(52,168,83,0.25); }
+      .draw-button--pet.draw-button--multi { background:linear-gradient(135deg, rgba(67,195,131,0.35), rgba(34,139,34,0.55)); }
+      .draw-controls-secondary { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; background:rgba(12,18,28,0.45); border:1px solid rgba(142,238,255,0.12); border-radius:12px; padding:10px 14px; }
+      .draw-speed { display:flex; align-items:center; gap:12px; font-size:13px; margin:0; color:rgba(213,233,255,0.8); }
+      .draw-speed input[type=range] { width:180px; }
+      .draw-controls-secondary button { padding:8px 16px; border-radius:10px; border:1px solid rgba(255,104,104,0.45); background:linear-gradient(135deg, rgba(180,60,60,0.45), rgba(120,20,20,0.65)); color:#ffe2e2; font-weight:600; cursor:pointer; transition:opacity 0.12s ease, transform 0.12s ease; }
+      .draw-controls-secondary button:disabled { opacity:0.5; cursor:not-allowed; }
+      .draw-controls-secondary button:not(:disabled):hover { transform:translateY(-1px); }
+      .draw-msg { margin-top:8px; min-height:18px; }
+      .draw-msg.ok { color: var(--ok); }
+      .draw-msg.warn { color: var(--warn); }
+      .draw-msg.error { color: #ff6b6b; }
+      .preset-editor-grid { display:flex; flex-wrap:wrap; gap:18px; }
+      .preset-section { flex:1 1 340px; background:rgba(12,18,28,0.55); border:1px solid rgba(142,238,255,0.18); border-radius:12px; padding:16px; box-shadow: inset 0 0 18px rgba(10,20,38,0.35); }
+      .preset-section h4 { margin:0; }
+      .preset-table { width:100%; margin-top:12px; }
+      .preset-table th, .preset-table td { vertical-align:middle; }
+      .preset-table input[type="text"],
+      .preset-table input[type="number"] { width:100%; box-sizing:border-box; font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid rgba(142,238,255,0.22); background:rgba(10,14,24,0.6); color:#e6f0ff; }
+      .preset-table input[type="number"] { -moz-appearance:textfield; }
+      .preset-table input[type="number"]::-webkit-outer-spin-button,
+      .preset-table input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+      .preset-table button { padding:6px 12px; border-radius:6px; border:1px solid rgba(106,169,255,0.35); background:rgba(14,24,40,0.75); color:#dce7ff; cursor:pointer; font-size:12px; }
+      .preset-table button:hover { border-color:rgba(142,238,255,0.55); color:#ffffff; }
+      .preset-boost-cell { white-space:nowrap; }
+      .preset-boost-cell input { width:80px; display:inline-block; margin-right:4px; }
+      .preset-table [data-display="note"] { font-size:12px; color:rgba(213,233,255,0.85); }
       .shop-btns { display:flex; gap:6px; }
       .shop-btns button { flex:1 1 60px; padding:6px 0; font-size:11px; }
       .diamond-shop { margin-top:18px; padding:16px; border:1px solid rgba(142,238,255,0.18); border-radius:14px; background:rgba(12,18,30,0.72); box-shadow:0 12px 24px rgba(5,10,18,0.28); }
@@ -366,3 +532,851 @@
       .auth-message.ok { color: var(--ok); }
       .auth-message.warn { color: var(--warn); }
       .auth-message.error { color: var(--danger); }
+
+      /* Admin UI Improvements */
+      .admin-tabs {
+        display: flex;
+        border-bottom: 2px solid rgba(142, 238, 255, 0.25);
+        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 10px 10px 0 0;
+        overflow: hidden;
+      }
+
+      .admin-tab {
+        flex: 1;
+        padding: 12px 20px;
+        background: transparent;
+        border: none;
+        color: #aeb7c6;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+
+      .admin-tab:hover {
+        background: rgba(142, 238, 255, 0.1);
+        color: #e7ecf3;
+      }
+
+      .admin-tab.active {
+        background: #6aa9ff;
+        color: #06122a;
+        font-weight: 600;
+      }
+
+      .admin-tab-content {
+        min-height: 200px;
+        animation: fadeIn 0.3s ease;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Better spacing for admin sections */
+      .admin-tab-content .row {
+        margin-bottom: 12px;
+      }
+
+      .admin-tab-content h3 {
+        color: #6aa9ff;
+        border-bottom: 1px solid rgba(142, 238, 255, 0.2);
+        padding-bottom: 6px;
+        margin-bottom: 12px;
+      }
+
+      /* Input field improvements */
+      .admin-tab-content input[type="number"],
+      .admin-tab-content input[type="text"],
+      .admin-tab-content input[type="password"],
+      .admin-tab-content select {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(142, 238, 255, 0.3);
+        border-radius: 6px;
+        padding: 6px 10px;
+        color: #e7ecf3;
+        transition: border-color 0.2s ease;
+      }
+
+      .admin-tab-content input:focus,
+      .admin-tab-content select:focus {
+        border-color: #6aa9ff;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(106, 169, 255, 0.2);
+      }
+
+      /* Button improvements */
+      .admin-tab-content button {
+        background: rgba(106, 169, 255, 0.2);
+        border: 1px solid rgba(106, 169, 255, 0.4);
+        color: #e7ecf3;
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 500;
+      }
+
+      .admin-tab-content button:hover {
+        background: rgba(106, 169, 255, 0.3);
+        border-color: #6aa9ff;
+      }
+
+      /* Table improvements */
+      .admin-tab-content .stats {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(142, 238, 255, 0.2);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .admin-tab-content .stats th {
+        background: rgba(106, 169, 255, 0.15);
+        color: #6aa9ff;
+        font-weight: 600;
+      }
+
+      .admin-tab-content .stats td {
+        border-bottom: 1px solid rgba(142, 238, 255, 0.1);
+      }
+
+      /* Rare animation section */
+      .rare-anim-controls {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(142, 238, 255, 0.15);
+        border-radius: 10px;
+        padding: 16px;
+        margin-top: 12px;
+      }
+
+      /* 5-tab admin section visibility */
+      .admin-tab-content {
+        display: none;
+      }
+
+      /* Tab content visibility rules */
+      #adminPanel.show-difficulty .admin-tab-content {
+        display: none !important;
+      }
+      #adminPanel.show-difficulty .admin-tab-content[data-tab="difficulty"] {
+        display: block !important;
+      }
+
+      #adminPanel.show-character .admin-tab-content {
+        display: none !important;
+      }
+      #adminPanel.show-character .admin-tab-content[data-tab="character"] {
+        display: block !important;
+      }
+
+      #adminPanel.show-gacha .admin-tab-content {
+        display: none !important;
+      }
+      #adminPanel.show-gacha .admin-tab-content[data-tab="gacha"] {
+        display: block !important;
+      }
+
+      #adminPanel.show-shop .admin-tab-content {
+        display: none !important;
+      }
+      #adminPanel.show-shop .admin-tab-content[data-tab="shop"] {
+        display: block !important;
+      }
+
+      #adminPanel.show-backup .admin-tab-content {
+        display: none !important;
+      }
+      #adminPanel.show-backup .admin-tab-content[data-tab="backup"] {
+        display: block !important;
+      }
+
+      #adminPanel.show-rewards .admin-tab-content {
+        display: none !important;
+      }
+      #adminPanel.show-rewards .admin-tab-content[data-tab="rewards"] {
+        display: block !important;
+      }
+
+      /* 가챠 탭 스타일 */
+      .gacha-tabs {
+        display: flex;
+        border-bottom: 2px solid rgba(142, 238, 255, 0.25);
+        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 10px 10px 0 0;
+        overflow: hidden;
+      }
+
+      .gacha-tab {
+        flex: 1;
+        padding: 12px 20px;
+        background: transparent;
+        border: none;
+        color: #aeb7c6;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        position: relative;
+      }
+
+      .gacha-tab:hover {
+        background: rgba(142, 238, 255, 0.08);
+        color: var(--text);
+      }
+
+      .gacha-tab.active {
+        background: rgba(106, 169, 255, 0.15);
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .gacha-tab-content {
+        display: none;
+        padding: 0 4px;
+      }
+
+      .gacha-tab-content.active {
+        display: block;
+      }
+
+      /* 가챠 패널 탭 전환 */
+      #gachaPanel .gacha-tab-content {
+        display: none !important;
+      }
+
+      #gachaPanel.show-draw .gacha-tab-content[data-tab="draw"] {
+        display: block !important;
+      }
+
+      #gachaPanel.show-config .gacha-tab-content[data-tab="config"] {
+        display: block !important;
+      }
+
+      #gachaPanel.show-stats .gacha-tab-content[data-tab="stats"] {
+        display: block !important;
+      }
+
+      #gachaPanel.show-log .gacha-tab-content[data-tab="log"] {
+        display: block !important;
+      }
+
+      /* Hide unnecessary panels in admin view */
+      body.admin-view .panel:not(#adminPanel) {
+        display: none !important;
+      }
+
+      .monster-preview .stats {
+        margin-top: 6px;
+      }
+
+      .monster-preview .stats th,
+      .monster-preview .stats td {
+        text-align: center;
+      }
+
+      .monster-preview .stats td:first-child {
+        text-align: left;
+        font-weight: 600;
+      }
+
+      .monster-preview .stats td:nth-child(2) {
+        color: #6aa9ff;
+        font-weight: 600;
+      }
+
+      #monsterDifficultyStatus.ok {
+        color: var(--ok);
+      }
+      #monsterDifficultyStatus.warn {
+        color: #f4c76a;
+      }
+      #monsterDifficultyStatus.error {
+        color: #ff6b6b;
+      }
+
+      /* Always show admin panel in admin view */
+      body.admin-view #adminPanel {
+        display: block !important;
+      }
+
+      /* 슬롯머신 오버레이 스타일 */
+      .slot-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(4, 8, 14, 0.92);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+
+      .slot-overlay.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .slot-container {
+        max-width: min(85vw, 800px);
+        width: 100%;
+        background: rgba(16, 22, 32, 0.95);
+        border: 2px solid rgba(106, 169, 255, 0.4);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+        text-align: center;
+      }
+
+      .slot-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(106, 169, 255, 0.3);
+      }
+
+      .slot-header h3 {
+        margin: 0;
+        font-size: 24px;
+        color: var(--accent);
+        text-shadow: 0 0 12px rgba(106, 169, 255, 0.6);
+      }
+
+      .slot-skip {
+        padding: 8px 16px;
+        background: rgba(255, 107, 107, 0.2);
+        border: 1px solid rgba(255, 107, 107, 0.4);
+        border-radius: 12px;
+        color: #ffe2e2;
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s ease;
+      }
+
+      .slot-skip:hover {
+        background: rgba(255, 107, 107, 0.3);
+        border-color: rgba(255, 107, 107, 0.6);
+      }
+
+      /* 단일 슬롯 (1회 뽑기) */
+      .single-slot {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 24px;
+      }
+
+      .slot-machine {
+        position: relative;
+        width: 200px;
+        height: 280px;
+        background: linear-gradient(135deg, rgba(16, 26, 40, 0.8), rgba(8, 16, 28, 0.9));
+        border: 3px solid rgba(106, 169, 255, 0.5);
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow:
+          0 0 24px rgba(106, 169, 255, 0.4),
+          inset 0 0 20px rgba(0, 0, 0, 0.5);
+      }
+
+      .slot-reel {
+        position: absolute;
+        width: 100%;
+        height: 200%; /* 16개 티어를 위해 2배 높이 */
+        display: flex;
+        flex-direction: column;
+        animation-fill-mode: forwards;
+      }
+
+      .slot-tier {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        font-weight: 700;
+        background: rgba(8, 14, 24, 0.8);
+        border-bottom: 1px solid rgba(106, 169, 255, 0.2);
+      }
+
+      .slot-selector {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 85%;
+        height: 6.25%; /* 16개 티어 중 1개 = 100% / 16 = 6.25% */
+        border: 2px solid rgba(255, 215, 0, 0.8);
+        border-radius: 8px;
+        background: rgba(255, 215, 0, 0.1);
+        box-shadow:
+          0 0 10px rgba(255, 215, 0, 0.6),
+          inset 0 0 10px rgba(255, 215, 0, 0.2);
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      /* 멀티 슬롯 (10회 뽑기) */
+      .multi-slot {
+        margin-bottom: 24px;
+      }
+
+      .slot-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
+        max-width: 480px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .grid-slot {
+        position: relative;
+        width: 100%;
+        height: 120px;
+        background: linear-gradient(135deg, rgba(16, 26, 40, 0.7), rgba(8, 16, 28, 0.8));
+        border: 2px solid rgba(106, 169, 255, 0.4);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 0 12px rgba(106, 169, 255, 0.3);
+      }
+
+      .grid-slot .slot-reel {
+        position: absolute;
+        width: 100%;
+        height: 200%; /* 16개 티어를 위해 2배 높이 */
+        display: flex;
+        flex-direction: column;
+      }
+
+      .grid-slot .slot-tier {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 700;
+        background: rgba(8, 14, 24, 0.7);
+        border-bottom: 1px solid rgba(106, 169, 255, 0.2);
+      }
+
+      .grid-slot .slot-selector {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 85%;
+        height: 6.25%; /* 16개 티어 중 1개 = 100% / 16 = 6.25% */
+        border: 2px solid rgba(255, 215, 0, 0.8);
+        border-radius: 6px;
+        background: rgba(255, 215, 0, 0.1);
+        box-shadow:
+          0 0 12px rgba(255, 215, 0, 0.6),
+          inset 0 0 8px rgba(255, 215, 0, 0.2);
+        z-index: 10;
+      }
+
+      /* 보너스 슬롯 */
+      .bonus-slot-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .bonus-label {
+        font-size: 18px;
+        font-weight: 700;
+        color: #ffd166;
+        text-shadow: 0 0 12px rgba(255, 209, 102, 0.8);
+        animation: bonusPulse 2s ease-in-out infinite;
+      }
+
+      .bonus-slot {
+        position: relative;
+        width: 240px;
+        height: 160px;
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.3));
+        border: 3px solid rgba(255, 215, 0, 0.8);
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow:
+          0 0 32px rgba(255, 215, 0, 0.6),
+          inset 0 0 24px rgba(0, 0, 0, 0.4);
+      }
+
+      .bonus-slot .slot-reel {
+        height: 200% !important; /* 16개 티어를 위해 2배 높이 */
+      }
+
+      .bonus-slot .slot-tier {
+        font-size: 20px;
+        background: rgba(16, 20, 8, 0.8);
+        border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+      }
+
+      .bonus-slot .slot-selector {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 85%;
+        height: 6.25%; /* 16개 티어 중 1개 = 100% / 16 = 6.25% */
+        border: 3px solid rgba(255, 215, 0, 1.0);
+        border-radius: 8px;
+        background: rgba(255, 215, 0, 0.2);
+        box-shadow:
+          0 0 16px rgba(255, 215, 0, 0.8),
+          inset 0 0 12px rgba(255, 215, 0, 0.3);
+        z-index: 10;
+      }
+
+      /* 슬롯 상태 표시 */
+      .slot-status {
+        margin-top: 24px;
+      }
+
+      .slot-message {
+        font-size: 16px;
+        color: var(--accent);
+        margin-bottom: 12px;
+        min-height: 24px;
+      }
+
+      .slot-progress {
+        width: 100%;
+        height: 8px;
+        background: rgba(106, 169, 255, 0.2);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .slot-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), #8ef);
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+
+      /* 등급별 색상 */
+      .slot-tier[data-tier="SSS+"], .slot-tier:contains("SSS+") {
+        color: #ffd166;
+        text-shadow: 0 0 8px rgba(255, 209, 102, 0.8);
+      }
+
+      .slot-tier[data-tier="SS+"], .slot-tier:contains("SS+") {
+        color: #ff9bf8;
+        text-shadow: 0 0 8px rgba(255, 155, 248, 0.8);
+      }
+
+      .slot-tier[data-tier="S+"], .slot-tier:contains("S+") {
+        color: #ff7f8a;
+        text-shadow: 0 0 8px rgba(255, 127, 138, 0.8);
+      }
+
+      .slot-tier[data-tier="S"], .slot-tier:contains("S") {
+        color: #ff6b6b;
+        text-shadow: 0 0 8px rgba(255, 107, 107, 0.8);
+      }
+
+      .slot-tier[data-tier="A"], .slot-tier:contains("A") {
+        color: #6ecb9b;
+        text-shadow: 0 0 8px rgba(110, 203, 155, 0.8);
+      }
+
+      .slot-tier[data-tier="B"], .slot-tier:contains("B") {
+        color: #6aa9ff;
+        text-shadow: 0 0 8px rgba(106, 169, 255, 0.8);
+      }
+
+      .slot-tier[data-tier="C"], .slot-tier:contains("C") {
+        color: #9aa5b1;
+      }
+
+      .slot-tier[data-tier="D"], .slot-tier:contains("D") {
+        color: #738091;
+      }
+
+      /* 애니메이션 키프레임 */
+      @keyframes bonusPulse {
+        0%, 100% { opacity: 0.8; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.05); }
+      }
+
+      @keyframes slotSpin {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-100%); }
+      }
+
+      @keyframes slotSpinFast {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-200%); }
+      }
+
+      @keyframes slotSpinSlow {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-50%); }
+      }
+
+      @keyframes slotStop {
+        0% { transform: translateY(-25%); }
+        100% { transform: translateY(0); }
+      }
+
+      @keyframes slotFlash {
+        0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6); }
+        50% { box-shadow: 0 0 40px rgba(255, 215, 0, 1); }
+      }
+
+      /* 반응형 디자인 */
+      @media (max-width: 720px) {
+        .slot-container {
+          padding: 16px;
+          max-width: 95vw;
+        }
+
+        .slot-machine {
+          width: 160px;
+          height: 220px;
+        }
+
+        .slot-tier {
+          font-size: 18px;
+        }
+
+        .slot-grid {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          max-width: 320px;
+        }
+
+        .grid-slot {
+          height: 80px;
+        }
+
+        .grid-slot .slot-tier {
+          font-size: 12px;
+        }
+
+        .bonus-slot {
+          width: 180px;
+          height: 120px;
+        }
+
+        .bonus-slot .slot-tier {
+          font-size: 16px;
+        }
+      }
+
+      /* 티어 텍스트 이펙트 */
+      .tier-effect {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #ffd700;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.8),
+          0 0 20px rgba(255,215,0,0.6);
+        z-index: 1000;
+        pointer-events: none;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5);
+        transition: all 0.5s ease-out;
+      }
+
+      .tier-effect.show {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      /* 티어별 색상 */
+      .tier-effect[data-tier="SSS+"] {
+        color: #ff1493;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.8),
+          0 0 20px rgba(255,20,147,0.8);
+      }
+
+      .tier-effect[data-tier="SS+"] {
+        color: #ff6b47;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.8),
+          0 0 20px rgba(255,107,71,0.8);
+      }
+
+      .tier-effect[data-tier="S+"] {
+        color: #ffd700;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.8),
+          0 0 20px rgba(255,215,0,0.8);
+      }
+
+      /* 개별 슬롯 위치 텍스트 이펙트 */
+      .tier-effect-local {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #ffd700;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(255,215,0,0.8);
+        z-index: 100;
+        pointer-events: none;
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.3);
+        transition: all 0.4s ease-out;
+        background: rgba(0,0,0,0.7);
+        border-radius: 8px;
+        padding: 4px 8px;
+        white-space: nowrap;
+      }
+
+      .tier-effect-local.show {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+
+      /* 슬롯별 티어 색상 */
+      .tier-effect-local[data-tier="SSS+"] {
+        color: #ff1493;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(255,20,147,0.9);
+      }
+
+      .tier-effect-local[data-tier="SS+"] {
+        color: #ff6b47;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(255,107,71,0.9);
+      }
+
+      .tier-effect-local[data-tier="S+"] {
+        color: #ffd700;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(255,215,0,0.9);
+      }
+
+      .tier-effect-local[data-tier="A"] {
+        color: #9370db;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(147,112,219,0.7);
+      }
+
+      .tier-effect-local[data-tier="B"] {
+        color: #4169e1;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(65,105,225,0.7);
+      }
+
+      .tier-effect-local[data-tier="C"] {
+        color: #32cd32;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(50,205,50,0.7);
+      }
+
+      .tier-effect-local[data-tier="D"] {
+        color: #ffffff;
+        text-shadow:
+          2px 2px 4px rgba(0,0,0,0.9),
+          0 0 15px rgba(255,255,255,0.5);
+      }
+
+      /* Enhanced responsive design for mobile devices */
+      @media (max-width: 768px) {
+        .draw-groups {
+          flex-direction: column;
+        }
+
+        .draw-group {
+          flex: 1 1 auto;
+        }
+
+        .draw-result-grid {
+          grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+          gap: 8px;
+        }
+
+        .draw-card {
+          padding: 8px;
+        }
+
+        .draw-card .draw-icon {
+          font-size: 24px;
+        }
+
+        .gear-preview, .character-preview {
+          justify-content: center;
+          gap: 6px;
+        }
+
+        .gear-icon, .character-class {
+          width: 28px;
+          height: 28px;
+          font-size: 16px;
+        }
+
+        .probability-table-container {
+          padding: 12px;
+        }
+
+        .probability-table th,
+        .probability-table td {
+          padding: 6px 4px;
+          font-size: 11px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .draw-button {
+          padding: 10px 12px;
+        }
+
+        .draw-button__title {
+          font-size: 13px;
+        }
+
+        .draw-button__subtitle {
+          font-size: 11px;
+        }
+
+        .draw-result-grid {
+          grid-template-columns: repeat(auto-fill, minmax(75px, 1fr));
+        }
+
+        .pet-ticket-badge {
+          font-size: 11px;
+          padding: 5px 10px;
+        }
+
+        .character-class {
+          width: 32px;
+          height: 32px;
+          font-size: 18px;
+        }
+
+        .gear-icon {
+          width: 28px;
+          height: 28px;
+          font-size: 16px;
+        }
+      }

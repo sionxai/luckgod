@@ -279,96 +279,6 @@
                   </thead>
                   <tbody id="gearPresetTableBody"></tbody>
                 </table>
-                <div class="admin-probability-card" style="margin-top:18px">
-                  <div class="row">
-                    <h4 class="muted" style="margin:0">🎲 뽑기 확률 정보</h4>
-                    <div class="muted small">가챠 시뮬레이터와 동일한 확률표입니다.</div>
-                  </div>
-                  <div class="row gacha-type-row">
-                    <button id="adminProbDisplayModeGear" class="mode-btn active" type="button">장비 확률</button>
-                    <button id="adminProbDisplayModeCharacter" class="mode-btn" type="button">캐릭터 확률</button>
-                  </div>
-                  <div id="adminGearProbabilityWrap">
-                    <div class="probability-table-container">
-                      <h5 class="muted" style="margin:0">장비 뽑기 확률표</h5>
-                      <table class="probability-table" id="adminGearProbabilityTable" aria-label="관리자 장비 뽑기 확률표">
-                        <thead>
-                          <tr>
-                            <th>등급</th>
-                            <th class="prob-basic">기본 뽑기<br><span class="small-cost">(100/900pt)</span></th>
-                            <th class="prob-boost">확률업 뽑기<br><span class="small-cost">(500/4,500pt)</span></th>
-                            <th class="prob-premium">프리미엄 뽑기<br><span class="small-cost">(2,000/18,000pt)</span></th>
-                          </tr>
-                        </thead>
-                        <tbody id="adminGearProbabilityBody"></tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div id="adminCharacterProbabilityWrap" style="display:none">
-                    <div class="probability-table-container">
-                      <h5 class="muted" style="margin:0">캐릭터 뽑기 확률표</h5>
-                      <table class="probability-table" id="adminCharacterProbabilityTable" aria-label="관리자 캐릭터 뽑기 확률표">
-                        <thead>
-                          <tr>
-                            <th>등급</th>
-                            <th class="prob-basic">기본 뽑기<br><span class="small-cost">(10,000/90,000pt)</span></th>
-                            <th class="prob-boost">확률업 뽑기<br><span class="small-cost">(50,000/450,000pt)</span></th>
-                            <th class="prob-premium">프리미엄 뽑기<br><span class="small-cost">(200,000/1,800,000pt)</span></th>
-                          </tr>
-                        </thead>
-                        <tbody id="adminCharacterProbabilityBody"></tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-                <div class="row admin-config-controls" style="margin-top:18px; gap:16px; align-items:flex-end;">
-                  <label>입력 모드<select id="adminMode"><option value="weight" selected>가중치</option><option value="percent">퍼센트(%)</option></select></label>
-                  <label>시드<input id="adminSeed" type="text" placeholder="예: lucky-777" /></label>
-                  <label><input id="adminLock" type="checkbox" /> 설정 잠금</label>
-                </div>
-
-                <!-- 가챠 타입 선택 및 가중치 설정 -->
-                <div class="row gacha-type-row" style="margin-top:18px;">
-                  <button id="adminGachaModeGearConfig" class="mode-btn active" type="button">장비 설정</button>
-                  <button id="adminGachaModePetConfig" class="mode-btn" type="button">펫 설정</button>
-                  <button id="adminGachaModeCharacterConfig" class="mode-btn" type="button">캐릭터 설정</button>
-                </div>
-
-                <div id="adminGearConfigWrap" style="margin-top:12px;">
-                  <table class="weights" id="adminWeightsTable" aria-label="등급별 가중치 테이블">
-                    <thead>
-                      <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
-                  <div class="row" style="margin-top:12px;">
-                    <label><input id="adminPityEnabled" type="checkbox" /> 천장(보장)</label>
-                    <label>기준<select id="adminPityFloor"><option value="S">S 이상</option><option value="A">A 이상</option></select></label>
-                    <label>스팬<input id="adminPitySpan" type="number" min="1" value="90" style="width:90px" /></label>
-                  </div>
-                  <div class="row" style="margin-top:8px;">
-                    <label><input id="adminG10Enabled" type="checkbox" /> 10연 최소 보장</label>
-                    <label>최소<select id="adminG10Tier"><option value="A">A 이상</option><option value="S">S 이상</option></select></label>
-                  </div>
-                </div>
-
-                <div id="adminPetConfigWrap" style="display:none; margin-top:12px;">
-                  <p class="muted small">펫 뽑기는 상대 가중치 비율로 계산되며, 관리자만 수정할 수 있습니다.</p>
-                  <table class="stats" id="adminPetWeightTable" aria-label="펫 가챠 가중치 설정">
-                    <thead><tr><th>펫</th><th>가중치</th></tr></thead>
-                    <tbody id="adminPetWeightTableBody"></tbody>
-                  </table>
-                </div>
-
-                <div id="adminCharacterConfigWrap" style="display:none; margin-top:12px;">
-                  <p class="muted small">캐릭터 뽑기 확률을 등급별로 조정합니다. 장비 설정과는 독립적으로 저장됩니다.</p>
-                  <table class="weights" id="adminCharacterWeightsTable" aria-label="캐릭터 가챠 가중치 테이블">
-                    <thead>
-                      <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
-                    </thead>
-                    <tbody id="adminCharacterWeightsBody"></tbody>
-                  </table>
-                </div>
               </section>
               <section class="preset-section">
                 <div class="row preset-admin-row" style="align-items:center; justify-content:space-between; gap:12px;">
@@ -576,14 +486,7 @@
             <div id="gearDrawControls" class="gear-draw-controls">
               <div class="draw-groups">
                 <section class="draw-group" aria-labelledby="singleDrawLabel">
-                  <h3 id="singleDrawLabel">⚔️ 장비 1회 뽑기</h3>
-                  <div class="gear-preview">
-                    <span class="gear-icon" title="투구">🪖</span>
-                    <span class="gear-icon" title="갑옷">🛡️</span>
-                    <span class="gear-icon" title="주무기">⚔️</span>
-                    <span class="gear-icon" title="보조무기">🗡️</span>
-                    <span class="gear-icon" title="신발">🥾</span>
-                  </div>
+                  <h3 id="singleDrawLabel">1회 뽑기</h3>
                   <div class="draw-button-grid">
                     <button id="drawBasic1" class="draw-button draw-button--base" type="button" title="기본 확률로 한 번 뽑습니다.">
                       <span class="draw-button__title" data-preset-role="label">기본 뽑기</span>
@@ -603,7 +506,7 @@
                   </div>
                 </section>
                 <section class="draw-group" aria-labelledby="multiDrawLabel">
-                  <h3 id="multiDrawLabel">🎊 장비 10회 뽑기</h3>
+                  <h3 id="multiDrawLabel">10회 뽑기</h3>
                   <div class="draw-button-grid">
                     <button id="drawBasic10" class="draw-button draw-button--base" type="button" title="10% 할인된 가격으로 10회 뽑습니다.">
                       <span class="draw-button__title" data-preset-role="label">기본 10회</span>
@@ -624,39 +527,15 @@
                 </section>
               </div>
             </div>
-            <div id="petDrawControls" class="gear-draw-controls pet-draw-controls" style="display:none">
-              <div class="draw-groups">
-                <section class="draw-group" aria-labelledby="petDrawLabel">
-                  <h3 id="petDrawLabel">🐾 펫 뽑기</h3>
-                  <div class="pet-ticket-info">
-                    <span class="pet-ticket-badge">보유 뽑기권: <strong id="petTicketInline">0</strong>개</span>
-                  </div>
-                  <div class="draw-button-grid">
-                    <button id="drawPet1" class="draw-button draw-button--pet" type="button" title="펫 뽑기권 1개를 사용하여 랜덤한 펫 1마리를 획득합니다.">
-                      <span class="draw-button__title">🎁 펫 1회 뽑기</span>
-                      <span class="draw-button__subtitle">뽑기권 1개 소모</span>
-                      <span class="draw-button__note">랜덤 펫 획득</span>
-                    </button>
-                    <button id="drawPet10" class="draw-button draw-button--pet draw-button--multi" type="button" title="펫 뽑기권 10개를 사용하여 랜덤한 펫 10마리를 획득합니다.">
-                      <span class="draw-button__title">🎊 펫 10회 뽑기</span>
-                      <span class="draw-button__subtitle">뽑기권 10개 소모</span>
-                      <span class="draw-button__note">랜덤 펫 10마리</span>
-                    </button>
-                  </div>
-                </section>
-              </div>
+            <div id="petDrawControls" class="row pet-draw-row" style="display:none">
+              <button id="drawPet1" class="primary">펫 1회</button>
+              <button id="drawPet10">펫 10회</button>
+              <span class="muted small">보유 티켓: <b id="petTicketInline">0</b></span>
             </div>
             <div id="characterDrawControls" class="gear-draw-controls character-draw-controls" style="display:none">
               <div class="draw-groups">
                 <section class="draw-group" aria-labelledby="characterSingleLabel">
-                  <h3 id="characterSingleLabel">👑 캐릭터 1회 뽑기</h3>
-                  <div class="character-preview">
-                    <span class="character-class" title="전사">⚔️</span>
-                    <span class="character-class" title="마법사">🔮</span>
-                    <span class="character-class" title="궁수">🏹</span>
-                    <span class="character-class" title="도적">🗡️</span>
-                    <span class="character-class" title="여신">✨</span>
-                  </div>
+                  <h3 id="characterSingleLabel">캐릭터 1회 뽑기</h3>
                   <div class="draw-button-grid">
                     <button id="drawCharBasic1" class="draw-button draw-button--base" type="button" title="기본 확률로 캐릭터 한 명을 뽑습니다.">
                       <span class="draw-button__title" data-preset-role="label">기본 캐릭터 뽑기</span>
@@ -676,7 +555,7 @@
                   </div>
                 </section>
                 <section class="draw-group" aria-labelledby="characterMultiLabel">
-                  <h3 id="characterMultiLabel">🌟 캐릭터 10회 뽑기</h3>
+                  <h3 id="characterMultiLabel">캐릭터 10회 뽑기</h3>
                   <div class="draw-button-grid">
                     <button id="drawCharBasic10" class="draw-button draw-button--base" type="button" title="10% 할인된 가격으로 캐릭터 10회를 뽑습니다.">
                       <span class="draw-button__title" data-preset-role="label">기본 캐릭터 10회</span>
@@ -723,60 +602,48 @@
               <button id="toggleUserEdit">설정 편집 모드</button>
             </div>
             <div id="presetMsg" class="muted small" aria-live="polite"></div>
-
-            <!-- 확률 정보 섹션 -->
-            <div class="probability-info-section" style="margin-top:18px">
-              <div class="row">
-                <h4 class="muted" style="margin:0">🎲 뽑기 확률 정보</h4>
-                <div class="muted small">프리셋 설정에 따른 실제 뽑기 확률입니다.</div>
-              </div>
-
-              <!-- 확률 표시 모드 선택 -->
-              <div class="row gacha-type-row" style="margin-top:12px">
-                <button id="probDisplayModeGear" class="mode-btn active" type="button">장비 확률</button>
-                <button id="probDisplayModeCharacter" class="mode-btn" type="button">캐릭터 확률</button>
-              </div>
-
-              <!-- 장비 확률 테이블 -->
-              <div id="gearProbabilityWrap">
-                <div class="probability-table-container">
-                  <h5 class="muted" style="margin:8px 0">장비 뽑기 확률표</h5>
-                  <table class="probability-table" id="gearProbabilityTable" aria-label="장비 뽑기 확률표">
-                    <thead>
-                      <tr>
-                        <th>등급</th>
-                        <th class="prob-basic">기본 뽑기<br><span class="small-cost">(100/900pt)</span></th>
-                        <th class="prob-boost">확률업 뽑기<br><span class="small-cost">(500/4,500pt)</span></th>
-                        <th class="prob-premium">프리미엄 뽑기<br><span class="small-cost">(2,000/18,000pt)</span></th>
-                      </tr>
-                    </thead>
-                    <tbody id="gearProbabilityBody"></tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- 캐릭터 확률 테이블 -->
-              <div id="characterProbabilityWrap" style="display:none">
-                <div class="probability-table-container">
-                  <h5 class="muted" style="margin:8px 0">캐릭터 뽑기 확률표</h5>
-                  <table class="probability-table" id="characterProbabilityTable" aria-label="캐릭터 뽑기 확률표">
-                    <thead>
-                      <tr>
-                        <th>등급</th>
-                        <th class="prob-basic">기본 뽑기<br><span class="small-cost">(10,000/90,000pt)</span></th>
-                        <th class="prob-boost">확률업 뽑기<br><span class="small-cost">(50,000/450,000pt)</span></th>
-                        <th class="prob-premium">프리미엄 뽑기<br><span class="small-cost">(200,000/1,800,000pt)</span></th>
-                      </tr>
-                    </thead>
-                    <tbody id="characterProbabilityBody"></tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- 업데이트 상태 -->
-              <div id="probabilityUpdateStatus" class="probability-update-notice" style="display:none;margin-top:12px">
-                ✨ 확률 정보가 업데이트되었습니다
-              </div>
+            <div class="row">
+              <label>입력 모드<select id="mode"><option value="weight" selected>가중치</option><option value="percent">퍼센트(%)</option></select></label>
+              <label>시드<input id="seed" type="text" placeholder="예: lucky-777" /></label>
+              <label><input id="lock" type="checkbox" /> 설정 잠금</label>
+            </div>
+            <div class="row gacha-type-row">
+              <button id="gachaModeGearConfig" class="mode-btn active" type="button">장비 설정</button>
+              <button id="gachaModePetConfig" class="mode-btn" type="button">펫 설정</button>
+              <button id="gachaModeCharacterConfig" class="mode-btn" type="button">캐릭터 설정</button>
+            </div>
+            <div id="gearConfigWrap">
+            <table class="weights" id="weightsTable" aria-label="등급별 가중치 테이블">
+              <thead>
+                <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <div class="row">
+              <label><input id="pityEnabled" type="checkbox" /> 천장(보장)</label>
+              <label>기준<select id="pityFloor"><option value="S">S 이상</option><option value="A">A 이상</option></select></label>
+              <label>스팬<input id="pitySpan" type="number" min="1" value="90" style="width:90px" /></label>
+            </div>
+            <div class="row">
+              <label><input id="g10Enabled" type="checkbox" /> 10연 최소 보장</label>
+              <label>최소<select id="g10Tier"><option value="A">A 이상</option><option value="S">S 이상</option></select></label>
+            </div>
+            </div>
+            <div id="petConfigWrap" style="display:none">
+              <p class="muted small">펫 뽑기는 상대 가중치 비율로 계산되며, 관리자만 수정할 수 있습니다.</p>
+              <table class="stats" id="petWeightTable" aria-label="펫 가챠 가중치 설정">
+                <thead><tr><th>펫</th><th>가중치</th></tr></thead>
+                <tbody id="petWeightTableBody"></tbody>
+              </table>
+            </div>
+          <div id="characterConfigWrap" style="display:none">
+              <p class="muted small">캐릭터 뽑기 확률을 등급별로 조정합니다. 장비 설정과는 독립적으로 저장됩니다.</p>
+              <table class="weights" id="characterWeightsTable" aria-label="캐릭터 가챠 가중치 테이블">
+                <thead>
+                  <tr><th>등급</th><th>입력값</th><th>정규화 확률</th></tr>
+                </thead>
+                <tbody id="characterWeightsBody"></tbody>
+              </table>
             </div>
           </div>
 

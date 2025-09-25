@@ -26,7 +26,7 @@ export const DEFAULT_MONSTER_SCALING = {
   basePower: 500,
   maxPower: 50000000,
   curve: 1.6,
-  difficultyMultiplier: 1,
+  difficultyMultiplier: 2,
   attackShare: 0.32,
   defenseShare: 0.22,
   hpMultiplier: 6.5,
@@ -38,6 +38,11 @@ export const DEFAULT_MONSTER_SCALING = {
   critDmgMax: 420,
   dodgeBase: 3,
   dodgeMax: 40
+};
+
+export const DEFAULT_DIFFICULTY_ADJUSTMENTS = {
+  easy: -50,
+  hard: 100
 };
 
 export const DEFAULT_USER_SETTINGS = {
@@ -756,6 +761,26 @@ export function normalizeMonsterScaling(raw) {
   return base;
 }
 
+const clampPercent = (value, min, max, fallback) => {
+  const numVal = Number(value);
+  if (!Number.isFinite(numVal)) return fallback;
+  let next = numVal;
+  if (typeof min === 'number' && next < min) next = min;
+  if (typeof max === 'number' && next > max) next = max;
+  return Math.round(next * 100) / 100;
+};
+
+export function sanitizeDifficultyAdjustments(raw) {
+  const defaults = DEFAULT_DIFFICULTY_ADJUSTMENTS;
+  if (!raw || typeof raw !== 'object') {
+    return { ...defaults };
+  }
+  return {
+    easy: clampPercent(raw.easy, -90, 0, defaults.easy),
+    hard: clampPercent(raw.hard, 0, 1000, defaults.hard)
+  };
+}
+
 function normalizeWeights(weights) {
   const total = Object.values(weights).reduce((sum, val) => sum + val, 0);
   if (!(total > 0)) {
@@ -805,6 +830,15 @@ export function sanitizeConfig(raw) {
   };
   config.petWeights = sanitizePetWeights(raw && raw.petWeights);
   config.characterBalance = sanitizeCharacterBalance(raw && raw.characterBalance);
+  let difficultyAdjustments = sanitizeDifficultyAdjustments(raw && raw.difficultyAdjustments);
+  if (!raw || raw.difficultyAdjustments === undefined) {
+    const rawMultiplier = raw && raw.monsterScaling && raw.monsterScaling.difficultyMultiplier;
+    if (rawMultiplier === 1 && config.monsterScaling.difficultyMultiplier === 1) {
+      config.monsterScaling.difficultyMultiplier = DEFAULT_MONSTER_SCALING.difficultyMultiplier;
+      difficultyAdjustments = { ...DEFAULT_DIFFICULTY_ADJUSTMENTS };
+    }
+  }
+  config.difficultyAdjustments = difficultyAdjustments;
   return config;
 }
 
